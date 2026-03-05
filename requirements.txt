@@ -1,0 +1,39 @@
+# Core Infrastructure
+python-dotenv
+pyyaml
+
+# Vector Database (Lite & Local)
+chromadb>=0.4.22
+
+# RAGFlow Deepdoc Dependencies
+# deepdoc might require some external image/pdf handling libraries depending on your document types.
+# This represents a baseline.
+PyMuPDF
+mineru[pipeline]
+Pillow
+docx2txt
+openpyxl
+pandas
+beautifulsoup4
+markdown
+pdfplumber
+
+# Embeddings (Local Model)
+sentence-transformers
+transformers
+torch
+# (optional for faster inference on CPU/GPU depending on torch setup)
+# torchvision
+# torchaudio
+
+# LangChain Ecosystem (for future extension and easy wrappers)
+langchain
+langchain-community
+langchain-core
+# Note: For connecting to vLLM via open-ai compatible API
+openai 
+tiktoken
+
+# Web/API integration for custom Skills in future
+requests
+aiohttp

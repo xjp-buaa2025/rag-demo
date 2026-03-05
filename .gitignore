@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# ChromaDB data (local storage, don't commit)
+storage/chroma_db/
+
+# Sensitive / large files
+.env
+*.pdf
+*.log
+ingest_error.log
+
+# Claude Code local config (contains permissions, not for repo)
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# MinerU / model cache
+.cache/
