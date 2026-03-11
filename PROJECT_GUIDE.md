@@ -17,8 +17,9 @@
    - [main_ingest.py](#62-main_ingestpy)
    - [main_chat.py](#63-main_chatpy)
    - [app.py](#64-apppy)
-   - [document_processing/common/token_utils.py](#65-document_processingcommontoken_utilspy)
-   - [document_processing/rag/nlp/__init__.py](#66-document_processingragnlp__init__py)
+   - [eval_rag.py](#65-eval_ragpy)
+   - [document_processing/common/token_utils.py](#66-document_processingcommontoken_utilspy)
+   - [document_processing/rag/nlp/__init__.py](#67-document_processingragnlp__init__py)
 7. [关键工具库详解](#7-关键工具库详解)
 8. [配置系统（.env）](#8-配置系统env)
 9. [运行方式](#9-运行方式)
@@ -123,6 +124,7 @@ rag-demo/
 ├── main_ingest.py            # 第二步：文档解析+向量化+写入 ChromaDB
 ├── main_chat.py              # 终端交互问答（轻量调试用）
 ├── app.py                    # Gradio Web UI（完整功能界面）
+├── eval_rag.py               # RAG 性能评估工具（召回诊断 / LLM 打分 / RAGAS 三指标）
 ├── requirements.txt          # Python 依赖列表
 ├── .env                      # 密钥配置（不提交 git）
 ├── .gitignore
@@ -293,15 +295,84 @@ for chunk in stream:
 #### `run_ingest()` 生成器
 同样用 `yield` 让入库日志实时显示在 UI 上，而不是等全部完成才更新。
 
-#### 历史窗口限制
+#### 历史窗口限制与 Gradio 版本兼容
+
+Gradio 5+ 将 history 格式从配对列表 `[[user, assistant], ...]` 改为平铺的消息字典列表 `[{"role": "user", "content": "..."}, ...]`。代码兼容两种格式：
+
 ```python
-for user_msg, assistant_msg in history[-6:]:
+for item in history[-12:]:  # 12 = 最近 6 轮 × 每轮 2 条
+    if isinstance(item, dict):
+        # Gradio 5+ 新格式
+        messages.append({"role": item["role"], "content": item["content"]})
+    else:
+        # Gradio 4 旧格式
+        user_msg, assistant_msg = item[0], item[1]
+        ...
 ```
-只取最近 6 轮历史，防止 prompt 超长（LLM context 有上限）。
+
+只取最近 12 条消息（6 轮），防止 prompt 超长。
+
+#### 性能评估面板
+
+`app.py` 还集成了 RAG 性能评估功能，在 UI 中以折叠面板（`📊 性能评估`）呈现：
+
+- **🔍 召回诊断**：调用 `run_eval_diagnose()`，对 10 道内置测试题做向量检索，输出每题 Top-5 召回片段、余弦距离和全局统计。不调用 LLM，秒出结果。
+- **⚖️ LLM 打分**：调用 `run_eval_judge()`，在召回基础上请 LLM 从相关性/完整性/可回答性三个维度各打 0-5 分，最后输出综合得分。
+
+两个函数均为生成器（`yield`），结果实时流式显示到 Textbox，与 `run_ingest()` 模式一致。
 
 ---
 
-### 6.5 `document_processing/common/token_utils.py`
+### 6.5 `eval_rag.py`
+
+**职责**：独立的 RAG 性能评估脚本，同时作为 `app.py` 性能评估面板的逻辑来源参考。
+
+**三种运行模式**（通过 `--mode` 参数切换）：
+
+#### `--mode diagnose`（默认）
+1. 读取知识库所有 chunk，统计长度分布（均值/中位数/分桶直方图）
+2. 对 10 道内置测试题逐一做向量检索（Top-5）
+3. 打印每题召回片段（文本前 80 字 + 来源 + 余弦距离）
+4. 输出全局距离统计和质量判断
+
+#### `--mode judge`
+在 diagnose 基础上，追加 LLM-as-Judge 打分：
+- 把每道题的检索原文发给 LLM，要求输出 JSON 格式打分
+- 三个维度：**相关性**（片段与问题相关程度）、**完整性**（片段能否覆盖回答）、**可回答性**（能否给出令用户满意的答案）
+- 输出每道题三维分数 + 全局均值
+
+#### `--mode ragas`
+对齐学术界 RAGAS 框架，走完整 **检索→生成→评估** 链路，计算三个无需 Ground Truth 的指标：
+
+| 指标 | 含义 | 计算方式 |
+|------|------|---------|
+| **Context Relevance**（上下文相关性） | 检索片段中有多少内容真正与问题相关 | LLM 从 chunks 中提取相关句子，计算比例 |
+| **Faithfulness**（忠实度）| 答案中的事实声明是否都有检索内容支撑（幻觉检测） | 拆解答案为原子声明 → 逐条核验是否有 chunk 支撑 |
+| **Answer Relevance**（回答相关性） | 答案是否直接针对了用户提问 | 从答案逆向生成 3 个问题 → 与原问题的 embedding 余弦相似度均值 |
+
+与 `judge` 模式的区别：
+- `judge`：只评估**检索阶段**（chunks 本身的质量），不生成答案
+- `ragas`：评估**完整 RAG 链路**（包括生成阶段），指标更贴近真实使用效果
+- `ragas` 运行时间更长（每道题多次 LLM 调用），10 道题约需 5–15 分钟
+
+**如何解读余弦距离**（`diagnose` 模式）：
+| 距离范围 | 含义 |
+|---------|------|
+| < 0.3 | 高度相关，召回质量优秀 |
+| 0.3–0.6 | 中等，基本可用 |
+| 0.6–0.8 | 较差，建议增大 chunk_size 或 TOP_K |
+| > 0.8 | 很差，需排查 Embedding 或文档质量 |
+
+**设计原则**：不引入额外依赖（只用 stdlib + 已有包），可直接运行：
+```bash
+PYTHONUTF8=1 python eval_rag.py --mode diagnose
+PYTHONUTF8=1 python eval_rag.py --mode judge
+PYTHONUTF8=1 python eval_rag.py --mode ragas
+```
+
+---
+
+### 6.6 `document_processing/common/token_utils.py`  <!-- 原 6.5 -->
 
 **职责**：为 deepdoc 提供 token 计数功能的"垫片"（shim）。
 
@@ -311,7 +382,7 @@ for user_msg, assistant_msg in history[-6:]:
 
 ---
 
-### 6.6 `document_processing/rag/nlp/__init__.py`
+### 6.7 `document_processing/rag/nlp/__init__.py`
 
 **职责**：为 deepdoc 提供编码检测功能的"垫片"（shim）。
 
@@ -354,8 +425,9 @@ for user_msg, assistant_msg in history[-6:]:
 
 ### OpenAI Python SDK
 - **是什么**：OpenAI 官方 Python 客户端
-- **我们用它连的**：SiliconFlow（`https://api.siliconflow.cn/v1`），完全兼容 OpenAI 接口格式
+- **我们用它连的**：MiniMax（主力）或 SiliconFlow（备用），均兼容 OpenAI 接口格式
 - **流式输出**：`stream=True` + `for chunk in stream` 实现打字机效果
+- **FallbackLLMClient**：`app.py` 中定义的代理类，优先调 MiniMax，失败时自动切换 SiliconFlow，对外接口与 `openai.OpenAI` 完全兼容
 
 ### Gradio
 - **是什么**：快速构建 ML 演示 Web UI 的 Python 库
@@ -369,14 +441,22 @@ for user_msg, assistant_msg in history[-6:]:
 `.env` 文件放在项目根目录，**不提交 git**（已加入 .gitignore）。
 
 ```env
-LLM_API_KEY=sk-xxxxxxxx        # SiliconFlow / vLLM 的 API Key
-LLM_BASE_URL=https://api.siliconflow.cn/v1   # API 地址
-LLM_MODEL=Qwen/Qwen2.5-14B-Instruct         # 使用的模型名
+# 备用 LLM（SiliconFlow）
+LLM_API_KEY=sk-xxxxxxxx        # SiliconFlow API Key
+LLM_BASE_URL=https://api.siliconflow.cn/v1
+LLM_MODEL=Qwen/Qwen2.5-14B-Instruct
+
+# 主力 LLM（MiniMax，优先使用；留空则退回 SiliconFlow）
+MINIMAX_API_KEY=               # MiniMax API Key（填入后自动启用）
+MINIMAX_BASE_URL=https://api.minimax.chat/v1
+MINIMAX_MODEL=MiniMax-Text-01
 ```
 
-`python-dotenv` 的 `load_dotenv()` 在脚本启动时自动读取这个文件，注入到 `os.environ`，代码通过 `os.getenv("LLM_API_KEY")` 读取。
+`python-dotenv` 的 `load_dotenv()` 在脚本启动时自动读取这个文件，注入到 `os.environ`，代码通过 `os.getenv()` 读取。
 
-**好处**：密钥不硬编码在代码里，不会被 git 记录，换模型只改 .env 不改代码。
+**LLM 优先级**：`MINIMAX_API_KEY` 非空时，`app.py` 会用 `FallbackLLMClient` 优先调 MiniMax，失败时自动降级到 SiliconFlow；`eval_rag.py` 直接切换为 MiniMax client。`MINIMAX_API_KEY` 为空时两者均使用 SiliconFlow。
+
+**好处**：密钥不硬编码，不会被 git 记录，换模型只改 `.env` 不改代码。
 
 ---
 
@@ -413,6 +493,9 @@ PYTHONUTF8=1 $PYTHON app.py
 | ChromaDB `collection.count()` 返回 0 | 未运行入库或 --clear 清空后未重新入库 | 运行 `main_ingest.py` |
 | LLM 返回"知识库中没有找到" | 检索距离太大，语义不匹配 | 检查入库块数是否正常，检查 Embedding 模型是否加载成功 |
 | GBK 编码错误 | Windows 控制台编码问题 | 命令前加 `PYTHONUTF8=1` |
+| 多轮对话第二问报错 `too many values to unpack` | Gradio 5+ 修改了 history 格式 | 已修复，`app.py` 的 `chat()` 函数已兼容新旧两种格式 |
+| ChromaDB `Error loading hnsw index` | 强制杀进程导致索引文件损坏 | 用 PowerShell `Remove-Item -Recurse` 清空 `storage/chroma_db/` 目录后重启 |
+| 回答内容太短 | SYSTEM_PROMPT 要求"简洁" | 已修改 SYSTEM_PROMPT 为"详细、准确、有条理" |
 
 ---
 
@@ -423,3 +506,10 @@ PYTHONUTF8=1 $PYTHON app.py
 | 2026-03-06 | 初始化项目，完成架构设计，deepdoc 集成，ChromaDB 入库 |
 | 2026-03-06 | 用 MinerU pipeline 替换 pymupdf4llm，支持扫描版 PDF OCR |
 | 2026-03-06 | 创建本文档，为所有代码文件添加中文注释 |
+| 2026-03-09 | 修复 Gradio 6.x 多轮对话报错（history 格式兼容 dict 和 list 两种形式） |
+| 2026-03-09 | 新增 `eval_rag.py`：RAG 性能评估工具，支持召回诊断和 LLM-as-Judge 两种模式 |
+| 2026-03-09 | `app.py` 新增"📊 性能评估"前端面板，召回诊断和 LLM 打分结果实时显示 |
+| 2026-03-09 | 调整 `app.py` 和 `main_chat.py` 的 SYSTEM_PROMPT，去掉"简洁"限制，改为详细输出 |
+| 2026-03-09 | `eval_rag.py` 新增 `--mode ragas`：实现 RAGAS 三指标（Context Relevance / Faithfulness / Answer Relevance） |
+| 2026-03-09 | `app.py` 性能评估面板新增"🧪 RAGAS 评估"按钮，走完整检索→生成→评估链路 |
+| 2026-03-09 | 新增 MiniMax 支持：`.env` 加 `MINIMAX_API_KEY/BASE_URL/MODEL`；`app.py` 引入 `FallbackLLMClient`（优先 MiniMax，失败降级 SiliconFlow）；`eval_rag.py` 同步支持 MiniMax 优先 |
