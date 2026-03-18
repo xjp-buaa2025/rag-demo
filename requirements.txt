@@ -3,7 +3,7 @@ python-dotenv
 pyyaml
 
 # Vector Database (Lite & Local)
-chromadb>=0.4.22
+chromadb==0.4.24
 
 # RAGFlow Deepdoc Dependencies
 # deepdoc might require some external image/pdf handling libraries depending on your document types.
@@ -26,14 +26,23 @@ torch
 # torchvision
 # torchaudio
 
-# LangChain Ecosystem (for future extension and easy wrappers)
+# LangChain Ecosystem
 langchain
 langchain-community
 langchain-core
+langchain-openai
 # Note: For connecting to vLLM via open-ai compatible API
-openai 
+openai
 tiktoken
+
+# Graph Database (BOM → Neo4j)
+neo4j
 
 # Web/API integration for custom Skills in future
 requests
 aiohttp
+
+# FastAPI 后端（重构自 app.py）
+fastapi>=0.111
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9

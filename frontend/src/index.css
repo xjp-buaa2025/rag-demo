@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/* 全局基础样式 */
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Markdown 渲染区域样式（react-markdown 输出的原生 HTML） */
+.prose h1, .prose h2, .prose h3 {
+  font-weight: 600;
+  margin: 0.75em 0 0.25em;
+}
+.prose p { margin: 0.4em 0; line-height: 1.6; }
+.prose ul, .prose ol { padding-left: 1.5em; margin: 0.4em 0; }
+.prose li { margin: 0.2em 0; }
+.prose code {
+  background: #f1f5f9;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.875em;
+  font-family: ui-monospace, Consolas, monospace;
+}
+.prose pre {
+  background: #1e293b;
+  color: #e2e8f0;
+  border-radius: 6px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.prose pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+.prose blockquote {
+  border-left: 3px solid #94a3b8;
+  padding-left: 12px;
+  color: #64748b;
+  margin: 0.5em 0;
+}
+.prose table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+  font-size: 0.875em;
+}
+.prose th, .prose td {
+  border: 1px solid #e2e8f0;
+  padding: 6px 10px;
+  text-align: left;
+}
+.prose th { background: #f8fafc; font-weight: 600; }
+.prose hr { border: none; border-top: 1px solid #e2e8f0; margin: 0.75em 0; }
+.prose strong { font-weight: 600; }
+.prose em { font-style: italic; color: #475569; }

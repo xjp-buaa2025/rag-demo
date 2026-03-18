@@ -24,7 +24,10 @@
 8. [配置系统（.env）](#8-配置系统env)
 9. [运行方式](#9-运行方式)
 10. [常见问题与排查](#10-常见问题与排查)
-11. [变更日志](#11-变更日志)
+11. [BOM-GraphRAG 扩展](#11-bom-graphrag-扩展)
+12. [FastAPI 后端](#12-fastapi-后端)
+13. [React 前端](#13-react-前端)
+14. [变更日志](#14-变更日志)
 
 ---
 
@@ -462,23 +465,40 @@ MINIMAX_MODEL=MiniMax-Text-01
 
 ## 9. 运行方式
 
-> 所有命令需在激活 `rag_demo` conda 环境后运行，或使用完整 Python 路径。
+> 所有 Python 命令需在激活 `rag_demo` conda 环境后运行。
+
+### 方式 A（推荐）：FastAPI + React 前后端分离
 
 ```bash
-PYTHON="C:/Users/Administrator/Miniconda3/envs/rag_demo/python.exe"
+# 终端 1：启动 FastAPI 后端（:8000）
+conda activate rag_demo
+PYTHONUTF8=1 python run_backend.py
+# → API 文档：http://localhost:8000/docs
+# → 健康检查：http://localhost:8000/health
 
-# 第一步：PDF 转 Markdown（首次运行会下载 MinerU 模型，耐心等待）
-PYTHONUTF8=1 $PYTHON pdf_to_md.py
+# 终端 2：启动 React 前端（:5173）
+cd frontend
+npm run dev
+# → 浏览器访问：http://localhost:5173
+```
 
-# 第二步：文档入库（首次运行会下载 BAAI/bge-m3 模型）
-PYTHONUTF8=1 $PYTHON main_ingest.py --clear   # --clear 清空重建
-PYTHONUTF8=1 $PYTHON main_ingest.py           # 增量入库
+### 方式 B（旧）：Gradio 一体化界面
 
-# 方式A：终端问答
-PYTHONUTF8=1 $PYTHON main_chat.py
+```bash
+conda activate rag_demo
+PYTHONUTF8=1 python app.py
+# → 浏览器访问：http://127.0.0.1:7860
+```
 
-# 方式B：Web 界面（访问 http://127.0.0.1:7860）
-PYTHONUTF8=1 $PYTHON app.py
+### 文档入库（首次必须运行）
+
+```bash
+# PDF 转 Markdown（MinerU OCR，首次下载模型需等待）
+PYTHONUTF8=1 python pdf_to_md.py
+
+# 知识库入库（首次下载 BAAI/bge-m3 模型）
+PYTHONUTF8=1 python main_ingest.py --clear   # 清空重建
+PYTHONUTF8=1 python main_ingest.py           # 增量入库
 ```
 
 ---
@@ -499,7 +519,230 @@ PYTHONUTF8=1 $PYTHON app.py
 
 ---
 
-## 11. 变更日志
+## 11. BOM-GraphRAG 扩展
+
+> 目标：将结构化 BOM（物料清单）写入 Neo4j 图数据库，用 LangChain Agent 结合 BOM 图谱和 RAG 知识库，生成航空发动机装配方案。现有 RAG 功能完全不受影响。
+
+### 11.1 整体架构
+
+```
+BOM Excel (data/test_bom.xlsx)
+    │
+    ▼ bom_ingest.py
+Neo4j 图数据库 (Docker bolt://localhost:7687)
+    ├─ 节点: Assembly（组件）/ Part（零件）/ Standard（标准件）
+    └─ 关系: CHILD_OF（层级隶属）
+    │
+    ▼ assembly_agent.py
+LangChain ReAct Agent
+    ├─ Tool: bom_query       → 查询 Neo4j（零件层级、材料、数量）
+    └─ Tool: knowledge_query → 查询 ChromaDB（装配工艺、设计规范）
+    │
+    ▼
+装配方案报告（Markdown 格式）
+```
+
+### 11.2 BOM 表格式规范
+
+Excel 文件必须包含以下列（列名不区分大小写）：
+
+| 列名 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `level_code` | 字符串 | 层级编号，`.` 分隔 | `1.2.1` |
+| `part_id` | 字符串 | 零件唯一编号（主键） | `HPT-D01` |
+| `part_name` | 字符串 | 零件中文名称 | `涡轮盘` |
+| `part_name_en` | 字符串 | 零件英文名称 | `Turbine Disk` |
+| `category` | 枚举 | `Assembly` / `Part` / `Standard` | `Part` |
+| `qty` | 整数 | 数量 | `80` |
+| `unit` | 字符串 | 单位 | `件` |
+| `material` | 字符串 | 材料牌号（可为空） | `GH4169` |
+| `weight_kg` | 浮点 | 重量 kg（可为空） | `42.0` |
+| `spec` | 字符串 | 规格说明（可为空） | `φ520×120 mm` |
+| `note` | 字符串 | 备注（可为空） | `粉末冶金盘` |
+
+**层级编号规则**：`level_code` 用 `.` 分隔表达父子层级，`bom_ingest.py` 自动根据此字段建立 `CHILD_OF` 关系。例如 `1.2.1` 的父节点为 `1.2`，祖父节点为 `1`。
+
+### 11.3 Neo4j 图模型
+
+```
+(涡扇发动机整机:Assembly {part_id:"ENG-001", weight_kg:2800, ...})
+    └─[:CHILD_OF]─(高压涡轮模块:Assembly {part_id:"HPT-000"})
+                       ├─[:CHILD_OF]─(高压涡轮导向器:Assembly)
+                       │                  └─[:CHILD_OF]─(导向叶片:Part {material:"DD6（单晶）", qty:32})
+                       └─[:CHILD_OF]─(高压涡轮转子:Assembly)
+                                          ├─[:CHILD_OF]─(涡轮盘:Part {material:"GH4169"})
+                                          └─[:CHILD_OF]─(涡轮工作叶片:Part {qty:80})
+```
+
+**为什么用 Neo4j 而不是 SQLite/ChromaDB？**
+BOM 的本质是图（树），查询"某个模块的所有子孙零件"需要递归，SQL 写起来复杂。Neo4j 的 Cypher 一行搞定：
+```cypher
+MATCH (n)-[:CHILD_OF*]->(root {part_id:"HPT-000"}) RETURN n
+```
+
+### 11.4 `bom_ingest.py` 详解
+
+**流程**：读取 Excel → 校验列名 → 写入节点（MERGE 幂等）→ 建立 CHILD_OF 关系 → 打印统计
+
+**关键设计**：
+- `MERGE` 而非 `CREATE`：重复运行不报错，实现幂等性
+- `--clear` 参数：仅删除 BOM 节点，不影响 Neo4j 中其他数据
+- 分三批写入（Assembly / Part / Standard）：避免 Cypher label 动态拼接的注入风险
+
+```bash
+PYTHONUTF8=1 python bom_ingest.py                      # 增量写入
+PYTHONUTF8=1 python bom_ingest.py --file data/my.xlsx  # 指定文件
+PYTHONUTF8=1 python bom_ingest.py --clear              # 清空重建
+```
+
+### 11.5 `assembly_agent.py` 详解
+
+**架构**：LangChain `ReAct Agent`（Reasoning + Acting 循环），拥有两个工具：
+
+| 工具 | 数据源 | 输入 | 输出 |
+|------|--------|------|------|
+| `bom_query` | Neo4j | 自然语言问题（含模块/零件名） | 结构化零件清单文本 |
+| `knowledge_query` | ChromaDB | 技术问题 | 相关教材原文片段 |
+
+**ReAct 循环**（每次用户提问，Agent 自动执行）：
+```
+Thought: 需要先查 BOM 知道有哪些零件
+Action: bom_query("高压涡轮模块包含哪些零件")
+Observation: 【高压涡轮模块】包含：涡轮盘×1, 涡轮叶片×80, ...
+Thought: 再查工艺规范
+Action: knowledge_query("涡轮叶片装配工艺要求")
+Observation: [来源：航空发动机设计手册] 涡轮叶片安装...
+Thought: 已有足够信息
+Final Answer: 【装配方案】步骤1: ... 步骤2: ...
+```
+
+**降级机制**：
+- Neo4j 不可用时：`bom_query` 返回提示信息，Agent 仍可用 `knowledge_query` 回答
+- ChromaDB 不可用时：`knowledge_query` 返回提示信息，Agent 仍可用 `bom_query` 回答
+
+```bash
+PYTHONUTF8=1 python assembly_agent.py                          # 交互模式
+PYTHONUTF8=1 python assembly_agent.py --query "生成高压涡轮装配方案"  # 单次查询
+```
+
+### 11.6 Neo4j Docker 快速启动
+
+```bash
+# 首次启动（创建容器）
+docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:5-community
+
+
+# 后续每次启动
+docker start neo4j
+
+# 浏览器可视化（用户名 neo4j，密码 password）
+# http://localhost:7474
+```
+
+`.env` 中追加：
+```env
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASS=password
+```
+
+### 11.7 新增文件清单
+
+```
+rag-demo/
+├── bom_ingest.py              # BOM → Neo4j 入库脚本
+├── assembly_agent.py          # LangChain Agent（装配方案生成）
+└── data/
+    ├── test_bom.xlsx          # 测试 BOM（47 条，涡扇发动机）
+    └── generate_test_bom.py   # 生成测试 BOM 的脚本
+```
+
+---
+
+## 12. FastAPI 后端
+
+`backend/` 目录将 `app.py` 中的所有后端逻辑抽离为独立 FastAPI 服务（`:8000`），`app.py` Gradio 继续在 `:7860` 运行，两者并行。
+
+### 文件结构
+
+```
+backend/
+├── main.py      # FastAPI app + lifespan（初始化 Embedding/ChromaDB/LLM）+ CORS + /health
+├── state.py     # AppState dataclass + FallbackLLMClient + LocalEmbeddingFunction
+├── deps.py      # Depends 函数（get_state / get_neo4j_cfg 等）
+├── sse.py       # 生成器→SSE 适配（log_gen_to_sse / chat_gen_to_sse）
+└── routers/
+    ├── ingest.py    # GET /ingest/status, POST /ingest（SSE）
+    ├── retrieve.py  # POST /retrieve（JSON）
+    ├── chat.py      # POST /chat（SSE）
+    ├── eval.py      # POST /eval/diagnose|judge|ragas（SSE）
+    ├── bom.py       # GET /bom/status, POST /bom/ingest（SSE）, POST /bom/query
+    └── assembly.py  # POST /assembly/chat（SSE）
+```
+
+### SSE 两种语义
+
+| 类型 | 接口 | 帧格式 | 前端处理 |
+|------|------|--------|---------|
+| 日志流 | /ingest、/eval/*、/bom/ingest | `{"log": "完整快照"}` + `[DONE]` | 覆盖式替换显示 |
+| 聊天流 | /chat、/assembly/chat | `{"delta": "增量"}` + `{"done":true,"sources_md":"..."}` | 追加式拼接 |
+
+---
+
+## 13. React 前端
+
+`frontend/` 目录基于 Vite + React 18 + TypeScript + Tailwind CSS v4 构建，通过 Vite 代理调用 FastAPI。
+
+### 技术栈
+
+| 层级 | 选型 |
+|------|------|
+| 框架 | React 18 + TypeScript |
+| 构建 | Vite（`npm run dev` → `:5173`） |
+| 样式 | Tailwind CSS v4（`@tailwindcss/vite` 插件，无需 tailwind.config.js） |
+| 状态 | Zustand（预留，当前用 `useState` + hooks） |
+| Markdown | react-markdown + remark-gfm |
+
+### 核心设计：POST SSE
+
+浏览器原生 `EventSource` 只支持 GET；所有聊天/入库接口是 POST SSE，因此用 `fetch + ReadableStream` 手动解析：
+
+```
+fetch(url, {method:'POST', body:...})
+  → res.body.getReader()
+  → 循环 read() → 解码 → 按 \n 拆行 → 找 "data: " 前缀 → JSON.parse
+```
+
+封装在 `src/hooks/usePostSSE.ts`（日志流）和 `src/hooks/useChat.ts`（聊天流）。
+
+### 文件结构
+
+```
+frontend/src/
+├── App.tsx                   # 顶层：Header + 双 Tab + Accordion 组件
+├── types/index.ts            # TS 类型（Message、BomStatus、SseFrame 等）
+├── api/client.ts             # 所有 API 调用封装（唯一入口）
+├── hooks/
+│   ├── usePostSSE.ts         # 日志类 SSE hook（log 覆盖式）
+│   └── useChat.ts            # 聊天类 SSE hook（delta 追加式）
+└── components/
+    ├── rag/
+    │   ├── KnowledgePanel.tsx  # 知识库入库 + 日志
+    │   ├── EvalPanel.tsx       # 三种评估 + 报告
+    │   └── RagChat.tsx         # RAG 问答聊天框
+    └── bom/
+        ├── Neo4jStatus.tsx     # Neo4j 状态检测
+        ├── BomIngest.tsx       # BOM 文件上传入库
+        └── AssemblyChat.tsx    # 装配方案融合问答
+```
+
+### Vite 代理配置
+
+`vite.config.ts` 中 `/api/*` 代理到 `localhost:8000`，前端请求 `/api/chat` → FastAPI `/chat`，浏览器不触发 CORS。
+
+---
+
+## 14. 变更日志
 
 | 日期 | 变更内容 |
 |------|----------|
@@ -513,3 +756,6 @@ PYTHONUTF8=1 $PYTHON app.py
 | 2026-03-09 | `eval_rag.py` 新增 `--mode ragas`：实现 RAGAS 三指标（Context Relevance / Faithfulness / Answer Relevance） |
 | 2026-03-09 | `app.py` 性能评估面板新增"🧪 RAGAS 评估"按钮，走完整检索→生成→评估链路 |
 | 2026-03-09 | 新增 MiniMax 支持：`.env` 加 `MINIMAX_API_KEY/BASE_URL/MODEL`；`app.py` 引入 `FallbackLLMClient`（优先 MiniMax，失败降级 SiliconFlow）；`eval_rag.py` 同步支持 MiniMax 优先 |
+| 2026-03-12 | 新增 BOM-GraphRAG 扩展：`bom_ingest.py`（BOM→Neo4j）、`assembly_agent.py`（LangChain ReAct Agent）、`data/test_bom.xlsx`（47条涡扇发动机测试数据）；`requirements.txt` 追加 `neo4j`、`langchain-openai` |
+| 2026-03-18 | FastAPI 后端重构：新建 `backend/`（main.py/state.py/deps.py/sse.py + routers/），暴露 12 个 REST+SSE 接口，`run_backend.py` 启动脚本，`requirements.txt` 追加 fastapi/uvicorn/python-multipart |
+| 2026-03-18 | React 前端：新建 `frontend/`（Vite + React 18 + TypeScript + Tailwind CSS v4），双 Tab 布局，POST SSE 流式接入，全面替代 Gradio |

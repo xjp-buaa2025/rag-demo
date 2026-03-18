@@ -14,8 +14,9 @@ build/
 venv/
 env/
 
-# ChromaDB data (local storage, don't commit)
+# Local storage (vector DB + graph DB，不提交)
 storage/chroma_db/
+storage/graph_db/
 
 # Sensitive / large files
 .env
@@ -23,6 +24,10 @@ storage/chroma_db/
 *.rar
 *.log
 ingest_error.log
+*.xlsx
+
+# Knowledge base documents in data/ (large, not source code)
+data/*.md
 
 # Claude Code local config (contains permissions, not for repo)
 .claude/

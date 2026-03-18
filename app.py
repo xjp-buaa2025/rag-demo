@@ -29,6 +29,13 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 import gradio as gr
+import pandas as pd
+
+try:
+    from neo4j import GraphDatabase as _Neo4jDriver
+    _NEO4J_AVAILABLE = True
+except ImportError:
+    _NEO4J_AVAILABLE = False
 
 # 加载 .env 配置
 load_dotenv()
@@ -45,6 +52,12 @@ from main_ingest import process_document
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 CHROMA_DB_DIR = os.path.join(os.path.dirname(__file__), 'storage', 'chroma_db')
+
+# Neo4j 配置（BOM 装配系统）
+NEO4J_URI  = os.getenv("NEO4J_URI",  "bolt://localhost:7687")
+NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+NEO4J_PASS = os.getenv("NEO4J_PASS", "password")
+DEFAULT_BOM_PATH = os.path.join(os.path.dirname(__file__), "data", "test_bom.xlsx")
 COLLECTION_NAME = "local_rag_knowledge"
 EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
 TOP_K = 4  # 每次检索返回 4 个相关块（比 main_chat.py 多一个，给 Web 用户更多参考）
@@ -191,11 +204,24 @@ class LocalEmbeddingFunction:
 # 全局单例：启动时初始化，之后所有请求复用
 embedding_func = LocalEmbeddingFunction(EMBEDDING_MODEL_NAME)
 chroma_client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
-collection = chroma_client.get_or_create_collection(
-    name=COLLECTION_NAME,
-    embedding_function=embedding_func,
-    metadata={"hnsw:space": "cosine"},
-)
+try:
+    collection = chroma_client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        embedding_function=embedding_func,
+        metadata={"hnsw:space": "cosine"},
+    )
+    _probe = collection.count()  # 触发索引加载，尽早发现 HNSW 损坏
+except Exception as _e:
+    print(f"[警告] ChromaDB 索引损坏（{_e}），自动重建集合，请重新运行入库脚本…")
+    try:
+        chroma_client.delete_collection(COLLECTION_NAME)
+    except Exception:
+        pass
+    collection = chroma_client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        embedding_function=embedding_func,
+        metadata={"hnsw:space": "cosine"},
+    )
 if MINIMAX_API_KEY:
     _primary = OpenAI(api_key=MINIMAX_API_KEY, base_url=MINIMAX_BASE_URL)
     _fallback = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
@@ -771,76 +797,473 @@ def chat(message: str, history: list):
 
 
 # ==========================================
+# BOM 装配系统 — 后端逻辑
+# ==========================================
+
+# Neo4j 连接（懒加载，首次调用时建立）
+_neo4j_driver = None
+
+
+def _get_neo4j():
+    """获取 Neo4j 连接，失败时返回 None（不抛异常，保证 UI 不崩溃）。"""
+    global _neo4j_driver
+    if _neo4j_driver is not None:
+        return _neo4j_driver
+    if not _NEO4J_AVAILABLE:
+        return None
+    try:
+        driver = _Neo4jDriver.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+        driver.verify_connectivity()
+        _neo4j_driver = driver
+    except Exception:
+        _neo4j_driver = None
+    return _neo4j_driver
+
+
+def check_neo4j_status() -> str:
+    """检测 Neo4j 连接，返回 Markdown 状态文本（供 UI 直接显示）。"""
+    global _neo4j_driver
+    _neo4j_driver = None          # 强制重新连接
+    driver = _get_neo4j()
+    if not _NEO4J_AVAILABLE:
+        return "🔴 **Neo4j 未安装**：请运行 `pip install neo4j`"
+    if driver is None:
+        return (
+            "🔴 **Neo4j 未连接**  \n"
+            f"URI：`{NEO4J_URI}`  \n"
+            "请先启动 Docker 容器：  \n"
+            "```\ndocker start neo4j\n```"
+        )
+    try:
+        with driver.session() as s:
+            r = s.run("""
+                MATCH (n) WHERE n:Assembly OR n:Part OR n:Standard
+                RETURN count(n) AS nodes
+            """).single()
+            nodes = r["nodes"] if r else 0
+            edges = s.run("MATCH ()-[r:CHILD_OF]->() RETURN count(r) AS cnt").single()["cnt"]
+        return (
+            f"🟢 **已连接** `{NEO4J_URI}`  \n"
+            f"图谱：**{nodes} 个节点**，**{edges} 条关系**  \n"
+            f"可视化：[http://localhost:7474](http://localhost:7474)"
+        )
+    except Exception as e:
+        return f"🟡 **连接异常**：{e}"
+
+
+def run_bom_ingest_ui(file_obj, clear_first: bool):
+    """
+    BOM 入库生成器（供 Gradio yield 实时刷新日志）。
+    file_obj：Gradio File 组件上传的临时文件对象，为 None 时使用默认测试 BOM。
+    """
+    lines = []
+
+    def emit(msg):
+        lines.append(msg)
+        return "\n".join(lines)
+
+    # 确定文件路径
+    if file_obj is None:
+        filepath = DEFAULT_BOM_PATH
+        yield emit(f"📌 未上传文件，使用默认测试 BOM：{os.path.basename(filepath)}")
+    else:
+        filepath = file_obj.name if hasattr(file_obj, "name") else str(file_obj)
+        yield emit(f"📌 使用上传文件：{os.path.basename(filepath)}")
+
+    if not os.path.exists(filepath):
+        yield emit(f"❌ 文件不存在：{filepath}")
+        return
+
+    # 读取 Excel
+    yield emit("📖 读取 BOM 表…")
+    try:
+        df = pd.read_excel(filepath, dtype=str)
+        df.columns = [c.strip().lower() for c in df.columns]
+        for col in ("material", "weight_kg", "spec", "note"):
+            if col not in df.columns:
+                df[col] = ""
+        df = df.dropna(subset=["level_code", "part_id"])
+        for col in df.columns:
+            df[col] = df[col].fillna("").astype(str).str.strip()
+        df["qty"] = pd.to_numeric(df["qty"], errors="coerce").fillna(1).astype(int)
+        yield emit(f"✅ 读取成功：共 {len(df)} 条零件记录")
+    except Exception as e:
+        yield emit(f"❌ 读取失败：{e}")
+        return
+
+    # 连接 Neo4j
+    yield emit(f"🔌 连接 Neo4j（{NEO4J_URI}）…")
+    driver = _get_neo4j()
+    if driver is None:
+        yield emit("❌ Neo4j 不可用，请先启动：docker start neo4j")
+        return
+    yield emit("✅ 连接成功")
+
+    with driver.session() as session:
+        # 建立 Schema
+        for label in ("Assembly", "Part", "Standard"):
+            session.run(f"CREATE CONSTRAINT IF NOT EXISTS FOR (n:{label}) REQUIRE n.part_id IS UNIQUE")
+        yield emit("🔧 Schema 约束已就绪")
+
+        # 可选清空
+        if clear_first:
+            r = session.run("""
+                MATCH (n) WHERE n:Assembly OR n:Part OR n:Standard
+                DETACH DELETE n RETURN count(n) AS cnt
+            """).single()
+            yield emit(f"🗑️ 已清空旧数据（{r['cnt']} 个节点）")
+
+        # 写入节点
+        records = df.to_dict(orient="records")
+        for category in ("Assembly", "Part", "Standard"):
+            batch = [r for r in records if r["category"] == category]
+            if not batch:
+                continue
+            session.run(f"""
+                UNWIND $rows AS row
+                MERGE (n:{category} {{part_id: row.part_id}})
+                SET n.level_code   = row.level_code,
+                    n.part_name    = row.part_name,
+                    n.part_name_en = row.part_name_en,
+                    n.qty          = toInteger(row.qty),
+                    n.unit         = row.unit,
+                    n.material     = row.material,
+                    n.weight_kg    = CASE row.weight_kg WHEN '' THEN null ELSE toFloat(row.weight_kg) END,
+                    n.spec         = row.spec,
+                    n.note         = row.note
+            """, rows=batch)
+            yield emit(f"   ✅ {category}：写入 {len(batch)} 个节点")
+
+        # 建立关系
+        level_map = dict(zip(df["level_code"], df["part_id"]))
+        edges = []
+        for _, row in df.iterrows():
+            code = str(row["level_code"])
+            if "." not in code:
+                continue
+            parent_code = ".".join(code.split(".")[:-1])
+            parent_id = level_map.get(parent_code)
+            if parent_id:
+                edges.append({"child_id": row["part_id"], "parent_id": parent_id})
+        if edges:
+            session.run("""
+                UNWIND $edges AS e
+                MATCH (child  {part_id: e.child_id})
+                MATCH (parent {part_id: e.parent_id})
+                MERGE (child)-[:CHILD_OF]->(parent)
+            """, edges=edges)
+        yield emit(f"   ✅ CHILD_OF 关系：建立 {len(edges)} 条")
+
+        # 统计
+        r2 = session.run("""
+            MATCH (n) WHERE n:Assembly OR n:Part OR n:Standard
+            RETURN count(CASE WHEN n:Assembly THEN 1 END) AS a,
+                   count(CASE WHEN n:Part THEN 1 END) AS p,
+                   count(CASE WHEN n:Standard THEN 1 END) AS s
+        """).single()
+        yield emit(
+            f"\n🎉 入库完成！Assembly:{r2['a']}  Part:{r2['p']}  Standard:{r2['s']}  "
+            f"关系:{len(edges)} 条  \n"
+            f"可视化查看：http://localhost:7474"
+        )
+
+
+def _query_bom_text(question: str) -> str:
+    """从 Neo4j 查询与问题相关的 BOM 信息，返回格式化文本。"""
+    driver = _get_neo4j()
+    if driver is None:
+        return ""
+
+    KNOWN_KEYWORDS = [
+        "风扇", "压气机", "高压压气机", "低压压气机", "燃烧室",
+        "高压涡轮", "低压涡轮", "涡轮", "附件", "尾喷管",
+        "叶片", "涡轮盘", "火焰筒", "喷嘴", "机匣", "转子", "静子",
+    ]
+    keywords = [kw for kw in KNOWN_KEYWORDS if kw in question] or [question[:15]]
+
+    with driver.session() as session:
+        lines = []
+        seen = set()
+        for kw in keywords:
+            rows = session.run("""
+                MATCH (parent) WHERE parent.part_name CONTAINS $kw
+                OPTIONAL MATCH (child)-[:CHILD_OF*1..2]->(parent)
+                WITH parent, collect(child) AS children
+                RETURN parent.part_name AS module,
+                       parent.part_id   AS module_id,
+                       parent.spec      AS spec,
+                       [c IN children | {
+                         name:c.part_name, id:c.part_id,
+                         qty:c.qty, unit:c.unit,
+                         material:c.material, spec:c.spec, note:c.note
+                       }] AS parts
+            """, kw=kw).data()
+
+            for r in rows:
+                mod = r.get("module", "")
+                if not mod or mod in seen:
+                    continue
+                seen.add(mod)
+                lines.append(f"【{mod}】({r.get('module_id','')})")
+                if r.get("spec"):
+                    lines.append(f"  规格：{r['spec']}")
+                for p in (r.get("parts") or []):
+                    mat  = f" 材料:{p['material']}" if p.get("material") else ""
+                    spec = f" 规格:{p['spec']}"     if p.get("spec") else ""
+                    note = f" 备注:{p['note']}"     if p.get("note") else ""
+                    lines.append(
+                        f"  - {p['name']}({p['id']}) ×{p['qty']}{p['unit']}{mat}{spec}{note}"
+                    )
+        return "\n".join(lines) if lines else ""
+
+
+ASSEMBLY_SYSTEM_PROMPT = """你是一名资深航空发动机装配工程师，熟悉涡扇发动机的结构设计和装配工艺。
+根据提供的 BOM 零件清单和技术知识库内容，生成详细的装配方案。
+方案须包含：零件清单确认、装配顺序（步骤编号）、工艺要点（力矩/公差/工装）、注意事项。
+若 BOM 或知识库无相关数据，请说明并基于通用工程知识回答。"""
+
+
+def assembly_chat(message: str, history: list):
+    """
+    装配方案问答（流式）：并行查 BOM 图谱 + RAG 知识库，再流式生成装配方案。
+    比 LangChain ReAct Agent 更快（无多轮 LLM 推理决策），直接两路融合。
+    """
+    # 1. 并行查询两路信息
+    bom_text  = _query_bom_text(message)
+    rag_chunks = retrieve(message)   # 复用现有向量检索
+
+    # 2. 构建 prompt
+    rag_context = ""
+    if rag_chunks:
+        rag_context = "\n\n".join(
+            f"[{i+1}] 来源:{c['source']}\n{c['text']}"
+            for i, c in enumerate(rag_chunks)
+        )
+
+    sections = []
+    if bom_text:
+        sections.append(f"【BOM 零件清单（来自图数据库）】\n{bom_text}")
+    if rag_context:
+        sections.append(f"【技术知识库（来自教材）】\n{rag_context}")
+
+    if sections:
+        user_content = "\n\n".join(sections) + f"\n\n【用户问题】\n{message}"
+    else:
+        user_content = message
+
+    # 3. 构建多轮历史
+    messages = [{"role": "system", "content": ASSEMBLY_SYSTEM_PROMPT}]
+    for item in history[-8:]:
+        if isinstance(item, dict):
+            if item.get("role") in ("user", "assistant"):
+                messages.append({"role": item["role"], "content": item.get("content") or ""})
+        else:
+            if item[0]: messages.append({"role": "user",      "content": item[0]})
+            if item[1]: messages.append({"role": "assistant",  "content": item[1]})
+    messages.append({"role": "user", "content": user_content})
+
+    # 4. 流式生成
+    full_answer = ""
+    try:
+        stream = llm_client.chat.completions.create(
+            model=LLM_MODEL, messages=messages, temperature=0.3, stream=True,
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content or ""
+            full_answer += delta
+            yield full_answer
+    except Exception as e:
+        yield f"❌ LLM 调用失败：{e}"
+        return
+
+    # 5. 追加 BOM 来源注脚
+    if bom_text:
+        full_answer += "\n\n---\n**🔩 BOM 数据来源**：Neo4j 图数据库"
+    if rag_chunks:
+        full_answer += "\n\n---\n**📚 知识库参考**\n" + "".join(
+            f"**[{i+1}] {c['source']}**  \n_{c['text'][:80].replace(chr(10),' ')}…_\n"
+            for i, c in enumerate(rag_chunks, 1)
+        )
+    yield full_answer
+
+
+# ==========================================
 # Gradio UI 布局
 # ==========================================
 
-with gr.Blocks(title="本地知识库 RAG 问答") as demo:
-    gr.Markdown("## 📖 本地知识库 RAG 问答")
-    gr.Markdown(f"模型：`{_active_model_label}` &nbsp;·&nbsp; Embedding：`{EMBEDDING_MODEL_NAME}`")
-
-    # 折叠面板：知识库管理（默认折叠，不干扰问答主界面）
-    with gr.Accordion("📂 知识库管理", open=False):
-        status_md = gr.Markdown(_status())   # 显示当前知识库文档块数
-        with gr.Row():
-            ingest_btn = gr.Button("🔄 扫描 data/ 并入库（增量）", variant="primary", scale=2)
-            clear_btn = gr.Button("🗑️ 清空后重建", variant="stop", scale=1)
-        ingest_log = gr.Textbox(
-            label="入库日志",
-            lines=10,
-            interactive=False,
-            placeholder="点击按钮后这里会显示入库进度…",
-        )
-
-    # 折叠面板：性能评估
-    with gr.Accordion("📊 性能评估", open=False):
-        gr.Markdown(
-            "**召回诊断**：检索 10 道测试题，显示每题召回距离和片段，无需调用 LLM，秒出结果。  \n"
-            "**LLM 打分**：召回质量三维打分（相关性/完整性/可回答性），约需 1–2 分钟。  \n"
-            "**RAGAS 评估**：走完整 检索→生成→评估 链路，计算 Context Relevance / Faithfulness / Answer Relevance，约需 5–15 分钟。"
-        )
-        with gr.Row():
-            diagnose_btn = gr.Button("🔍 召回诊断", variant="primary", scale=2)
-            judge_btn = gr.Button("⚖️ LLM 打分", variant="secondary", scale=1)
-            ragas_btn = gr.Button("🧪 RAGAS 评估", variant="secondary", scale=1)
-        eval_log = gr.Textbox(
-            label="评估结果",
-            lines=25,
-            max_lines=60,
-            interactive=False,
-            placeholder="点击按钮后这里会实时显示评估报告…",
-        )
-
-    # 主界面：对话组件
-    gr.ChatInterface(
-        fn=chat,
-        examples=["RAG是什么？", "RAG有哪些核心步骤？", "RAG和直接微调模型有什么区别？"],
-        chatbot=gr.Chatbot(height=460, render_markdown=True),
-        textbox=gr.Textbox(placeholder="输入问题，按 Enter 发送…", scale=9),
+with gr.Blocks(title="航空发动机知识库 & 装配系统") as demo:
+    gr.Markdown("## 🚀 航空发动机知识库 & 装配系统")
+    gr.Markdown(
+        f"LLM：`{_active_model_label}` &nbsp;·&nbsp; Embedding：`{EMBEDDING_MODEL_NAME}`"
     )
 
-    # 注意：Gradio 要求事件回调必须是具名函数，lambda 无法被正确识别为生成器
-    def do_ingest():
-        yield from run_ingest(clear_first=False)
+    with gr.Tabs():
 
-    def do_clear_ingest():
-        yield from run_ingest(clear_first=True)
+        # ── Tab 1：RAG 知识库问答 ──────────────────────────────────────────
+        with gr.Tab("📖 RAG 知识库问答"):
 
-    # 绑定按钮事件：输出写入日志框和状态栏
-    ingest_btn.click(fn=do_ingest, outputs=[ingest_log, status_md])
-    clear_btn.click(fn=do_clear_ingest, outputs=[ingest_log, status_md])
+            with gr.Accordion("📂 知识库管理", open=False):
+                status_md = gr.Markdown(_status())
+                with gr.Row():
+                    ingest_btn = gr.Button("🔄 扫描 data/ 并入库（增量）", variant="primary", scale=2)
+                    clear_btn  = gr.Button("🗑️ 清空后重建", variant="stop", scale=1)
+                ingest_log = gr.Textbox(
+                    label="入库日志", lines=10, interactive=False,
+                    placeholder="点击按钮后这里会显示入库进度…",
+                )
 
-    def do_eval_diagnose():
-        yield from run_eval_diagnose()
+            with gr.Accordion("📊 性能评估", open=False):
+                gr.Markdown(
+                    "**召回诊断**：秒出，无需 LLM。&nbsp;&nbsp;"
+                    "**LLM 打分**：三维打分，约 1–2 分钟。&nbsp;&nbsp;"
+                    "**RAGAS 评估**：完整链路，约 5–15 分钟。"
+                )
+                with gr.Row():
+                    diagnose_btn = gr.Button("🔍 召回诊断", variant="primary", scale=2)
+                    judge_btn    = gr.Button("⚖️ LLM 打分", variant="secondary", scale=1)
+                    ragas_btn    = gr.Button("🧪 RAGAS 评估", variant="secondary", scale=1)
+                eval_log = gr.Textbox(
+                    label="评估结果", lines=25, max_lines=60, interactive=False,
+                    placeholder="点击按钮后这里会实时显示评估报告…",
+                )
 
-    def do_eval_judge():
-        yield from run_eval_judge()
+            # RAG 问答对话区
+            rag_chatbot = gr.Chatbot(
+                height=460, render_markdown=True, label="知识库问答",
+                placeholder="<center>请先完成知识库入库，再开始提问</center>",
+            )
+            with gr.Row():
+                rag_input = gr.Textbox(
+                    placeholder="输入问题，按 Enter 发送…", scale=9, show_label=False,
+                )
+                rag_send_btn = gr.Button("发送", variant="primary", scale=1)
+            with gr.Row():
+                rag_clear_btn = gr.Button("🗑️ 清空对话", scale=1)
+                gr.Examples(
+                    examples=["RAG是什么？", "压气机的工作原理？", "涡轮叶片如何冷却？"],
+                    inputs=rag_input, label="示例问题",
+                )
 
-    def do_eval_ragas():
-        yield from run_eval_ragas()
+        # ── Tab 2：BOM 装配系统 ────────────────────────────────────────────
+        with gr.Tab("🔩 BOM 装配系统"):
 
+            with gr.Accordion("⚙️ Neo4j 图数据库状态", open=True):
+                neo4j_status_md = gr.Markdown(
+                    "点击「检测连接」按钮查看 Neo4j 状态"
+                )
+                with gr.Row():
+                    neo4j_check_btn = gr.Button("🔍 检测连接", variant="primary", scale=1)
+                    with gr.Column(scale=3):
+                        gr.Markdown(
+                            f"默认地址：`{NEO4J_URI}` &nbsp; "
+                            "启动命令：`docker start neo4j`"
+                        )
+
+            with gr.Accordion("📋 BOM 入库", open=False):
+                gr.Markdown(
+                    "上传 BOM Excel 文件（或留空使用内置测试数据 `data/test_bom.xlsx`）。  \n"
+                    "BOM 格式要求：含 `level_code / part_id / part_name / category / qty / unit` 列。"
+                )
+                bom_file_input = gr.File(
+                    label="BOM Excel 文件（留空则用默认测试数据）",
+                    file_types=[".xlsx"],
+                )
+                with gr.Row():
+                    bom_ingest_btn = gr.Button("📥 入库（增量）", variant="primary", scale=2)
+                    bom_clear_btn  = gr.Button("🗑️ 清空后重建", variant="stop", scale=1)
+                bom_ingest_log = gr.Textbox(
+                    label="入库日志", lines=12, interactive=False,
+                    placeholder="点击「入库」按钮后这里会显示进度…",
+                )
+
+            # 装配方案问答区
+            gr.Markdown("### 💬 装配方案生成")
+            gr.Markdown(
+                "Agent 自动查询 **BOM 图谱**（零件清单/材料/规格）+ **RAG 知识库**（工艺规范）  \n"
+                "并融合两路信息，生成完整装配方案。"
+            )
+            assembly_chatbot = gr.Chatbot(
+                height=500, render_markdown=True, label="装配方案",
+                placeholder=(
+                    "<center>Neo4j 连接后即可开始提问<br/>"
+                    "示例：生成高压涡轮模块的完整装配方案</center>"
+                ),
+            )
+            with gr.Row():
+                assembly_input = gr.Textbox(
+                    placeholder="输入问题，如：生成高压涡轮模块装配方案…",
+                    scale=9, show_label=False,
+                )
+                assembly_send_btn = gr.Button("发送", variant="primary", scale=1)
+            with gr.Row():
+                assembly_clear_btn = gr.Button("🗑️ 清空对话", scale=1)
+                gr.Examples(
+                    examples=[
+                        "生成高压涡轮模块的完整装配方案",
+                        "燃烧室模块包含哪些零件？装配注意事项是什么？",
+                        "风扇叶片安装有哪些工艺要求？",
+                    ],
+                    inputs=assembly_input, label="示例问题",
+                )
+
+    # ── 事件绑定 ─────────────────────────────────────────────────────────────
+
+    # Tab 1：知识库管理
+    def do_ingest():       yield from run_ingest(clear_first=False)
+    def do_clear_ingest(): yield from run_ingest(clear_first=True)
+    ingest_btn.click(fn=do_ingest,       outputs=[ingest_log, status_md])
+    clear_btn.click( fn=do_clear_ingest, outputs=[ingest_log, status_md])
+
+    # Tab 1：性能评估
+    def do_eval_diagnose(): yield from run_eval_diagnose()
+    def do_eval_judge():    yield from run_eval_judge()
+    def do_eval_ragas():    yield from run_eval_ragas()
     diagnose_btn.click(fn=do_eval_diagnose, outputs=eval_log)
-    judge_btn.click(fn=do_eval_judge, outputs=eval_log)
-    ragas_btn.click(fn=do_eval_ragas, outputs=eval_log)
+    judge_btn.click(   fn=do_eval_judge,    outputs=eval_log)
+    ragas_btn.click(   fn=do_eval_ragas,    outputs=eval_log)
+
+    # Tab 1：RAG 问答对话（流式）
+    def rag_submit(message, history):
+        history = history or []
+        if not message.strip():
+            yield "", history
+            return
+        history = history + [{"role": "user", "content": message}]
+        history.append({"role": "assistant", "content": ""})
+        yield "", history
+        for partial in chat(message, history[:-2]):
+            history[-1]["content"] = partial
+            yield "", history
+
+    rag_send_btn.click(fn=rag_submit,  inputs=[rag_input, rag_chatbot], outputs=[rag_input, rag_chatbot])
+    rag_input.submit(  fn=rag_submit,  inputs=[rag_input, rag_chatbot], outputs=[rag_input, rag_chatbot])
+    rag_clear_btn.click(fn=lambda: ([], ""), outputs=[rag_chatbot, rag_input])
+
+    # Tab 2：Neo4j 状态检测
+    neo4j_check_btn.click(fn=check_neo4j_status, outputs=neo4j_status_md)
+
+    # Tab 2：BOM 入库
+    def do_bom_ingest(file_obj):       yield from run_bom_ingest_ui(file_obj, clear_first=False)
+    def do_bom_clear_ingest(file_obj): yield from run_bom_ingest_ui(file_obj, clear_first=True)
+    bom_ingest_btn.click(fn=do_bom_ingest,       inputs=bom_file_input, outputs=bom_ingest_log)
+    bom_clear_btn.click( fn=do_bom_clear_ingest, inputs=bom_file_input, outputs=bom_ingest_log)
+
+    # Tab 2：装配方案问答（流式）
+    def assembly_submit(message, history):
+        history = history or []
+        if not message.strip():
+            yield "", history
+            return
+        history = history + [{"role": "user", "content": message}]
+        history.append({"role": "assistant", "content": ""})
+        yield "", history
+        for partial in assembly_chat(message, history[:-2]):
+            history[-1]["content"] = partial
+            yield "", history
+
+    assembly_send_btn.click(fn=assembly_submit, inputs=[assembly_input, assembly_chatbot], outputs=[assembly_input, assembly_chatbot])
+    assembly_input.submit(  fn=assembly_submit, inputs=[assembly_input, assembly_chatbot], outputs=[assembly_input, assembly_chatbot])
+    assembly_clear_btn.click(fn=lambda: ([], ""), outputs=[assembly_chatbot, assembly_input])
 
 
 if __name__ == "__main__":
@@ -850,7 +1273,7 @@ if __name__ == "__main__":
     demo.launch(
         server_name="127.0.0.1",
         server_port=7860,
-        share=False,          # 不生成公网链接
+        share=False,
+        show_error=True,
         theme=gr.themes.Soft(),
-        show_error=True,      # 在 UI 上显示后端报错，方便调试
     )
