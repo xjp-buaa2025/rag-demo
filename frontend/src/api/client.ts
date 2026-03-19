@@ -99,9 +99,9 @@ export function postChat(message: string, history: Message[]) {
 // ----------------------------------------------------------
 // 评估接口（SSE）
 // ----------------------------------------------------------
-export function postEvalDiagnose() { return postSSE('/eval/diagnose') }
-export function postEvalJudge()    { return postSSE('/eval/judge') }
-export function postEvalRagas()    { return postSSE('/eval/ragas') }
+export function postEvalRetrieval()  { return postSSE('/eval/retrieval') }
+export function postEvalGeneration() { return postSSE('/eval/generation') }
+export function postEvalRagas()      { return postSSE('/eval/ragas') }
 
 // ----------------------------------------------------------
 // BOM 状态检查（JSON）

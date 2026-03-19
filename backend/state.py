@@ -78,6 +78,7 @@ class AppState:
     llm_client: Any             # FallbackLLMClient 或 openai.OpenAI
     active_model_label: str
     neo4j_driver: Optional[Any] = None
+    reranker: Optional[Any] = None      # sentence_transformers.CrossEncoder，None 表示未加载，降级为距离排序
     is_ingesting: bool = False          # 防并发：入库期间置 True，结束后清除
     collection_lock: threading.Lock = field(default_factory=threading.Lock)
     neo4j_lock: threading.Lock = field(default_factory=threading.Lock)

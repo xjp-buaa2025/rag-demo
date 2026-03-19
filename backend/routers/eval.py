@@ -4,12 +4,14 @@ backend/routers/eval.py — RAG 性能评估接口
 POST /eval/diagnose  — 向量召回诊断（秒级，无 LLM）→ SSE
 POST /eval/judge     — LLM-as-Judge 三维打分（~1-2 分钟）→ SSE
 POST /eval/ragas     — RAGAS 三指标评估（~5-15 分钟）→ SSE
+POST /eval/ranked    — 有监督检索指标 Recall@K/MRR/NDCG@K（LLM 自动标注）→ SSE
 
 全部迁移自 app.py：run_eval_diagnose()、run_eval_judge()、run_eval_ragas()。
 业务逻辑与 app.py 完全一致，仅去掉对全局变量的直接引用，改为通过 state 传入。
 """
 
 import json
+import math
 import re
 import statistics
 from fastapi import APIRouter, Depends, Request
@@ -457,4 +459,488 @@ def _run_ragas(state: AppState, llm_model: str):
             yield emit("  🟠 RAG 质量中等，建议优化 chunk 策略和 TOP_K。")
         else:
             yield emit("  🔴 RAG 质量较差，请检查知识库内容、Embedding 模型和生成策略。")
+    yield emit("=" * 60)
+
+
+# ==========================================
+# 有监督检索指标：Recall@K / MRR / NDCG@K
+# ==========================================
+
+RELEVANCE_JUDGE_PROMPT = """判断以下文档片段是否与问题直接相关。
+只回答 YES 或 NO，不要有任何其他内容。
+
+【问题】
+{question}
+
+【文档片段】
+{chunk}"""
+
+RANKED_RETRIEVE_K = 10  # 构建 ground truth 时取 top-10
+RANKED_EVAL_K = 5       # 计算指标时取 top-5
+
+
+def _annotate_relevance(state: AppState, llm_model: str, question: str, chunks: list) -> list:
+    """对每个 chunk 调用 LLM 判断是否与 question 相关，返回 bool 列表。"""
+    labels = []
+    for chunk in chunks:
+        try:
+            resp = state.llm_client.chat.completions.create(
+                model=llm_model,
+                messages=[{"role": "user", "content": RELEVANCE_JUDGE_PROMPT.format(
+                    question=question, chunk=chunk["text"][:500]
+                )}],
+                temperature=0.0,
+            )
+            ans = resp.choices[0].message.content.strip().upper()
+            labels.append("YES" in ans)
+        except Exception:
+            labels.append(False)
+    return labels
+
+
+def _recall_at_k(retrieved: list, relevant_set: set, k: int) -> float:
+    """Recall@K = |retrieved[:K] ∩ relevant| / max(|relevant|, 1)"""
+    if not relevant_set:
+        return 0.0
+    hits = sum(1 for c in retrieved[:k] if c["text"] in relevant_set)
+    return hits / len(relevant_set)
+
+
+def _mrr(retrieved: list, relevant_set: set) -> float:
+    """MRR = 1/rank_of_first_relevant；若无相关文档则返回 0。"""
+    for i, c in enumerate(retrieved, 1):
+        if c["text"] in relevant_set:
+            return 1.0 / i
+    return 0.0
+
+
+def _ndcg_at_k(retrieved: list, relevant_set: set, k: int) -> float:
+    """NDCG@K（binary relevance）= DCG@K / IDCG@K"""
+    dcg = sum(
+        (1.0 if c["text"] in relevant_set else 0.0) / math.log2(i + 2)
+        for i, c in enumerate(retrieved[:k])
+    )
+    ideal_hits = min(len(relevant_set), k)
+    idcg = sum(1.0 / math.log2(i + 2) for i in range(ideal_hits))
+    return dcg / idcg if idcg > 0 else 0.0
+
+
+@router.post("/ranked", summary="有监督检索指标 Recall@K/MRR/NDCG@K（SSE）")
+def eval_ranked(request: Request, state: AppState = Depends(get_state)):
+    llm_model = request.app.state.llm_model
+    return log_gen_to_sse(_run_ranked(state, llm_model))
+
+
+def _run_ranked(state: AppState, llm_model: str):
+    lines = []
+
+    def emit(msg=""):
+        lines.append(msg)
+        return "\n".join(lines)
+
+    total = state.collection.count()
+    yield emit("=" * 60)
+    yield emit("  有监督检索指标：Recall@K / MRR / NDCG@K")
+    yield emit("  （LLM-as-Annotator 自动构建 Ground Truth）")
+    yield emit("=" * 60)
+    yield emit(f"知识库文档块总数：{total}")
+    if total == 0:
+        yield emit("⚠️ 知识库为空，请先完成入库后再评估。")
+        return
+
+    yield emit("\n📋 Ground Truth 构建中（每题检索 Top-10，LLM 逐块标注相关性）…")
+    yield emit("  预计耗时：约 1-3 分钟")
+
+    all_r1, all_r3, all_r5, all_mrr, all_ndcg = [], [], [], [], []
+
+    for i, question in enumerate(EVAL_QUESTIONS, 1):
+        yield emit(f"\n[{i:02d}/{len(EVAL_QUESTIONS)}] {question}")
+
+        # 取 top-10 用于标注
+        n_label = min(RANKED_RETRIEVE_K, total)
+        q_emb = state.embedding_func([question])[0]
+        label_results = state.collection.query(
+            query_embeddings=[q_emb],
+            n_results=n_label,
+            include=["documents", "metadatas", "distances"],
+        )
+        label_chunks = [
+            {"text": doc, "source": meta.get("source", "未知"), "distance": dist}
+            for doc, meta, dist in zip(
+                label_results["documents"][0],
+                label_results["metadatas"][0],
+                label_results["distances"][0],
+            )
+        ]
+
+        yield emit(f"  标注 {len(label_chunks)} 个候选块…")
+        labels = _annotate_relevance(state, llm_model, question, label_chunks)
+        relevant_set = {c["text"] for c, rel in zip(label_chunks, labels) if rel}
+        n_rel = len(relevant_set)
+        yield emit(f"  标注完成：{n_rel}/{len(label_chunks)} 块相关")
+
+        if n_rel == 0:
+            yield emit("  ⚠️  无相关块，该题跳过（可能问题与语料不匹配）")
+            continue
+
+        # 取 top-5 作为"被评估的检索结果"
+        n_eval = min(RANKED_EVAL_K, total)
+        eval_results = state.collection.query(
+            query_embeddings=[q_emb],
+            n_results=n_eval,
+            include=["documents", "metadatas", "distances"],
+        )
+        eval_chunks = [
+            {"text": doc, "source": meta.get("source", "未知"), "distance": dist}
+            for doc, meta, dist in zip(
+                eval_results["documents"][0],
+                eval_results["metadatas"][0],
+                eval_results["distances"][0],
+            )
+        ]
+
+        r1 = _recall_at_k(eval_chunks, relevant_set, 1)
+        r3 = _recall_at_k(eval_chunks, relevant_set, 3)
+        r5 = _recall_at_k(eval_chunks, relevant_set, 5)
+        mrr = _mrr(eval_chunks, relevant_set)
+        ndcg = _ndcg_at_k(eval_chunks, relevant_set, 5)
+
+        all_r1.append(r1); all_r3.append(r3); all_r5.append(r5)
+        all_mrr.append(mrr); all_ndcg.append(ndcg)
+
+        yield emit(f"  Recall@1={r1:.3f}  Recall@3={r3:.3f}  Recall@5={r5:.3f}")
+        yield emit(f"  MRR={mrr:.3f}  NDCG@5={ndcg:.3f}")
+
+    yield emit(f"\n{'=' * 60}")
+    yield emit("全局指标汇总")
+    yield emit("-" * 40)
+    metrics = [
+        ("Recall@1", all_r1,  "前1个结果中召回相关文档的比例"),
+        ("Recall@3", all_r3,  "前3个结果中召回相关文档的比例"),
+        ("Recall@5", all_r5,  "前5个结果中召回相关文档的比例"),
+        ("MRR     ", all_mrr, "第一个相关结果排名的倒数均值"),
+        ("NDCG@5  ", all_ndcg, "综合排名与相关性的折损累计增益"),
+    ]
+    for name, vals, desc in metrics:
+        if vals:
+            avg = statistics.mean(vals)
+            bar = "█" * int(avg * 10) + "░" * (10 - int(avg * 10))
+            yield emit(f"  {name}  {avg:.3f}  [{bar}]  {desc}")
+        else:
+            yield emit(f"  {name}  无有效数据")
+
+    all_vals = all_r5 + all_mrr + all_ndcg
+    if all_vals:
+        overall = statistics.mean(all_vals)
+        yield emit(f"\n  综合检索分:  {overall:.3f} / 1.0")
+        if overall >= 0.7:
+            yield emit("  ✅ 检索质量优秀。")
+        elif overall >= 0.5:
+            yield emit("  🟡 检索质量良好，有提升空间。")
+        elif overall >= 0.3:
+            yield emit("  🟠 检索质量中等，建议调整 chunk_size / TOP_K。")
+        else:
+            yield emit("  🔴 检索质量较差，请检查知识库内容和 Embedding 适配性。")
+    yield emit("=" * 60)
+
+
+# ==========================================
+# 检索阶段评估：CP@K / Recall@K / MRR / NDCG@K
+# ==========================================
+
+def _context_precision_at_k(labels: list, k: int) -> float:
+    """Context Precision@K = 前K个结果中相关块数 / K（信噪比）"""
+    return sum(1 for v in labels[:k] if v) / k if k > 0 else 0.0
+
+
+@router.post("/retrieval", summary="检索阶段评估（SSE）")
+def eval_retrieval(request: Request, state: AppState = Depends(get_state)):
+    llm_model = request.app.state.llm_model
+    return log_gen_to_sse(_run_retrieval(state, llm_model))
+
+
+def _run_retrieval(state: AppState, llm_model: str):
+    lines = []
+
+    def emit(msg=""):
+        lines.append(msg)
+        return "\n".join(lines)
+
+    total = state.collection.count()
+    yield emit("=" * 60)
+    yield emit("  检索阶段评估")
+    yield emit("  上下文精确率 / Recall@K / MRR / NDCG@K")
+    yield emit("=" * 60)
+    yield emit(f"知识库文档块总数：{total}")
+    if total == 0:
+        yield emit("⚠️ 知识库为空，请先完成入库后再评估。")
+        return
+
+    yield emit("\n📋 Ground Truth 构建中（每题 Top-10，LLM 逐块标注相关性）…")
+    yield emit("  预计耗时：约 1-3 分钟")
+
+    all_cp, all_r1, all_r3, all_r5, all_mrr, all_ndcg = [], [], [], [], [], []
+
+    for i, question in enumerate(EVAL_QUESTIONS, 1):
+        yield emit(f"\n[{i:02d}/{len(EVAL_QUESTIONS)}] {question}")
+
+        n_label = min(RANKED_RETRIEVE_K, total)
+        q_emb = state.embedding_func([question])[0]
+        label_results = state.collection.query(
+            query_embeddings=[q_emb],
+            n_results=n_label,
+            include=["documents", "metadatas", "distances"],
+        )
+        label_chunks = [
+            {"text": doc, "source": meta.get("source", "未知"), "distance": dist}
+            for doc, meta, dist in zip(
+                label_results["documents"][0],
+                label_results["metadatas"][0],
+                label_results["distances"][0],
+            )
+        ]
+
+        yield emit(f"  标注 {len(label_chunks)} 个候选块…")
+        labels = _annotate_relevance(state, llm_model, question, label_chunks)
+        relevant_set = {c["text"] for c, rel in zip(label_chunks, labels) if rel}
+        n_rel = len(relevant_set)
+        yield emit(f"  标注完成：{n_rel}/{len(label_chunks)} 块相关")
+
+        if n_rel == 0:
+            yield emit("  ⚠️  无相关块，该题跳过")
+            continue
+
+        # 取 top-5 作为被评估的检索结果
+        n_eval = min(RANKED_EVAL_K, total)
+        eval_results = state.collection.query(
+            query_embeddings=[q_emb],
+            n_results=n_eval,
+            include=["documents", "metadatas", "distances"],
+        )
+        eval_chunks = [
+            {"text": doc, "source": meta.get("source", "未知"), "distance": dist}
+            for doc, meta, dist in zip(
+                eval_results["documents"][0],
+                eval_results["metadatas"][0],
+                eval_results["distances"][0],
+            )
+        ]
+        # top-5 各块是否相关（直接用已标注的 label_chunks 前5个的标签）
+        eval_labels = labels[:n_eval]
+
+        cp  = _context_precision_at_k(eval_labels, n_eval)
+        r1  = _recall_at_k(eval_chunks, relevant_set, 1)
+        r3  = _recall_at_k(eval_chunks, relevant_set, 3)
+        r5  = _recall_at_k(eval_chunks, relevant_set, 5)
+        mrr = _mrr(eval_chunks, relevant_set)
+        ndcg = _ndcg_at_k(eval_chunks, relevant_set, 5)
+
+        all_cp.append(cp); all_r1.append(r1); all_r3.append(r3)
+        all_r5.append(r5); all_mrr.append(mrr); all_ndcg.append(ndcg)
+
+        yield emit(f"  精确率@5={cp:.3f}  Recall@1={r1:.3f}  Recall@3={r3:.3f}  Recall@5={r5:.3f}")
+        yield emit(f"  MRR={mrr:.3f}  NDCG@5={ndcg:.3f}")
+
+    yield emit(f"\n{'=' * 60}")
+    yield emit("检索阶段全局汇总")
+    yield emit("-" * 40)
+    metrics = [
+        ("上下文精确率@5", all_cp,   "检索结果信噪比（相关块占比）"),
+        ("Recall@1   ", all_r1,   "Top-1 中召回相关文档的比例"),
+        ("Recall@3   ", all_r3,   "Top-3 中召回相关文档的比例"),
+        ("Recall@5   ", all_r5,   "Top-5 中召回相关文档的比例"),
+        ("MRR        ", all_mrr,  "第一个相关文档排名的倒数均值"),
+        ("NDCG@5     ", all_ndcg, "综合排名与相关性的归一化折损增益"),
+    ]
+    for name, vals, desc in metrics:
+        if vals:
+            avg = statistics.mean(vals)
+            bar = "█" * int(avg * 10) + "░" * (10 - int(avg * 10))
+            yield emit(f"  {name}  {avg:.3f}  [{bar}]  {desc}")
+        else:
+            yield emit(f"  {name}  无有效数据")
+
+    core = all_r5 + all_mrr + all_ndcg
+    if core:
+        overall = statistics.mean(core)
+        yield emit(f"\n  综合检索分:  {overall:.3f} / 1.0")
+        verdict = (
+            "✅ 检索质量优秀。" if overall >= 0.7 else
+            "🟡 检索质量良好，有提升空间。" if overall >= 0.5 else
+            "🟠 检索质量中等，建议调整 chunk_size / TOP_K。" if overall >= 0.3 else
+            "🔴 检索质量较差，请检查知识库内容和 Embedding 适配性。"
+        )
+        yield emit(f"  {verdict}")
+    yield emit("=" * 60)
+
+
+# ==========================================
+# 生成阶段评估：忠实度 / 相关性 / 可回答性
+# ==========================================
+
+ANSWERABILITY_PROMPT = """根据以下检索内容，评估模型能否充分回答该问题。
+只输出一个 0-5 的整数分数，不要有任何其他内容。
+5=完全可以回答，4=基本可以，3=部分可以，2=勉强，1=几乎不能，0=完全不能。
+
+【问题】
+{question}
+
+【检索内容】
+{context}"""
+
+
+@router.post("/generation", summary="生成阶段评估（SSE）")
+def eval_generation(request: Request, state: AppState = Depends(get_state)):
+    llm_model = request.app.state.llm_model
+    return log_gen_to_sse(_run_generation(state, llm_model))
+
+
+def _run_generation(state: AppState, llm_model: str):
+    lines = []
+
+    def emit(msg=""):
+        lines.append(msg)
+        return "\n".join(lines)
+
+    total = state.collection.count()
+    yield emit("=" * 60)
+    yield emit("  生成阶段评估")
+    yield emit("  忠实度 / 相关性 / 可回答性")
+    yield emit("=" * 60)
+    yield emit(f"知识库文档块总数：{total}")
+    if total == 0:
+        yield emit("⚠️ 知识库为空，请先完成入库后再评估。")
+        return
+
+    all_faith, all_ar, all_ans = [], [], []
+
+    for i, question in enumerate(EVAL_QUESTIONS, 1):
+        yield emit(f"\n[{i:02d}/{len(EVAL_QUESTIONS)}] {question}")
+
+        chunks = _retrieve_eval(state, question)
+        if not chunks:
+            yield emit("  无召回结果，跳过")
+            continue
+
+        # —— 生成答案 ——
+        yield emit("  生成答案中…")
+        context_parts = [f"[{j+1}] 来源: {c['source']}\n{c['text']}" for j, c in enumerate(chunks)]
+        user_content = "参考资料：\n" + "\n\n".join(context_parts) + f"\n\n用户问题：{question}"
+        try:
+            resp = state.llm_client.chat.completions.create(
+                model=llm_model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_content},
+                ],
+                temperature=0.3,
+            )
+            answer = resp.choices[0].message.content.strip()
+            lines[-1] = f"  答案: {answer[:100].replace(chr(10), ' ')}…"
+            yield "\n".join(lines)
+        except Exception as ex:
+            lines[-1] = f"  答案生成失败: {ex}"
+            yield "\n".join(lines)
+            continue
+
+        context_numbered = "\n\n".join(f"[{j+1}] {c['text']}" for j, c in enumerate(chunks))
+
+        # —— 忠实度（Faithfulness）——
+        yield emit("  [忠实度] 拆解声明 + 逐条核验…")
+        try:
+            decompose_resp = state.llm_client.chat.completions.create(
+                model=llm_model,
+                messages=[{"role": "user", "content": RAGAS_FAITHFULNESS_DECOMPOSE.format(answer=answer)}],
+                temperature=0.01,
+            )
+            claims = [l.strip() for l in decompose_resp.choices[0].message.content.strip().split("\n") if l.strip()]
+            n_yes = 0
+            for claim in claims:
+                vr = state.llm_client.chat.completions.create(
+                    model=llm_model,
+                    messages=[{"role": "user", "content": RAGAS_FAITHFULNESS_VERIFY.format(
+                        context=context_numbered, claim=claim)}],
+                    temperature=0.01,
+                )
+                if "YES" in vr.choices[0].message.content.strip().upper():
+                    n_yes += 1
+            faith = n_yes / len(claims) if claims else 0.0
+            lines[-1] = f"  [忠实度] {faith:.3f}  ({n_yes}/{len(claims)} 声明有上下文支撑)"
+            yield "\n".join(lines)
+            all_faith.append(faith)
+        except Exception as ex:
+            lines[-1] = f"  [忠实度] 失败: {ex}"
+            yield "\n".join(lines)
+
+        # —— 相关性（Answer Relevance）——
+        yield emit("  [相关性] 反向生成问题 + 余弦相似度…")
+        try:
+            ar_resp = state.llm_client.chat.completions.create(
+                model=llm_model,
+                messages=[{"role": "user", "content": RAGAS_ANSWER_RELEVANCE_PROMPT.format(answer=answer)}],
+                temperature=0.3,
+            )
+            gen_qs = [l.strip() for l in ar_resp.choices[0].message.content.strip().split("\n") if l.strip()][:3]
+            q_emb = state.embedding_func.model.encode([question], normalize_embeddings=True)[0].tolist()
+            sims = []
+            for gq in gen_qs:
+                gq_emb = state.embedding_func.model.encode([gq], normalize_embeddings=True)[0].tolist()
+                sims.append(max(0.0, sum(a * b for a, b in zip(q_emb, gq_emb))))
+            ar = statistics.mean(sims) if sims else 0.0
+            lines[-1] = f"  [相关性] {ar:.3f}"
+            yield "\n".join(lines)
+            all_ar.append(ar)
+        except Exception as ex:
+            lines[-1] = f"  [相关性] 失败: {ex}"
+            yield "\n".join(lines)
+
+        # —— 可回答性（Answerability）——
+        yield emit("  [可回答性] LLM 打分…")
+        try:
+            context_plain = "\n\n".join(c["text"] for c in chunks)
+            ans_resp = state.llm_client.chat.completions.create(
+                model=llm_model,
+                messages=[{"role": "user", "content": ANSWERABILITY_PROMPT.format(
+                    question=question, context=context_plain)}],
+                temperature=0.01,
+            )
+            raw = ans_resp.choices[0].message.content.strip()
+            score = int("".join(c for c in raw if c.isdigit())[:1]) if any(c.isdigit() for c in raw) else 0
+            score = max(0, min(5, score))
+            lines[-1] = f"  [可回答性] {score}/5"
+            yield "\n".join(lines)
+            all_ans.append(score)
+        except Exception as ex:
+            lines[-1] = f"  [可回答性] 失败: {ex}"
+            yield "\n".join(lines)
+
+    yield emit(f"\n{'=' * 60}")
+    yield emit("生成阶段全局汇总")
+    yield emit("-" * 40)
+    for vals, label, desc in [
+        (all_faith, "忠实度  ", "答案声明由上下文支撑的比例（0-1）"),
+        (all_ar,    "相关性  ", "答案针对问题的语义相似度（0-1）"),
+        (all_ans,   "可回答性", "上下文充分性 LLM 打分（0-5）"),
+    ]:
+        if vals:
+            avg = statistics.mean(vals)
+            # 可回答性归一化到 0-1 显示进度条
+            bar_val = avg / 5 if label.strip() == "可回答性" else avg
+            bar = "█" * int(bar_val * 10) + "░" * (10 - int(bar_val * 10))
+            unit = "/5" if label.strip() == "可回答性" else ""
+            yield emit(f"  {label}  {avg:.2f}{unit}  [{bar}]  {desc}")
+        else:
+            yield emit(f"  {label}  无有效数据")
+
+    norm_vals = [v / 5 for v in all_ans] + all_faith + all_ar
+    if norm_vals:
+        overall = statistics.mean(norm_vals)
+        yield emit(f"\n  综合生成分:  {overall:.3f} / 1.0")
+        verdict = (
+            "✅ 生成质量优秀。" if overall >= 0.7 else
+            "🟡 生成质量良好，有提升空间。" if overall >= 0.5 else
+            "🟠 生成质量中等，建议优化 prompt 或 TOP_K。" if overall >= 0.3 else
+            "🔴 生成质量较差，请检查 LLM 和知识库配置。"
+        )
+        yield emit(f"  {verdict}")
     yield emit("=" * 60)

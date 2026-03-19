@@ -141,7 +141,7 @@ def process_document(file_path: str) -> List[dict]:
             with open(file_path, 'rb') as f:
                 content = f.read()
             # 注意：必须传 binary=content，不能只传路径，beartype 会做类型校验
-            raw_chunks = parser(file_path, binary=content)
+            raw_chunks = parser(file_path, binary=content, chunk_token_num=256)
             for chunk in raw_chunks:
                 # deepdoc 返回的每个 chunk 可能是 tuple(text, ...) 或纯字符串
                 text = chunk[0] if isinstance(chunk, (list, tuple)) else str(chunk)

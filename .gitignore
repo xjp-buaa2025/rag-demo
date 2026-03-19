@@ -26,9 +26,6 @@ storage/graph_db/
 ingest_error.log
 *.xlsx
 
-# Knowledge base documents in data/ (large, not source code)
-data/*.md
-
 # Claude Code local config (contains permissions, not for repo)
 .claude/
 

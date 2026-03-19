@@ -73,28 +73,21 @@ async def lifespan(app: FastAPI):
         os.makedirs(CHROMA_DB_DIR, exist_ok=True)
         chroma_client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
 
+    collection = chroma_client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        embedding_function=embedding_func,
+        metadata={"hnsw:space": "cosine"},
+    )
+
+    # 3.5 Reranker（CrossEncoder，约 280MB，支持中英文，失败则降级为距离排序）
+    reranker = None
     try:
-        collection = chroma_client.get_or_create_collection(
-            name=COLLECTION_NAME,
-            embedding_function=embedding_func,
-            metadata={"hnsw:space": "cosine"},
-        )
-        # 用 dummy query 触发 HNSW 文件加载，尽早暴露索引损坏
-        # count() 只查 SQLite，无法检测 HNSW 文件缺失/损坏
-        if collection.count() > 0:
-            _dummy = embedding_func(["test"])
-            collection.query(query_embeddings=_dummy, n_results=1)
-    except Exception as _e:
-        print(f"[警告] ChromaDB 索引损坏（{_e}），自动重建集合…")
-        try:
-            chroma_client.delete_collection(COLLECTION_NAME)
-        except Exception:
-            pass
-        collection = chroma_client.get_or_create_collection(
-            name=COLLECTION_NAME,
-            embedding_function=embedding_func,
-            metadata={"hnsw:space": "cosine"},
-        )
+        from sentence_transformers import CrossEncoder
+        print("[backend] 正在加载 Reranker 模型 BAAI/bge-reranker-base…")
+        reranker = CrossEncoder("BAAI/bge-reranker-base")
+        print("[backend] Reranker 加载成功。")
+    except Exception as _re:
+        print(f"[backend] ⚠️ Reranker 加载失败（{_re}），将降级为距离排序。")
 
     # 3. LLM 客户端（主备降级）
     if MINIMAX_API_KEY:
@@ -113,6 +106,7 @@ async def lifespan(app: FastAPI):
         collection=collection,
         llm_client=llm_client,
         active_model_label=label,
+        reranker=reranker,
     )
     app.state.llm_model   = LLM_MODEL
     app.state.data_dir    = os.path.join(_ROOT, "data")

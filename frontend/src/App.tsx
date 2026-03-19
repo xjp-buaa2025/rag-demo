@@ -78,35 +78,31 @@ function App() {
         </div>
       </div>
 
-      {/* ===== Tab 内容 ===== */}
+      {/* ===== Tab 内容（始终挂载，用 hidden 切换，保留组件状态）===== */}
       <main className="max-w-6xl mx-auto px-6 py-4">
 
         {/* Tab 1：RAG 知识库问答 */}
-        {activeTab === 'rag' && (
-          <div className="space-y-4">
-            <Accordion title="📂 知识库管理">
-              <KnowledgePanel />
-            </Accordion>
-            <Accordion title="📊 性能评估">
-              <EvalPanel />
-            </Accordion>
-            <RagChat />
-          </div>
-        )}
+        <div className={activeTab === 'rag' ? 'space-y-4' : 'hidden'}>
+          <Accordion title="📂 知识库管理">
+            <KnowledgePanel />
+          </Accordion>
+          <Accordion title="📊 性能评估">
+            <EvalPanel />
+          </Accordion>
+          <RagChat />
+        </div>
 
         {/* Tab 2：BOM 装配系统 */}
-        {activeTab === 'bom' && (
-          <div className="space-y-4">
-            <Accordion title="⚙️ Neo4j 图数据库状态" defaultOpen>
-              <Neo4jStatus />
-            </Accordion>
-            <Accordion title="📋 BOM 入库">
-              <BomIngest />
-            </Accordion>
-            <h2 className="text-base font-semibold text-slate-700">💬 装配方案生成</h2>
-            <AssemblyChat />
-          </div>
-        )}
+        <div className={activeTab === 'bom' ? 'space-y-4' : 'hidden'}>
+          <Accordion title="⚙️ Neo4j 图数据库状态" defaultOpen>
+            <Neo4jStatus />
+          </Accordion>
+          <Accordion title="📋 BOM 入库">
+            <BomIngest />
+          </Accordion>
+          <h2 className="text-base font-semibold text-slate-700">💬 装配方案生成</h2>
+          <AssemblyChat />
+        </div>
       </main>
     </div>
   )

@@ -44,10 +44,12 @@ def log_gen_to_sse(gen: Iterator) -> StreamingResponse:
                 if isinstance(snapshot, tuple):
                     snapshot = snapshot[0]
                 yield _sse_data({"log": str(snapshot)})
+        except GeneratorExit:
+            gen.close()
+            return  # 客户端断连，干净退出，不能在此 yield
         except Exception as e:
             yield _sse_data({"error": str(e)})
-        finally:
-            yield "data: [DONE]\n\n"
+        yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -73,6 +75,9 @@ def chat_gen_to_sse(gen: Iterator) -> StreamingResponse:
                 last_snapshot = snapshot
                 if delta:
                     yield _sse_data({"delta": delta})
+        except GeneratorExit:
+            gen.close()
+            return  # 客户端断连，干净退出，不能在此 yield
         except Exception as e:
             yield _sse_data({"error": str(e)})
             return
