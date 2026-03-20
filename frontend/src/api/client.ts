@@ -127,3 +127,28 @@ export function postBomIngest(file: File | null, clearFirst: boolean) {
 export function postAssemblyChat(message: string, history: Message[]) {
   return postSSE('/assembly/chat', { message, history })
 }
+
+// ----------------------------------------------------------
+// 视觉接口：上传图片获取描述（用于以图搜文）
+// ----------------------------------------------------------
+export async function postVisionDescribe(file: File): Promise<{ description: string; query_text: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${BASE}/vision/describe`, { method: 'POST', body: form })
+  if (!res.ok) throw new Error(`Vision API 调用失败: ${res.status}`)
+  return res.json()
+}
+
+// ----------------------------------------------------------
+// 视觉接口：上传图片直接 CLIP 以图搜图（JSON）
+// ----------------------------------------------------------
+export async function postVisionSearch(file: File, topK = 4): Promise<{
+  results: Array<{ text: string; source: string; page: number; distance: number; image_url?: string }>
+}> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('top_k', String(topK))
+  const res = await fetch(`${BASE}/vision/search?top_k=${topK}`, { method: 'POST', body: form })
+  if (!res.ok) throw new Error(`Vision Search 失败: ${res.status}`)
+  return res.json()
+}

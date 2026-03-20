@@ -99,32 +99,43 @@ RAGAS_ANSWER_RELEVANCE_PROMPT = """给定以下答案，生成 3 个可能引发
 # ==========================================
 
 def _retrieve_eval(state: AppState, query: str):
-    n = min(EVAL_TOP_K, state.collection.count())
+    """评估用检索：用 bge-m3 搜 text_vec，返回文本块（评估只看文本质量）。"""
+    from backend.routers.retrieve import qdrant_search_text
+    n = min(EVAL_TOP_K, state.get_doc_count())
     if n == 0:
         return []
-    q_emb = state.embedding_func([query])[0]
-    results = state.collection.query(
-        query_embeddings=[q_emb],
-        n_results=n,
-        include=["documents", "metadatas", "distances"],
-    )
+    hits = qdrant_search_text(state.qdrant_client, state.embedding_mgr, query, n)
+    # Qdrant 余弦相似度越高越相关；评估代码期望 distance 越小越好，转换为 1-score
     return [
-        {"text": doc, "source": meta.get("source", "未知"), "distance": dist}
-        for doc, meta, dist in zip(
-            results["documents"][0],
-            results["metadatas"][0],
-            results["distances"][0],
-        )
+        {"text": h["text"], "source": h["source"], "distance": max(0.0, 1.0 - h["distance"])}
+        for h in hits
     ]
 
 
 def _get_chunk_lengths(state: AppState):
-    total = state.collection.count()
-    lengths, offset = [], 0
-    while offset < total:
-        result = state.collection.get(limit=500, offset=offset, include=["documents"])
-        lengths.extend(len(doc) for doc in result["documents"])
-        offset += 500
+    """统计所有文本块的字符长度（用于诊断报告）。"""
+    from backend.state import COLLECTION_NAME
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+    lengths = []
+    offset = None
+    while True:
+        try:
+            results, next_offset = state.qdrant_client.scroll(
+                collection_name=COLLECTION_NAME,
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="chunk_type", match=MatchValue(value="text"))]
+                ),
+                with_payload=["text"],
+                limit=500,
+                offset=offset,
+            )
+            lengths.extend(len((p.payload or {}).get("text", "")) for p in results)
+            if next_offset is None or len(results) < 500:
+                break
+            offset = next_offset
+        except Exception:
+            break
     return lengths
 
 
@@ -144,7 +155,7 @@ def _run_diagnose(state: AppState):
         lines.append(msg)
         return "\n".join(lines)
 
-    total = state.collection.count()
+    total = state.get_doc_count()
     yield emit("=" * 60)
     yield emit("  RAG 召回质量诊断报告")
     yield emit("=" * 60)
@@ -224,7 +235,7 @@ def _run_judge(state: AppState, llm_model: str):
         lines.append(msg)
         return "\n".join(lines)
 
-    total = state.collection.count()
+    total = state.get_doc_count()
     yield emit("=" * 60)
     yield emit("  RAG LLM-as-Judge 评估报告")
     yield emit("=" * 60)
@@ -319,7 +330,7 @@ def _run_ragas(state: AppState, llm_model: str):
         lines.append(msg)
         return "\n".join(lines)
 
-    total = state.collection.count()
+    total = state.get_doc_count()
     yield emit("=" * 60)
     yield emit("  RAGAS 三指标评估报告")
     yield emit("  Context Relevance / Faithfulness / Answer Relevance")
@@ -423,10 +434,10 @@ def _run_ragas(state: AppState, llm_model: str):
                 temperature=0.3,
             )
             gen_qs = [l.strip() for l in ar_resp.choices[0].message.content.strip().split("\n") if l.strip()][:3]
-            q_emb = state.embedding_func.model.encode([question], normalize_embeddings=True)[0].tolist()
+            q_emb = state.embedding_mgr.encode_text([question])[0].tolist()
             sims = []
             for gq in gen_qs:
-                gq_emb = state.embedding_func.model.encode([gq], normalize_embeddings=True)[0].tolist()
+                gq_emb = state.embedding_mgr.encode_text([gq])[0].tolist()
                 sims.append(max(0.0, sum(a * b for a, b in zip(q_emb, gq_emb))))
             ar = statistics.mean(sims) if sims else 0.0
             lines[-1] = f"  [AR] Answer Relevance: {ar:.3f}"
@@ -538,7 +549,7 @@ def _run_ranked(state: AppState, llm_model: str):
         lines.append(msg)
         return "\n".join(lines)
 
-    total = state.collection.count()
+    total = state.get_doc_count()
     yield emit("=" * 60)
     yield emit("  有监督检索指标：Recall@K / MRR / NDCG@K")
     yield emit("  （LLM-as-Annotator 自动构建 Ground Truth）")
@@ -556,21 +567,13 @@ def _run_ranked(state: AppState, llm_model: str):
     for i, question in enumerate(EVAL_QUESTIONS, 1):
         yield emit(f"\n[{i:02d}/{len(EVAL_QUESTIONS)}] {question}")
 
-        # 取 top-10 用于标注
+        # 取 top-10 用于标注（Qdrant 文本检索）
+        from backend.routers.retrieve import qdrant_search_text
         n_label = min(RANKED_RETRIEVE_K, total)
-        q_emb = state.embedding_func([question])[0]
-        label_results = state.collection.query(
-            query_embeddings=[q_emb],
-            n_results=n_label,
-            include=["documents", "metadatas", "distances"],
-        )
+        all_hits = qdrant_search_text(state.qdrant_client, state.embedding_mgr, question, n_label)
         label_chunks = [
-            {"text": doc, "source": meta.get("source", "未知"), "distance": dist}
-            for doc, meta, dist in zip(
-                label_results["documents"][0],
-                label_results["metadatas"][0],
-                label_results["distances"][0],
-            )
+            {"text": h["text"], "source": h["source"], "distance": max(0.0, 1.0 - h["distance"])}
+            for h in all_hits
         ]
 
         yield emit(f"  标注 {len(label_chunks)} 个候选块…")
@@ -583,20 +586,12 @@ def _run_ranked(state: AppState, llm_model: str):
             yield emit("  ⚠️  无相关块，该题跳过（可能问题与语料不匹配）")
             continue
 
-        # 取 top-5 作为"被评估的检索结果"
+        # 取 top-5 作为"被评估的检索结果"（从 label_chunks 中取前 RANKED_EVAL_K 个）
         n_eval = min(RANKED_EVAL_K, total)
-        eval_results = state.collection.query(
-            query_embeddings=[q_emb],
-            n_results=n_eval,
-            include=["documents", "metadatas", "distances"],
-        )
+        eval_chunks = all_hits[:n_eval]
         eval_chunks = [
-            {"text": doc, "source": meta.get("source", "未知"), "distance": dist}
-            for doc, meta, dist in zip(
-                eval_results["documents"][0],
-                eval_results["metadatas"][0],
-                eval_results["distances"][0],
-            )
+            {"text": h["text"], "source": h["source"], "distance": max(0.0, 1.0 - h["distance"])}
+            for h in eval_chunks
         ]
 
         r1 = _recall_at_k(eval_chunks, relevant_set, 1)
@@ -666,7 +661,7 @@ def _run_retrieval(state: AppState, llm_model: str):
         lines.append(msg)
         return "\n".join(lines)
 
-    total = state.collection.count()
+    total = state.get_doc_count()
     yield emit("=" * 60)
     yield emit("  检索阶段评估")
     yield emit("  上下文精确率 / Recall@K / MRR / NDCG@K")
@@ -684,20 +679,12 @@ def _run_retrieval(state: AppState, llm_model: str):
     for i, question in enumerate(EVAL_QUESTIONS, 1):
         yield emit(f"\n[{i:02d}/{len(EVAL_QUESTIONS)}] {question}")
 
+        from backend.routers.retrieve import qdrant_search_text
         n_label = min(RANKED_RETRIEVE_K, total)
-        q_emb = state.embedding_func([question])[0]
-        label_results = state.collection.query(
-            query_embeddings=[q_emb],
-            n_results=n_label,
-            include=["documents", "metadatas", "distances"],
-        )
+        all_hits_2 = qdrant_search_text(state.qdrant_client, state.embedding_mgr, question, n_label)
         label_chunks = [
-            {"text": doc, "source": meta.get("source", "未知"), "distance": dist}
-            for doc, meta, dist in zip(
-                label_results["documents"][0],
-                label_results["metadatas"][0],
-                label_results["distances"][0],
-            )
+            {"text": h["text"], "source": h["source"], "distance": max(0.0, 1.0 - h["distance"])}
+            for h in all_hits_2
         ]
 
         yield emit(f"  标注 {len(label_chunks)} 个候选块…")
@@ -712,18 +699,9 @@ def _run_retrieval(state: AppState, llm_model: str):
 
         # 取 top-5 作为被评估的检索结果
         n_eval = min(RANKED_EVAL_K, total)
-        eval_results = state.collection.query(
-            query_embeddings=[q_emb],
-            n_results=n_eval,
-            include=["documents", "metadatas", "distances"],
-        )
         eval_chunks = [
-            {"text": doc, "source": meta.get("source", "未知"), "distance": dist}
-            for doc, meta, dist in zip(
-                eval_results["documents"][0],
-                eval_results["metadatas"][0],
-                eval_results["distances"][0],
-            )
+            {"text": h["text"], "source": h["source"], "distance": max(0.0, 1.0 - h["distance"])}
+            for h in all_hits_2[:n_eval]
         ]
         # top-5 各块是否相关（直接用已标注的 label_chunks 前5个的标签）
         eval_labels = labels[:n_eval]
@@ -802,7 +780,7 @@ def _run_generation(state: AppState, llm_model: str):
         lines.append(msg)
         return "\n".join(lines)
 
-    total = state.collection.count()
+    total = state.get_doc_count()
     yield emit("=" * 60)
     yield emit("  生成阶段评估")
     yield emit("  忠实度 / 相关性 / 可回答性")
@@ -881,10 +859,10 @@ def _run_generation(state: AppState, llm_model: str):
                 temperature=0.3,
             )
             gen_qs = [l.strip() for l in ar_resp.choices[0].message.content.strip().split("\n") if l.strip()][:3]
-            q_emb = state.embedding_func.model.encode([question], normalize_embeddings=True)[0].tolist()
+            q_emb = state.embedding_mgr.encode_text([question])[0].tolist()
             sims = []
             for gq in gen_qs:
-                gq_emb = state.embedding_func.model.encode([gq], normalize_embeddings=True)[0].tolist()
+                gq_emb = state.embedding_mgr.encode_text([gq])[0].tolist()
                 sims.append(max(0.0, sum(a * b for a, b in zip(q_emb, gq_emb))))
             ar = statistics.mean(sims) if sims else 0.0
             lines[-1] = f"  [相关性] {ar:.3f}"

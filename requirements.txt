@@ -2,8 +2,8 @@
 python-dotenv
 pyyaml
 
-# Vector Database (Lite & Local)
-chromadb==0.4.24
+# Vector Database (Local File Mode, No Docker)
+qdrant-client>=1.11   # Qdrant 本地文件模式（Windows 支持，替代 ChromaDB/Milvus）
 
 # RAGFlow Deepdoc Dependencies
 # deepdoc might require some external image/pdf handling libraries depending on your document types.
@@ -23,8 +23,11 @@ sentence-transformers
 transformers
 torch
 # (optional for faster inference on CPU/GPU depending on torch setup)
-# torchvision
+torchvision  # Chinese-CLIP 图片处理需要
 # torchaudio
+
+# Multimodal: Chinese-CLIP（通过 transformers 加载）
+# 模型权重：OFA-Sys/chinese-clip-vit-large-patch14（约 2GB，首次运行自动下载）
 
 # LangChain Ecosystem
 langchain

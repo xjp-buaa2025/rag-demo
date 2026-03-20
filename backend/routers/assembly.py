@@ -5,7 +5,7 @@ POST /assembly/chat
   请求体：{"message": "用户问题", "history": [...]}
   响应：SSE 流（同 /chat）
 
-双路融合：同时查询 Neo4j BOM 图谱 + ChromaDB 知识库，再流式生成装配方案。
+双路融合：同时查询 Neo4j BOM 图谱 + Qdrant 知识库，再流式生成装配方案。
 迁移自 app.py assembly_chat()。
 """
 
@@ -56,18 +56,14 @@ def _assembly_chat_gen(
     """装配方案生成器，迁移自 app.py assembly_chat()。"""
     # 1. 并行查询两路数据（同步调用，在线程池中执行）
     bom_text   = _query_bom_text(state, cfg, message)
-    n          = min(TOP_K, state.collection.count())
+    n          = min(TOP_K, state.get_doc_count())
     rag_chunks = []
     if n > 0:
-        q_emb    = state.embedding_func([message])[0]
-        results  = state.collection.query(
-            query_embeddings=[q_emb],
-            n_results=n,
-            include=["documents", "metadatas", "distances"],
-        )
+        from backend.routers.retrieve import qdrant_search_text
+        hits = qdrant_search_text(state.qdrant_client, state.embedding_mgr, message, n)
         rag_chunks = [
-            {"text": doc, "source": meta.get("source", "未知"), "page": meta.get("page", 0)}
-            for doc, meta in zip(results["documents"][0], results["metadatas"][0])
+            {"text": h["text"], "source": h["source"], "page": h["page"]}
+            for h in hits
         ]
 
     # 2. 构建融合 prompt

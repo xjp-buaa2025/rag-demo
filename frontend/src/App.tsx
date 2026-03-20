@@ -23,11 +23,20 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabId>('rag')
   const [healthInfo, setHealthInfo] = useState<{ count: number; model: string } | null>(null)
 
-  // 获取后端健康状态
+  // 获取后端健康状态（轮询，每 3 秒重试，后端就绪后停止）
   useEffect(() => {
-    getHealth()
-      .then((h) => setHealthInfo({ count: h.collection_count, model: h.model }))
-      .catch(() => setHealthInfo(null))
+    let timer: ReturnType<typeof setInterval>
+    const tryFetch = () => {
+      getHealth()
+        .then((h) => {
+          setHealthInfo({ count: h.collection_count, model: h.model })
+          clearInterval(timer)
+        })
+        .catch(() => {}) // 保持 null，继续轮询
+    }
+    tryFetch()
+    timer = setInterval(tryFetch, 3000)
+    return () => clearInterval(timer)
   }, [])
 
   const tabs: { id: TabId; label: string }[] = [
@@ -131,7 +140,7 @@ function Accordion({
         <span>{title}</span>
         <span className="text-slate-400 text-xs">{open ? '▲' : '▼'}</span>
       </button>
-      {open && <div className="p-4 bg-white">{children}</div>}
+      <div className={open ? 'p-4 bg-white' : 'hidden'}>{children}</div>
     </div>
   )
 }

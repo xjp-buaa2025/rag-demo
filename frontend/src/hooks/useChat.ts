@@ -19,6 +19,8 @@ interface UseChatResult {
   streamingText: string
   /** 最新回复的来源脚注 Markdown */
   sourcesMd: string
+  /** 最新回复关联的图片 URL 列表（图文检索） */
+  imageUrls: string[]
   loading: boolean
   sendMessage: (
     userText: string,
@@ -31,6 +33,7 @@ export function useChat(): UseChatResult {
   const [messages, setMessages] = useState<Message[]>([])
   const [streamingText, setStreamingText] = useState('')
   const [sourcesMd, setSourcesMd] = useState('')
+  const [imageUrls, setImageUrls] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
   const sendMessage = useCallback(
@@ -50,9 +53,10 @@ export function useChat(): UseChatResult {
             accumulated += (frame as SseDeltaFrame).delta
             setStreamingText(accumulated)
           } else if ('done' in frame) {
-            // 完成帧：从 streaming 区归档到 messages，提取来源
+            // 完成帧：从 streaming 区归档到 messages，提取来源和图片
             const done = frame as SseDoneFrame
             setSourcesMd(done.sources_md ?? '')
+            setImageUrls(done.image_urls ?? [])
             setMessages((prev) => [
               ...prev,
               { role: 'assistant', content: accumulated },
@@ -84,7 +88,8 @@ export function useChat(): UseChatResult {
     setMessages([])
     setStreamingText('')
     setSourcesMd('')
+    setImageUrls([])
   }, [])
 
-  return { messages, streamingText, sourcesMd, loading, sendMessage, clearMessages }
+  return { messages, streamingText, sourcesMd, imageUrls, loading, sendMessage, clearMessages }
 }

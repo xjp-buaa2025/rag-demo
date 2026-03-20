@@ -15,6 +15,8 @@ export interface Chunk {
   source: string
   page: number
   distance: number
+  chunk_type?: 'text' | 'image'    // 图文双路检索新增
+  image_url?: string               // 图片块的访问 URL（/images/{filename}）
 }
 
 /** /health 响应 */
@@ -52,6 +54,7 @@ export interface SseDeltaFrame {
 export interface SseDoneFrame {
   done: true
   sources_md: string
+  image_urls?: string[]            // 本次回答关联的图片 URL 列表（图文检索新增）
 }
 
 /** SSE 错误帧 */

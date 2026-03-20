@@ -17,6 +17,8 @@ env/
 # Local storage (vector DB + graph DB，不提交)
 storage/chroma_db/
 storage/graph_db/
+storage/qdrant.db/
+storage/images/
 
 # Sensitive / large files
 .env

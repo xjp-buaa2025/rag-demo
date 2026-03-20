@@ -1,32 +1,37 @@
 """
-backend/routers/retrieve.py — 向量检索接口
+backend/routers/retrieve.py — 向量检索接口（图文双路版）
 
 POST /retrieve
   请求体：{"query": "用户问题", "top_k": 4, "use_rerank": true}
-  响应：{"chunks": [{"text", "source", "page", "distance", "rerank_score"}, ...]}
+  响应：{"chunks": [{"text", "source", "page", "distance", "chunk_type", "image_url", ...}, ...]}
 
-同步 JSON 接口，毫秒级响应（reranker 打分约增加 50-200ms）。
-use_rerank=true 时先召回 top_k*3 个候选，再用 CrossEncoder 精排取 top_k，
-可通过对比 use_rerank=false/true 的结果验证重排序效果。
+双路检索策略：
+  - 路径1：bge-m3(query) → 搜 Qdrant text_vec → 文本块 + Caption块
+  - 路径2：Chinese-CLIP文本编码器(query) → 搜 Qdrant image_vec → 图片块
+  合并去重 → CrossEncoder 精排 → 返回 top_k
+
+向量度量：Qdrant 使用 COSINE（余弦相似度，值越高越相关）
 """
 
+import os
 from typing import List, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from backend.deps import get_state
-from backend.state import AppState
+from backend.state import AppState, COLLECTION_NAME
 
 router = APIRouter()
 
-RETRIEVE_RECALL_MULTIPLIER = 3   # 召回倍数：retrieve 接口召回 top_k * 3 个再精排
+RETRIEVE_RECALL_MULTIPLIER = 3   # 召回倍数
 RETRIEVE_RECALL_MAX = 20         # 最大召回数上限
+IMAGE_SERVE_PREFIX = "/images"   # 图片静态文件服务前缀
 
 
 class RetrieveRequest(BaseModel):
     query: str
     top_k: int = Field(default=4, ge=1, le=20)
-    use_rerank: bool = True      # 是否启用重排序（False 则直接按距离排序）
+    use_rerank: bool = True
 
 
 class ChunkResult(BaseModel):
@@ -34,53 +39,120 @@ class ChunkResult(BaseModel):
     source: str
     page: int = 0
     distance: float
-    rerank_score: Optional[float] = None  # 重排序分数，use_rerank=true 时填充
+    rerank_score: Optional[float] = None
+    chunk_type: str = "text"             # "text" | "image"
+    image_url: Optional[str] = None      # 仅 chunk_type="image" 时非空
 
 
 class RetrieveResponse(BaseModel):
     chunks: List[ChunkResult]
 
 
-@router.post("/retrieve", response_model=RetrieveResponse, summary="向量检索（支持重排序）")
+def _image_url(image_path: str) -> Optional[str]:
+    """将本地 image_path 转为前端可访问的 URL（/images/{filename}）。"""
+    if not image_path:
+        return None
+    return f"{IMAGE_SERVE_PREFIX}/{os.path.basename(image_path)}"
+
+
+def _qdrant_point_to_dict(point) -> dict:
+    """将 Qdrant ScoredPoint 转为统一的候选块 dict。"""
+    payload = point.payload or {}
+    image_path = payload.get("image_path", "")
+    return {
+        "id":          str(point.id),
+        "text":        payload.get("text", ""),
+        "source":      payload.get("source", "未知"),
+        "page":        payload.get("page", 0),
+        "distance":    point.score,   # Cosine 相似度，越高越相关
+        "chunk_type":  payload.get("chunk_type", "text"),
+        "image_path":  image_path,
+        "image_url":   _image_url(image_path),
+        "rerank_score": None,
+    }
+
+
+def qdrant_search_text(qdrant_client, embedding_mgr, query: str, n: int) -> List[dict]:
+    """
+    用 bge-m3 编码 query，搜 text_vec，返回文本块和 Caption 块。
+    适合文字查询找文本内容和图片描述。
+    """
+    text_vec = embedding_mgr.encode_text([query])[0].tolist()
+    results = qdrant_client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=text_vec,
+        using="text_vec",
+        limit=n,
+        with_payload=True,
+    )
+    return [_qdrant_point_to_dict(p) for p in results.points]
+
+
+def qdrant_search_image(qdrant_client, embedding_mgr, query: str, n: int) -> List[dict]:
+    """
+    用 Chinese-CLIP 文本编码器编码 query，搜 image_vec，只找图片块。
+    适合文字查图场景（文字描述 → 找相关图片）。
+    """
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+    clip_vec = embedding_mgr.encode_texts_clip([query])[0].tolist()
+    results = qdrant_client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=clip_vec,
+        using="image_vec",
+        limit=n,
+        with_payload=True,
+        query_filter=Filter(
+            must=[FieldCondition(key="chunk_type", match=MatchValue(value="image"))]
+        ),
+    )
+    return [_qdrant_point_to_dict(p) for p in results.points]
+
+
+def merge_and_dedup(text_results: List[dict], image_results: List[dict]) -> List[dict]:
+    """
+    合并两路检索结果，按 ID 去重，保留同一块中 distance 最高（最相关）的版本。
+    最终按 distance 降序排列（余弦相似度越高越相关）。
+    """
+    seen: dict = {}
+    for chunk in text_results + image_results:
+        cid = chunk["id"]
+        if cid not in seen or chunk["distance"] > seen[cid]["distance"]:
+            seen[cid] = chunk
+    return sorted(seen.values(), key=lambda c: c["distance"], reverse=True)
+
+
+@router.post("/retrieve", response_model=RetrieveResponse, summary="向量检索（双路图文，支持重排序）")
 def retrieve(body: RetrieveRequest, state: AppState = Depends(get_state)):
     """
-    对 ChromaDB 执行向量检索。
-    use_rerank=true 时先召回更多候选，用 CrossEncoder 精排后取 top_k。
-    n_results 不能超过 collection 总数，用 min() 保护。
+    双路向量检索：
+      - 路径1：bge-m3 文字查文本块/Caption（text_vec）
+      - 路径2：Chinese-CLIP 文字查图片（image_vec）
+    合并去重后用 CrossEncoder 重排，返回 top_k 结果。
     """
-    total = state.collection.count()
+    total = state.get_doc_count()
     if total == 0:
         return RetrieveResponse(chunks=[])
 
-    # 若启用重排序，先召回更多候选
     recall_n = min(body.top_k * RETRIEVE_RECALL_MULTIPLIER, RETRIEVE_RECALL_MAX, total)
     if not body.use_rerank or state.reranker is None:
         recall_n = min(body.top_k, total)
 
-    query_embedding = state.embedding_func([body.query])[0]
-    results = state.collection.query(
-        query_embeddings=[query_embedding],
-        n_results=recall_n,
-        include=["ids", "documents", "metadatas", "distances"],
+    # 路径1：文字检索（bge-m3）
+    text_results = qdrant_search_text(
+        state.qdrant_client, state.embedding_mgr, body.query, recall_n
     )
 
-    candidates = [
-        {
-            "text": doc,
-            "source": meta.get("source", "未知"),
-            "page": meta.get("page", 0),
-            "distance": dist,
-            "rerank_score": None,
-        }
-        for doc, meta, dist in zip(
-            results["documents"][0],
-            results["metadatas"][0],
-            results["distances"][0],
-        )
-    ]
+    # 路径2：图片检索（Chinese-CLIP）
+    image_results = qdrant_search_image(
+        state.qdrant_client, state.embedding_mgr, body.query, min(body.top_k, total)
+    )
 
-    # 重排序
-    if body.use_rerank and state.reranker is not None:
+    # 合并去重（余弦相似度降序）
+    candidates = merge_and_dedup(text_results, image_results)
+
+    # 重排序（CrossEncoder）
+    if body.use_rerank and state.reranker is not None and candidates:
         try:
             pairs = [(body.query, c["text"]) for c in candidates]
             scores = state.reranker.predict(pairs)
@@ -97,7 +169,9 @@ def retrieve(body: RetrieveRequest, state: AppState = Depends(get_state)):
             source=c["source"],
             page=c["page"],
             distance=c["distance"],
-            rerank_score=c["rerank_score"],
+            rerank_score=c.get("rerank_score"),
+            chunk_type=c.get("chunk_type", "text"),
+            image_url=c.get("image_url"),
         )
         for c in top
     ]

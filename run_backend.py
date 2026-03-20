@@ -7,7 +7,7 @@ run_backend.py — FastAPI 后端快捷启动脚本
 服务启动后访问：
   API 文档：http://localhost:8000/docs
   健康检查：http://localhost:8000/health
-  Gradio UI（另开终端）：python app.py → http://localhost:7860
+  React 前端（另开终端）：cd frontend && npm run dev → http://localhost:5173
 """
 
 import uvicorn

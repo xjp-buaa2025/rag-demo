@@ -8,737 +8,635 @@
 ## 目录
 
 1. [项目整体目标](#1-项目整体目标)
-2. [核心概念：什么是 RAG](#2-核心概念什么是-rag)
-3. [架构总览（五层设计）](#3-架构总览五层设计)
-4. [数据流全景](#4-数据流全景)
-5. [文件结构说明](#5-文件结构说明)
-6. [各代码文件详解](#6-各代码文件详解)
-   - [pdf_to_md.py](#61-pdf_to_mdpy)
-   - [main_ingest.py](#62-main_ingestpy)
-   - [main_chat.py](#63-main_chatpy)
-   - [app.py](#64-apppy)
-   - [eval_rag.py](#65-eval_ragpy)
-   - [document_processing/common/token_utils.py](#66-document_processingcommontoken_utilspy)
-   - [document_processing/rag/nlp/__init__.py](#67-document_processingragnlp__init__py)
-7. [关键工具库详解](#7-关键工具库详解)
-8. [配置系统（.env）](#8-配置系统env)
-9. [运行方式](#9-运行方式)
-10. [常见问题与排查](#10-常见问题与排查)
-11. [BOM-GraphRAG 扩展](#11-bom-graphrag-扩展)
-12. [FastAPI 后端](#12-fastapi-后端)
-13. [React 前端](#13-react-前端)
+2. [核心概念：RAG 与图文检索](#2-核心概念rag-与图文检索)
+3. [技术选型总览](#3-技术选型总览)
+4. [架构总览](#4-架构总览)
+5. [数据流全景](#5-数据流全景)
+6. [文件结构说明](#6-文件结构说明)
+7. [后端代码详解](#7-后端代码详解)
+8. [图文检索详解](#8-图文检索详解)
+9. [BOM-GraphRAG 扩展](#9-bom-graphrag-扩展)
+10. [React 前端详解](#10-react-前端详解)
+11. [配置系统（.env）](#11-配置系统env)
+12. [运行方式](#12-运行方式)
+13. [常见问题与排查](#13-常见问题与排查)
 14. [变更日志](#14-变更日志)
 
 ---
 
 ## 1. 项目整体目标
 
-构建一个**完全本地化**的 RAG（检索增强生成）问答系统，能回答"知识库里有但大模型不知道"的内容。
+构建一个**完全本地化**的**图文多模态 RAG**问答系统，能回答"知识库里有但大模型不知道"的内容，同时支持图片检索。
 
-核心约束：
-- **Embedding 完全本地**：不调用任何外部 Embedding API，用本机 GPU/CPU 跑 `BAAI/bge-m3`
-- **向量库轻量**：ChromaDB，单文件数据库，无需独立服务
-- **LLM 外接**：对接任意 OpenAI 兼容接口（SiliconFlow / vLLM 自部署均可）
-- **PDF OCR 支持**：用 MinerU 处理扫描版 PDF，不依赖 GPU
+核心能力：
+- **文字查文档**：传统 RAG，bge-m3 向量检索
+- **文字查图片**：输入文字描述，召回 PDF 中的相关图片（Chinese-CLIP）
+- **以图搜文**：上传图片，系统用 Vision LLM 生成描述后检索相关文档片段
+- **BOM 装配问答**：Neo4j 零件图谱 + 技术知识库双路融合
+- **Embedding 完全本地**：不调用任何外部 Embedding API
 
 ---
 
-## 2. 核心概念：什么是 RAG
+## 2. 核心概念：RAG 与图文检索
+
+### 文字 RAG
 
 ```
 用户问题
-    ↓
-【Embedding 模型】将问题向量化
-    ↓
-【向量数据库】检索最相似的文本块（召回 Top-K）
-    ↓
-【LLM】把检索到的原文 + 用户问题一起发给大模型，让它"看着原文回答"
-    ↓
-回答（有来源依据，不会幻觉）
+    ↓ bge-m3 将问题向量化（1024维）
+    ↓ Qdrant 余弦检索 → Top-K 文本块
+    ↓ 拼接 Prompt：系统提示 + 参考原文 + 问题
+    ↓ LLM 生成回答
+输出（有来源依据）
 ```
 
-**为什么不直接问 LLM？**
-大模型的知识截止于训练数据，企业内部文档/最新论文/私有资料它完全不知道。RAG 让大模型"开卷考试"——考试时翻书，而不是靠死记硬背。
+### 图文双路检索
 
-**为什么要 Embedding？**
-文字不能直接比较相似度，把文字转成向量（一组数字）后，相似含义的句子在向量空间里距离近，可以用数学方法快速找到最相关的段落。
+```
+用户问题（文字）
+    ├─ bge-m3 → 搜 text_vec → 文本块 + 图片Caption块
+    └─ Chinese-CLIP文本编码 → 搜 image_vec → 图片块
+              ↓ 合并去重 → CrossEncoder 重排 → Top-K
+              ↓ LLM 生成回答 + 相关图片展示
+
+用户上传图片
+    ├─ MiniMax Vision → 中文描述 → 走文字检索路径
+    └─ Chinese-CLIP图片编码 → 搜 image_vec → 以图搜图
+```
+
+### 双向量设计
+
+每个 Qdrant Point 存储两个向量：
+
+| 字段 | 模型 | 用途 |
+|------|------|------|
+| `text_vec` | bge-m3（1024维） | 文本语义检索 |
+| `image_vec` | Chinese-CLIP（1024维） | 图片跨模态检索 |
+
+文本块的 `image_vec` 填零向量；图片块的 `text_vec` 填 Caption 的 bge-m3 向量。
 
 ---
 
-## 3. 架构总览（五层设计）
+## 3. 技术选型总览
+
+| 组件 | 选型 | 说明 |
+|------|------|------|
+| 向量数据库 | **Qdrant**（本地文件模式） | `storage/qdrant.db`，无需 Docker，Windows 原生支持 |
+| 文本 Embedding | **BAAI/bge-m3**（1024维） | 本地推理，中英文均优秀 |
+| 图片 Embedding | **OFA-Sys/chinese-clip-vit-large-patch14**（1024维） | 中文 CLIP，图文跨模态 |
+| 图片 Caption | **MiniMax M2.5 Vision** | PDF 图片→中文描述，入库时调用 |
+| Reranker | **BAAI/bge-reranker-base** | CrossEncoder 精排，约 280MB |
+| LLM（主） | MiniMax M2.5（远程 API） | 支持 Vision；failover 到 SiliconFlow |
+| LLM（备） | SiliconFlow / vLLM | OpenAI 兼容，Qwen2.5-14B 等 |
+| 图谱数据库 | **Neo4j** | BOM 零件树，Cypher 递归查询 |
+| 后端框架 | **FastAPI** + uvicorn | SSE 流式响应 |
+| 前端框架 | **React 18 + TypeScript + Vite** | Tailwind CSS v4，POST SSE |
+| PDF 解析 | PyMuPDF（文本提取）+ MinerU（OCR） | 双路：可复制 PDF 直接提取，扫描版先 OCR |
+
+---
+
+## 4. 架构总览
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  Layer 5: 编排 / UI 层                               │
-│  app.py (Gradio Web UI)  main_chat.py (终端交互)     │
-├─────────────────────────────────────────────────────┤
-│  Layer 4: LLM 生成层                                 │
-│  OpenAI 兼容 API → SiliconFlow / vLLM               │
-│  模型：Qwen2.5-14B-Instruct（通过 .env 配置）        │
-├─────────────────────────────────────────────────────┤
-│  Layer 3: 检索召回层                                  │
-│  ChromaDB 向量检索（余弦距离）Top-K 召回              │
-│  未来可扩展：BM25 混合检索 + Reranker                 │
-├─────────────────────────────────────────────────────┤
-│  Layer 2: 向量存储层                                  │
-│  ChromaDB（storage/chroma_db/）                      │
-│  Embedding 模型：BAAI/bge-m3（本地推理）              │
-├─────────────────────────────────────────────────────┤
-│  Layer 1: 文档处理层                                  │
-│  MinerU（PDF→MD，支持 OCR）                          │
-│  deepdoc TxtParser / MarkdownParser（文本解析切片）   │
-└─────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│  React 前端（:5173）                                            │
+│  RAG问答 / 图片上传 / 知识库管理 / 评估 / BOM装配方案          │
+└───────────────────────┬────────────────────────────────────────┘
+                        │ POST SSE / JSON（/api/* → Vite代理）
+┌───────────────────────▼────────────────────────────────────────┐
+│  FastAPI 后端（:8000）                                          │
+│  ├─ /ingest        文档入库（双向量，SSE 进度流）               │
+│  ├─ /retrieve      向量检索（双路图文，JSON）                   │
+│  ├─ /chat          RAG 问答（多查询+双路+重排序，SSE）          │
+│  ├─ /eval/*        RAG 评估（诊断/RAGAS/LLM打分，SSE）         │
+│  ├─ /bom/*         BOM 入库 + Neo4j 查询                       │
+│  ├─ /assembly/chat BOM+知识库融合问答（SSE）                   │
+│  ├─ /vision/*      图片描述 + 以图搜图                         │
+│  └─ /images/*      图片静态文件服务（storage/images/）         │
+├────────────────────────────────────────────────────────────────┤
+│  核心组件层                                                     │
+│  EmbeddingManager（bge-m3 + Chinese-CLIP）                     │
+│  FallbackLLMClient（MiniMax → SiliconFlow 自动降级）           │
+│  ImageCaptioner（MiniMax Vision，图片→中文描述）               │
+│  CrossEncoder Reranker（BAAI/bge-reranker-base）               │
+├────────────────────────────────────────────────────────────────┤
+│  存储层                                                         │
+│  Qdrant（storage/qdrant.db）— 双向量文本+图片                  │
+│  Neo4j（Docker）— BOM 零件关系图谱                             │
+│  storage/images/ — 提取的 PDF 图片文件                         │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 4. 数据流全景
+## 5. 数据流全景
 
-### 入库流程（一次性，离线）
+### 5.1 知识库入库（一次性，离线）
 
 ```
 data/*.pdf
-    ↓ pdf_to_md.py（MinerU OCR）
-data/*.md
-    ↓ main_ingest.py
-    ├─ deepdoc 解析 .md/.txt → 文本块列表
-    ├─ BAAI/bge-m3 对每个块生成向量（本地推理）
-    └─ upsert → ChromaDB（storage/chroma_db/）
+    ↓ [PyMuPDF] 逐页提取文本 → 按句子边界切块（500字/块）
+    ↓ [PyMuPDF] page.get_images() → 过滤小图（<100×100）→ 保存 storage/images/
+    ↓ [bge-m3] 文本块向量化 → text_vec（1024维）
+    ↓ [MiniMax Vision] 图片 → 中文 Caption
+    ↓ [bge-m3] Caption 向量化 → 图片块 text_vec
+    ↓ [Chinese-CLIP] 图片 → image_vec（1024维）
+    ↓ Qdrant upsert → 双向量存储
+       每个 Point：{text_vec, image_vec, text, source, page, chunk_type, image_path, doc_id}
+
+data/*.md / *.txt
+    ↓ [RAGFlowTxtParser] deepdoc 解析 → 文本块
+    ↓ [bge-m3] 向量化 → text_vec；image_vec = [0]*1024
+    ↓ Qdrant upsert
+
+（扫描版 PDF 需先执行 pdf_to_md.py，用 MinerU OCR 生成 .md 文件）
 ```
 
-### 问答流程（实时）
+### 5.2 问答检索（实时）
 
 ```
-用户输入问题
-    ↓ BAAI/bge-m3 将问题向量化
-    ↓ ChromaDB 余弦检索 → Top-3 文本块
-    ↓ 拼接 Prompt：系统提示 + 参考原文 + 用户问题
-    ↓ OpenAI API（SiliconFlow）→ LLM 生成回答
-输出（含来源）
+用户输入文字问题
+    ↓ [LLM] 生成2个额外查询角度（多查询召回，静默）
+    ↓ 对每个查询：
+       ├─ [bge-m3] → Qdrant text_vec 搜索（Top-8，文本+Caption）
+       └─ [Chinese-CLIP] → Qdrant image_vec 搜索（Top-4，仅图片块）
+    ↓ 合并去重（按 Point UUID，保留最高 score）
+    ↓ [CrossEncoder] 精排 → Top-4
+    ↓ 拼接 Prompt → LLM 流式生成回答
+    ↓ SSE 帧：delta（增量）→ done（sources_md + image_urls）
+前端：回答 + 参考来源脚注 + 相关图片缩略图
 ```
 
 ---
 
-## 5. 文件结构说明
+## 6. 文件结构说明
 
 ```
 rag-demo/
-├── pdf_to_md.py              # 第一步：PDF 批量转 Markdown（MinerU OCR）
-├── main_ingest.py            # 第二步：文档解析+向量化+写入 ChromaDB
-├── main_chat.py              # 终端交互问答（轻量调试用）
-├── app.py                    # Gradio Web UI（完整功能界面）
-├── eval_rag.py               # RAG 性能评估工具（召回诊断 / LLM 打分 / RAGAS 三指标）
-├── requirements.txt          # Python 依赖列表
+├── pdf_to_md.py              # 扫描版 PDF → Markdown（MinerU OCR，可选预处理）
+├── main_ingest.py            # CLI 入库工具（Qdrant 双向量，支持 --clear）
+├── bom_ingest.py             # BOM Excel → Neo4j 零件图谱
+├── run_backend.py            # FastAPI 快速启动（uvicorn --reload）
+├── requirements.txt
 ├── .env                      # 密钥配置（不提交 git）
-├── .gitignore
 │
-├── data/                     # 放你的文档（.pdf .md .txt）
-│   └── rag_intro.md          # 示例文档
+├── data/                     # 原始文档（.pdf .md .txt）
 │
 ├── storage/
-│   └── chroma_db/            # ChromaDB 数据文件（不提交 git）
+│   ├── qdrant.db/            # Qdrant 本地文件数据库
+│   └── images/               # PDF 提取的图片文件（/images/* 静态服务）
 │
-├── document_processing/      # 文档解析层
-│   ├── common/
-│   │   ├── __init__.py
-│   │   └── token_utils.py    # shim：token 计数（tiktoken）
-│   ├── rag/
-│   │   ├── __init__.py
-│   │   └── nlp/__init__.py   # shim：编码检测（chardet）
-│   └── deepdoc/              # RAGFlow 抽离的解析引擎（第三方，不修改）
-│       ├── parser/           # TxtParser, MarkdownParser 等
-│       └── vision/           # OCR/布局相关（暂未使用）
+├── backend/                  # FastAPI 后端
+│   ├── main.py               # 应用入口：lifespan 初始化 + 路由注册
+│   ├── state.py              # AppState dataclass + FallbackLLMClient
+│   ├── embedding_manager.py  # EmbeddingManager（bge-m3 + Chinese-CLIP）
+│   ├── image_captioner.py    # MiniMax Vision 图片描述
+│   ├── deps.py               # FastAPI Depends（get_state / get_neo4j_cfg）
+│   ├── sse.py                # 生成器 → SSE 响应适配
+│   └── routers/
+│       ├── ingest.py         # POST /ingest（SSE），GET /ingest/status
+│       ├── retrieve.py       # POST /retrieve（双路检索，JSON）
+│       ├── chat.py           # POST /chat（多查询+双路+重排，SSE）
+│       ├── eval.py           # POST /eval/diagnose|judge|ragas|ranked|retrieval|generation（SSE）
+│       ├── bom.py            # POST /bom/ingest（SSE），GET /bom/status，POST /bom/query
+│       ├── assembly.py       # POST /assembly/chat（SSE）
+│       └── vision.py         # POST /vision/describe，POST /vision/search
 │
-└── prompts/
-    └── ragflow_prompts/      # RAGFlow 工业级提示词库（参考用）
+├── frontend/                 # React 前端
+│   ├── src/
+│   │   ├── App.tsx           # 根组件：Header + 双 Tab
+│   │   ├── types/index.ts    # TypeScript 类型定义
+│   │   ├── api/client.ts     # 所有后端 API 调用封装
+│   │   ├── hooks/
+│   │   │   ├── usePostSSE.ts # 日志类 SSE hook
+│   │   │   └── useChat.ts    # 聊天类 SSE hook（含 imageUrls）
+│   │   └── components/
+│   │       ├── rag/
+│   │       │   ├── KnowledgePanel.tsx  # 知识库入库 + 日志
+│   │       │   ├── EvalPanel.tsx       # 六种评估报告
+│   │       │   └── RagChat.tsx         # RAG 问答（含图片上传）
+│   │       └── bom/
+│   │           ├── Neo4jStatus.tsx     # Neo4j 连接状态
+│   │           ├── BomIngest.tsx       # BOM 文件上传入库
+│   │           └── AssemblyChat.tsx    # 装配方案融合问答
+│   └── vite.config.ts        # /api/* 代理到 localhost:8000
+│
+└── document_processing/      # deepdoc 解析引擎（RAGFlow 抽离，不修改）
+    ├── common/token_utils.py # shim：token 计数
+    ├── rag/nlp/__init__.py   # shim：编码检测
+    └── deepdoc/              # TxtParser / MarkdownParser 等
 ```
 
 ---
 
-## 6. 各代码文件详解
+## 7. 后端代码详解
 
----
+### 7.1 `backend/main.py` — 应用入口
 
-### 6.1 `pdf_to_md.py`
+**lifespan 初始化顺序**：
+1. `EmbeddingManager` 加载（bge-m3 + Chinese-CLIP，约 2+2GB，首次需下载）
+2. `_init_qdrant(QDRANT_DB_PATH, COLLECTION_NAME)` — 创建或打开本地 Qdrant
+3. `CrossEncoder("BAAI/bge-reranker-base")` — Reranker（失败则降级为距离排序）
+4. LLM 客户端配置（MINIMAX_API_KEY 存在则 MiniMax 为主，否则直接用 SiliconFlow）
+5. 构造 `AppState` 放入 `app.state.app_state`
+6. **兜底自动入库**：若 Qdrant 为空且 `data/` 有文件，后台线程触发 `_run_ingest`
 
-**职责**：将 `data/` 目录下所有 PDF 批量转换为 Markdown 文件，供 `main_ingest.py` 入库。
-
-**为什么需要这一步？**
-- PyMuPDF 的 `get_text("text")` 对扫描版 PDF 完全无效（图像 PDF 无文字层）
-- 即使是"可复制"的 PDF，中文字体嵌入问题也常导致乱码或内容缺失
-- MinerU 先做布局分析（找到文字区域），再做 OCR，输出结构化 Markdown，效果远好于直接提取
-
-**工具选型：MinerU（pipeline 后端）**
-- `pipeline` 后端 = PaddleOCR + DocLayout-YOLO 布局检测，CPU 即可运行
-- `auto` 方法 = 自动判断：有文字层的页面用文字提取，扫描页用 OCR（混合文档友好）
-- `-l ch` = 中文优先，提升中文识别率
-
-**关键设计：两步走**
-```
-pdf_to_md.py  →  data/*.md  →  main_ingest.py
-```
-中间产物（`.md` 文件）可以人工打开检查质量，如果某本书转换效果差，可以手动修正再入库，而不是让错误数据污染知识库。
-
-**输出目录结构（MinerU 内部）**：
-```
-临时目录/
-└── {书名}/
-    └── auto/
-        └── {书名}.md    ← 我们读这个文件
-```
-脚本读取后写到 `data/{书名}.md`，临时目录自动删除。
-
-**幂等性**：已存在同名 `.md` 的 PDF 直接跳过，重复运行安全。
-
----
-
-### 6.2 `main_ingest.py`
-
-**职责**：扫描 `data/` 目录，解析所有文档，生成向量，写入 ChromaDB。
-
-**核心类/函数**：
-
-#### `LocalEmbeddingFunction`
-ChromaDB 的 `embedding_function` 参数要求传入一个可调用对象（callable），输入字符串列表，返回向量列表。这个类就是对 `SentenceTransformer` 的包装，让它符合这个接口。
-
-`name()` 方法是 ChromaDB 1.5+ 新增要求，用于在元数据中记录使用的 Embedding 模型名称，防止用不同模型混存导致向量不一致。
-
-#### `_split_text(text, chunk_size=500)`
-**为什么要切片？**
-- 大模型有 context 长度限制，一整本书塞不进去
-- 向量检索的粒度决定召回精度：太长→噪声多，太短→上下文不足
-- 500 字是经验值，覆盖约 2-5 段正文
-
-**切片策略**：按句子边界（`。！？\n`）分割，不在句中间截断，保证每个块语义完整。
-
-#### `process_document(file_path)`
-统一的文件解析入口，根据扩展名分发：
-- `.txt` / `.md` → deepdoc `RAGFlowTxtParser`
-- `.pdf` → PyMuPDF（fallback；正式流程下 PDF 已被 `pdf_to_md.py` 转为 MD）
-
-#### `main()`
-`--clear` 参数删除旧的 ChromaDB collection 再重建，用于全量重建知识库。
-
-**跳过已有 MD 的 PDF**：
+**`_init_qdrant`** 创建 Named Multi-Vector Collection：
 ```python
-files_to_process = [
-    f for f in files_to_process
-    if not (f.lower().endswith('.pdf') and
-            os.path.exists(os.path.splitext(f)[0] + '.md'))
-]
+vectors_config={
+    "text_vec":  VectorParams(size=1024, distance=Distance.COSINE),
+    "image_vec": VectorParams(size=1024, distance=Distance.COSINE),
+}
 ```
-防止同一本书被入库两次（一次以 PDF、一次以 MD）。
 
-**ChromaDB upsert vs insert**：
-用 `upsert`（不是 `insert`）是为了幂等性——用文件名+块序号构成唯一 ID，重复运行时更新而不是报错。
-
----
-
-### 6.3 `main_chat.py`
-
-**职责**：终端交互式问答，适合调试和快速验证效果。
-
-**多轮对话实现**：
-维护一个 `messages` 列表，格式为 OpenAI ChatCompletion 规范：
-```python
-[
-  {"role": "system", "content": "系统提示"},
-  {"role": "user",   "content": "问题1（含检索原文）"},
-  {"role": "assistant", "content": "回答1"},
-  {"role": "user",   "content": "问题2（含检索原文）"},
-  ...
-]
-```
-每轮都把历史带上，LLM 可以理解"你刚才说的 XX" 这类指代。
-
-**检索注入方式**：
-每轮用户消息不是直接发用户原话，而是：
-```
-参考资料：
-[1] 来源: xxx.md
-（检索到的原文段落）
-
-用户问题：XXX
-```
-LLM 看到参考资料后，会优先根据原文回答，而不是靠自己的"记忆"。
-
-**为什么 temperature=0.3？**
-RAG 问答需要"忠实于原文"，创造性越低越好（0 = 完全确定性，1 = 最大发散）。0.3 是保守但不死板的平衡点。
-
----
-
-### 6.4 `app.py`
-
-**职责**：基于 Gradio 的 Web 问答界面，集成了入库管理和流式对话。
-
-**与 `main_chat.py` 的关系**：
-功能相同，但 `app.py` 是图形界面，适合非技术用户使用。两者共享 `main_ingest.process_document()` 逻辑（直接 import）。
-
-**关键设计点**：
-
-#### 全局初始化（模块级代码）
-```python
-embedding_func = LocalEmbeddingFunction(...)  # 启动时加载一次
-chroma_client = chromadb.PersistentClient(...)
-collection = ...
-llm_client = OpenAI(...)
-```
-Embedding 模型加载耗时约 10-30 秒，放在全局避免每次请求都重新加载。
-
-#### 流式输出（streaming）
-```python
-stream = llm_client.chat.completions.create(..., stream=True)
-for chunk in stream:
-    delta = chunk.choices[0].delta.content or ""
-    full_answer += delta
-    yield full_answer  # Gradio 每次 yield 都刷新 UI
-```
-`stream=True` 让 LLM 边生成边返回，用户看到文字逐渐出现，而不是等待全部生成完才显示。
-
-#### `run_ingest()` 生成器
-同样用 `yield` 让入库日志实时显示在 UI 上，而不是等全部完成才更新。
-
-#### 历史窗口限制与 Gradio 版本兼容
-
-Gradio 5+ 将 history 格式从配对列表 `[[user, assistant], ...]` 改为平铺的消息字典列表 `[{"role": "user", "content": "..."}, ...]`。代码兼容两种格式：
+### 7.2 `backend/state.py` — 全局状态
 
 ```python
-for item in history[-12:]:  # 12 = 最近 6 轮 × 每轮 2 条
-    if isinstance(item, dict):
-        # Gradio 5+ 新格式
-        messages.append({"role": item["role"], "content": item["content"]})
-    else:
-        # Gradio 4 旧格式
-        user_msg, assistant_msg = item[0], item[1]
-        ...
+@dataclass
+class AppState:
+    qdrant_client: Any              # QdrantClient（本地文件 storage/qdrant.db）
+    embedding_mgr: Any              # EmbeddingManager（bge-m3 + Chinese-CLIP）
+    llm_client: Any                 # FallbackLLMClient 或 openai.OpenAI
+    active_model_label: str         # 显示用，e.g. "MiniMax(M2.5) → fallback: Qwen"
+    minimax_client: Optional[Any]   # 原始 MiniMax OpenAI 实例，Vision 专用
+    minimax_model: str
+    reranker: Optional[Any]         # CrossEncoder，None 则按 score 排序
+    neo4j_driver: Optional[Any]
+    is_ingesting: bool
+    collection_lock: Lock           # 防并发写冲突
+    neo4j_lock: Lock
 ```
 
-只取最近 12 条消息（6 轮），防止 prompt 超长。
+**`FallbackLLMClient`**：包装主/备两个 OpenAI 兼容客户端，主客户端抛异常时自动切换备用。接口与 `openai.OpenAI` 完全相同（`client.chat.completions.create(...)`）。Vision 调用必须直接使用 `minimax_client`，因为 SiliconFlow 不支持多模态。
 
-#### 性能评估面板
+### 7.3 `backend/embedding_manager.py` — 双模型管理
 
-`app.py` 还集成了 RAG 性能评估功能，在 UI 中以折叠面板（`📊 性能评估`）呈现：
-
-- **🔍 召回诊断**：调用 `run_eval_diagnose()`，对 10 道内置测试题做向量检索，输出每题 Top-5 召回片段、余弦距离和全局统计。不调用 LLM，秒出结果。
-- **⚖️ LLM 打分**：调用 `run_eval_judge()`，在召回基础上请 LLM 从相关性/完整性/可回答性三个维度各打 0-5 分，最后输出综合得分。
-
-两个函数均为生成器（`yield`），结果实时流式显示到 Textbox，与 `run_ingest()` 模式一致。
-
----
-
-### 6.5 `eval_rag.py`
-
-**职责**：独立的 RAG 性能评估脚本，同时作为 `app.py` 性能评估面板的逻辑来源参考。
-
-**三种运行模式**（通过 `--mode` 参数切换）：
-
-#### `--mode diagnose`（默认）
-1. 读取知识库所有 chunk，统计长度分布（均值/中位数/分桶直方图）
-2. 对 10 道内置测试题逐一做向量检索（Top-5）
-3. 打印每题召回片段（文本前 80 字 + 来源 + 余弦距离）
-4. 输出全局距离统计和质量判断
-
-#### `--mode judge`
-在 diagnose 基础上，追加 LLM-as-Judge 打分：
-- 把每道题的检索原文发给 LLM，要求输出 JSON 格式打分
-- 三个维度：**相关性**（片段与问题相关程度）、**完整性**（片段能否覆盖回答）、**可回答性**（能否给出令用户满意的答案）
-- 输出每道题三维分数 + 全局均值
-
-#### `--mode ragas`
-对齐学术界 RAGAS 框架，走完整 **检索→生成→评估** 链路，计算三个无需 Ground Truth 的指标：
-
-| 指标 | 含义 | 计算方式 |
-|------|------|---------|
-| **Context Relevance**（上下文相关性） | 检索片段中有多少内容真正与问题相关 | LLM 从 chunks 中提取相关句子，计算比例 |
-| **Faithfulness**（忠实度）| 答案中的事实声明是否都有检索内容支撑（幻觉检测） | 拆解答案为原子声明 → 逐条核验是否有 chunk 支撑 |
-| **Answer Relevance**（回答相关性） | 答案是否直接针对了用户提问 | 从答案逆向生成 3 个问题 → 与原问题的 embedding 余弦相似度均值 |
-
-与 `judge` 模式的区别：
-- `judge`：只评估**检索阶段**（chunks 本身的质量），不生成答案
-- `ragas`：评估**完整 RAG 链路**（包括生成阶段），指标更贴近真实使用效果
-- `ragas` 运行时间更长（每道题多次 LLM 调用），10 道题约需 5–15 分钟
-
-**如何解读余弦距离**（`diagnose` 模式）：
-| 距离范围 | 含义 |
-|---------|------|
-| < 0.3 | 高度相关，召回质量优秀 |
-| 0.3–0.6 | 中等，基本可用 |
-| 0.6–0.8 | 较差，建议增大 chunk_size 或 TOP_K |
-| > 0.8 | 很差，需排查 Embedding 或文档质量 |
-
-**设计原则**：不引入额外依赖（只用 stdlib + 已有包），可直接运行：
-```bash
-PYTHONUTF8=1 python eval_rag.py --mode diagnose
-PYTHONUTF8=1 python eval_rag.py --mode judge
-PYTHONUTF8=1 python eval_rag.py --mode ragas
+```python
+class EmbeddingManager:
+    encode_text(texts) → np.ndarray(N, 1024)      # bge-m3，normalize
+    encode_texts_clip(texts) → np.ndarray(N, 1024) # Chinese-CLIP 文本编码器
+    encode_images_clip(images) → np.ndarray(N, 1024) # Chinese-CLIP 图片编码器
+    zero_image_vec() → List[float]                 # [0.0]*1024，文本块占位
 ```
 
----
+**为什么同一个 1024 维可以用两个不同模型？**
+bge-m3 和 Chinese-CLIP vit-large-patch14 的输出维度恰好相同，因此 Qdrant Collection 的 `text_vec` 和 `image_vec` 索引参数完全一致。两者训练目标不同：bge-m3 优化文本语义相似度，Chinese-CLIP 优化图文跨模态对齐。
 
-### 6.6 `document_processing/common/token_utils.py`  <!-- 原 6.5 -->
+### 7.4 `backend/image_captioner.py` — Vision Caption
 
-**职责**：为 deepdoc 提供 token 计数功能的"垫片"（shim）。
-
-**背景**：deepdoc 的原始代码从 RAGFlow 内部导入 `from common.token_utils import num_tokens_from_string`，RAGFlow 用的是自己实现的版本。我们把这个包单独实现，让 deepdoc 的导入语句能正常工作。
-
-**实现**：用 OpenAI 官方的 `tiktoken` 库，`cl100k_base` 编码方案（GPT-3.5/4 使用的 tokenizer）。对中文 token 计数有一定误差（中文字符的 tokenizer 不同），但 deepdoc 用这个只是做粗粒度的长度判断，精度要求不高。
-
----
-
-### 6.7 `document_processing/rag/nlp/__init__.py`
-
-**职责**：为 deepdoc 提供编码检测功能的"垫片"（shim）。
-
-**背景**：deepdoc 的 txt_parser 需要 `from rag.nlp import find_codec` 来判断文件的字符编码（GBK / UTF-8 / Big5 等），原来从 RAGFlow 的 NLP 模块导入。
-
-**实现**：用 `chardet` 库检测二进制内容的编码，并做标准化处理（`ascii` → `utf-8`，`utf_8_sig` → `utf-8`）。
-
----
-
-## 7. 关键工具库详解
-
-### ChromaDB
-- **是什么**：纯 Python 向量数据库，数据存为 SQLite 文件，无需独立部署
-- **为什么选它**：轻量（单文件）、API 简单、支持余弦/欧氏距离
-- **核心概念**：`Collection`（类似数据库的表）、`upsert`（插入或更新）、`query`（向量检索）
-- **距离度量**：余弦距离（cosine）。对文本语义匹配比欧氏距离（L2）效果好，因为向量长度不影响相似度
-
-### BAAI/bge-m3
-- **是什么**：北京智源研究院开发的多语言 Embedding 模型
-- **为什么选它**：原生支持中文、英文，1792 维向量，效果优异，可本地运行
-- **运行方式**：`SentenceTransformer` 封装，CPU 可运行（慢），有 GPU 会自动加速
-- **向量维度**：1024（默认），越高维度越精确但越占内存
-
-### MinerU（mineru）
-- **是什么**：OpenDataLab 开发的开源 PDF 解析工具
-- **核心能力**：布局检测（DocLayout-YOLO）+ OCR（PaddleOCR）+ 阅读顺序排序
-- **pipeline 后端**：纯 CPU 可运行，适合本地部署
-- **首次运行**：自动从 HuggingFace 下载模型（约 2-4 GB），国内可设 `MINERU_MODEL_SOURCE=modelscope`
-- **输出**：结构化 Markdown，保留标题层级、表格，图片保存为单独文件
-
-### deepdoc（RAGFlow 抽离）
-- **是什么**：RAGFlow 项目的文档解析模块，支持 PDF/Word/Excel/TXT/MD 等格式
-- **我们用的部分**：`RAGFlowTxtParser`（处理 .txt/.md）
-- **为什么用它而不是直接 split**：deepdoc 按语义边界（段落、章节）切片，比简单按字数切效果好
-
-### SentenceTransformers
-- **是什么**：Hugging Face 的 Sentence Embedding 框架，封装了 BERT 系列模型
-- **作用**：把文本转为定长向量，语义相近的文本向量距离小
-- **batch 推理**：一次可以传入多个字符串列表，比逐个推理快很多
-
-### OpenAI Python SDK
-- **是什么**：OpenAI 官方 Python 客户端
-- **我们用它连的**：MiniMax（主力）或 SiliconFlow（备用），均兼容 OpenAI 接口格式
-- **流式输出**：`stream=True` + `for chunk in stream` 实现打字机效果
-- **FallbackLLMClient**：`app.py` 中定义的代理类，优先调 MiniMax，失败时自动切换 SiliconFlow，对外接口与 `openai.OpenAI` 完全兼容
-
-### Gradio
-- **是什么**：快速构建 ML 演示 Web UI 的 Python 库
-- **`gr.ChatInterface`**：内置的对话 UI 组件，自动处理历史记录显示
-- **`gr.Blocks`**：更灵活的自定义布局，可以加按钮、文本框等控件
-
----
-
-## 8. 配置系统（.env）
-
-`.env` 文件放在项目根目录，**不提交 git**（已加入 .gitignore）。
-
-```env
-# 备用 LLM（SiliconFlow）
-LLM_API_KEY=sk-xxxxxxxx        # SiliconFlow API Key
-LLM_BASE_URL=https://api.siliconflow.cn/v1
-LLM_MODEL=Qwen/Qwen2.5-14B-Instruct
-
-# 主力 LLM（MiniMax，优先使用；留空则退回 SiliconFlow）
-MINIMAX_API_KEY=               # MiniMax API Key（填入后自动启用）
-MINIMAX_BASE_URL=https://api.minimax.chat/v1
-MINIMAX_MODEL=MiniMax-Text-01
+```python
+def describe_image(client, model, image_path, context_text="") -> str
 ```
 
-`python-dotenv` 的 `load_dotenv()` 在脚本启动时自动读取这个文件，注入到 `os.environ`，代码通过 `os.getenv()` 读取。
+- 读取图片 → base64 编码 → MiniMax M2.5 Vision API
+- Prompt：请用中文详细描述这张图片内容，包括图中展示的结构、部件名称、工作原理或数据...
+- `context_text` 是图片所在页面的前 200 字，帮助 Caption 更准确
+- 失败返回 `""`，调用方跳过该图片块（不中断入库）
 
-**LLM 优先级**：`MINIMAX_API_KEY` 非空时，`app.py` 会用 `FallbackLLMClient` 优先调 MiniMax，失败时自动降级到 SiliconFlow；`eval_rag.py` 直接切换为 MiniMax client。`MINIMAX_API_KEY` 为空时两者均使用 SiliconFlow。
+### 7.5 `backend/routers/ingest.py` — 入库
 
-**好处**：密钥不硬编码，不会被 git 记录，换模型只改 `.env` 不改代码。
+**核心流程（`_do_ingest`）**：
+```
+对每个文件：
+  1. process_document(file_path) → 文本块 + 图片块列表
+  2. 增量删旧（Qdrant FilterSelector by doc_id）
+  3. 文本块：encode_text → text_vec；zero_image_vec → image_vec
+  4. 图片块：describe_image → caption → encode_text → text_vec；
+             encode_images_clip → image_vec
+  5. PointStruct(id=uuid5(doc_id_chunk_i), vector={...}, payload={...})
+  6. qdrant_client.upsert(points=batch, batch_size=32)
+  7. yield 完整日志快照（SSE 覆盖式显示）
+```
+
+**增量更新原理**：每个文件的 `doc_id = sha256(filename)[:16]`，删旧时用 Qdrant Filter 按 `doc_id` payload 字段匹配删除，然后重新插入。幂等安全。
+
+**Point UUID**：`str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{doc_id}_{i}"))` — 确定性生成，同文件同块号永远得到相同 UUID，避免重复插入。
+
+### 7.6 `backend/routers/retrieve.py` — 双路检索
+
+```python
+def qdrant_search_text(qdrant_client, embedding_mgr, query, n) -> List[dict]:
+    # bge-m3 编码 → query_points(using="text_vec")
+    # 返回文本块 + Caption 块
+
+def qdrant_search_image(qdrant_client, embedding_mgr, query, n) -> List[dict]:
+    # Chinese-CLIP 文本编码 → query_points(using="image_vec")
+    # query_filter: chunk_type == "image"，只返回图片块
+
+def merge_and_dedup(text_results, image_results) -> List[dict]:
+    # 按 Point UUID 去重，相同 ID 保留 score 更高的版本
+    # 按 score 降序排列（余弦相似度越高越相关）
+```
+
+**`POST /retrieve`** 完整流程：
+1. 路径1：`qdrant_search_text`（召回3×top_k，上限20）
+2. 路径2：`qdrant_search_image`（召回top_k）
+3. 合并去重 → CrossEncoder 精排 → 取 top_k
+4. 返回 `ChunkResult`（含 `chunk_type`、`image_url`）
+
+### 7.7 `backend/routers/chat.py` — 多查询 RAG 问答
+
+**四阶段流程（全部为 SSE 流）**：
+1. **多查询生成**（静默）：调 LLM 生成 2 个额外查询角度，扩大召回覆盖
+2. **双路多查询检索**（静默）：对所有查询分别执行 text+image 双路检索，合并去重
+3. **CrossEncoder 重排**（静默）：对候选块精排，取 Top-4
+4. **LLM 流式生成**：边生成边 yield，最后附带来源脚注和图片 URL
+
+**`_IMAGES_SEP`（`\n\n[__IMAGES__]`）协议**：最后一次 yield 在文本末尾附加此分隔符和 JSON 序列化的 `image_urls`，由 `sse.py` 的 done 帧解析逻辑拆分后透传前端。
+
+### 7.8 `backend/sse.py` — SSE 协议
+
+| 函数 | 用途 | 帧格式 |
+|------|------|--------|
+| `log_gen_to_sse(gen)` | 日志类（入库/评估） | `{"log": "完整日志快照"}` / `[DONE]` |
+| `chat_gen_to_sse(gen)` | 聊天类（问答） | `{"delta": "..."}` + `{"done":true,"sources_md":"...","image_urls":[...]}` |
+
+聊天流的帧分两类：中间帧发 `delta`（前端追加），最后帧发 `done`（前端解析来源脚注和图片列表）。
 
 ---
 
-## 9. 运行方式
+## 8. 图文检索详解
 
-> 所有 Python 命令需在激活 `rag_demo` conda 环境后运行。
+### 8.1 PDF 图片提取（`main_ingest.py`）
 
-### 方式 A（推荐）：FastAPI + React 前后端分离
-
-```bash
-# 终端 1：启动 FastAPI 后端（:8000）
-conda activate rag_demo
-PYTHONUTF8=1 python run_backend.py
-# → API 文档：http://localhost:8000/docs
-# → 健康检查：http://localhost:8000/health
-
-# 终端 2：启动 React 前端（:5173）
-cd frontend
-npm run dev
-# → 浏览器访问：http://localhost:5173
+```python
+def extract_images_from_pdf(file_path, output_dir, min_width=100, min_height=100):
+    # page.get_images(full=True) → img_info
+    # doc.extract_image(xref) → {image:bytes, width, height, ext}
+    # 过滤 < 100×100 像素（装饰图/图标/线条）
+    # 保存：{basename}_p{page}_img{idx}.{ext}
+    # 提取页面前200字作为 context_text（提升 Caption 质量）
 ```
 
-### 方式 B（旧）：Gradio 一体化界面
+**过滤阈值 100×100**：经验值，能过滤掉页眉装饰、分隔线等噪声，同时保留正文插图（通常 > 200×200）。
 
-```bash
-conda activate rag_demo
-PYTHONUTF8=1 python app.py
-# → 浏览器访问：http://127.0.0.1:7860
+### 8.2 以图搜文流程（前端驱动）
+
+```
+用户在前端上传图片
+    → POST /vision/describe（图片 → MiniMax Vision → 中文描述）
+    → 前端拼接：[图片内容：{description}] + 用户补充说明
+    → POST /chat（正常走 bge-m3 文字检索流程）
 ```
 
-### 文档入库（首次必须运行）
+**为什么这样设计？**
+直接用 Chinese-CLIP 图片编码搜文本向量在跨模态时效果不稳定。先用 Vision LLM 把图片"翻译"成文字描述，再走 bge-m3 文字检索，效果更可控，且不依赖 CLIP 模型的中文语料质量。
 
-```bash
-# PDF 转 Markdown（MinerU OCR，首次下载模型需等待）
-PYTHONUTF8=1 python pdf_to_md.py
+### 8.3 文字查图流程（自动）
 
-# 知识库入库（首次下载 BAAI/bge-m3 模型）
-PYTHONUTF8=1 python main_ingest.py --clear   # 清空重建
-PYTHONUTF8=1 python main_ingest.py           # 增量入库
+`/chat` 的每次双路检索自动包含：
 ```
+Chinese-CLIP 文本编码器（query）→ Qdrant image_vec 搜索
+    → 返回图片块（chunk_type="image"）
+    → image_url = /images/{filename}
+    → done 帧中 image_urls 数组
+    → 前端回答下方展示图片缩略图
+```
+
+### 8.4 `/vision/search` — 纯 CLIP 以图搜图
+
+```
+用户上传图片
+    → Chinese-CLIP 图片编码器 → image_vec
+    → Qdrant query_points(using="image_vec", filter: chunk_type=="image")
+    → 返回最相关的图片块（含 Caption 和 image_url）
+```
+
+无需 Vision LLM，纯向量匹配，速度快。用于"找与这张图相似的图"场景。
 
 ---
 
-## 10. 常见问题与排查
+## 9. BOM-GraphRAG 扩展
 
-| 现象 | 原因 | 解决 |
+### 9.1 功能概述
+
+在 RAG 问答基础上，追加 Neo4j 图数据库存储发动机 BOM（物料清单）。装配方案问答同时查询：
+- **Neo4j**：根据零件名/模块名递归查询子零件树
+- **Qdrant 知识库**：查相关技术规范和工艺要求
+- **融合 Prompt**：BOM 数据 + 技术知识 → LLM 生成装配方案
+
+### 9.2 BOM 表格式规范
+
+Excel 文件必须包含以下列：
+
+| 列名 | 类型 | 示例 |
 |------|------|------|
-| PDF 入库后块数极少 | PDF 是扫描版，无文字层 | 先运行 `pdf_to_md.py` 做 OCR |
-| MinerU 下载模型失败 | HuggingFace 网络不通 | `set MINERU_MODEL_SOURCE=modelscope` |
-| `num_tokens_from_string` 报错 | shim 未加入 sys.path | 确认 `document_processing/` 在 sys.path 中 |
-| ChromaDB `collection.count()` 返回 0 | 未运行入库或 --clear 清空后未重新入库 | 运行 `main_ingest.py` |
-| LLM 返回"知识库中没有找到" | 检索距离太大，语义不匹配 | 检查入库块数是否正常，检查 Embedding 模型是否加载成功 |
-| GBK 编码错误 | Windows 控制台编码问题 | 命令前加 `PYTHONUTF8=1` |
-| 多轮对话第二问报错 `too many values to unpack` | Gradio 5+ 修改了 history 格式 | 已修复，`app.py` 的 `chat()` 函数已兼容新旧两种格式 |
-| ChromaDB `Error loading hnsw index` | 强制杀进程导致索引文件损坏 | 用 PowerShell `Remove-Item -Recurse` 清空 `storage/chroma_db/` 目录后重启 |
-| 回答内容太短 | SYSTEM_PROMPT 要求"简洁" | 已修改 SYSTEM_PROMPT 为"详细、准确、有条理" |
+| `level_code` | 字符串（`.` 分隔层级） | `1.2.1` |
+| `part_id` | 字符串（唯一主键） | `HPT-D01` |
+| `part_name` | 字符串 | `涡轮盘` |
+| `part_name_en` | 字符串 | `Turbine Disk` |
+| `category` | `Assembly` / `Part` / `Standard` | `Part` |
+| `qty` | 整数 | `80` |
+| `unit` | 字符串 | `件` |
+| `material` | 字符串（可空） | `GH4169` |
+| `weight_kg` | 浮点（可空） | `42.0` |
+| `spec` | 字符串（可空） | `φ520×120 mm` |
+| `note` | 字符串（可空） | `粉末冶金盘` |
 
----
+**层级规则**：`1.2.1` 的父节点为 `1.2`，`bom_ingest.py` 自动建立 `CHILD_OF` 关系。
 
-## 11. BOM-GraphRAG 扩展
-
-> 目标：将结构化 BOM（物料清单）写入 Neo4j 图数据库，用 LangChain Agent 结合 BOM 图谱和 RAG 知识库，生成航空发动机装配方案。现有 RAG 功能完全不受影响。
-
-### 11.1 整体架构
+### 9.3 Neo4j 图模型
 
 ```
-BOM Excel (data/test_bom.xlsx)
-    │
-    ▼ bom_ingest.py
-Neo4j 图数据库 (Docker bolt://localhost:7687)
-    ├─ 节点: Assembly（组件）/ Part（零件）/ Standard（标准件）
-    └─ 关系: CHILD_OF（层级隶属）
-    │
-    ▼ assembly_agent.py
-LangChain ReAct Agent
-    ├─ Tool: bom_query       → 查询 Neo4j（零件层级、材料、数量）
-    └─ Tool: knowledge_query → 查询 ChromaDB（装配工艺、设计规范）
-    │
-    ▼
-装配方案报告（Markdown 格式）
-```
-
-### 11.2 BOM 表格式规范
-
-Excel 文件必须包含以下列（列名不区分大小写）：
-
-| 列名 | 类型 | 说明 | 示例 |
-|------|------|------|------|
-| `level_code` | 字符串 | 层级编号，`.` 分隔 | `1.2.1` |
-| `part_id` | 字符串 | 零件唯一编号（主键） | `HPT-D01` |
-| `part_name` | 字符串 | 零件中文名称 | `涡轮盘` |
-| `part_name_en` | 字符串 | 零件英文名称 | `Turbine Disk` |
-| `category` | 枚举 | `Assembly` / `Part` / `Standard` | `Part` |
-| `qty` | 整数 | 数量 | `80` |
-| `unit` | 字符串 | 单位 | `件` |
-| `material` | 字符串 | 材料牌号（可为空） | `GH4169` |
-| `weight_kg` | 浮点 | 重量 kg（可为空） | `42.0` |
-| `spec` | 字符串 | 规格说明（可为空） | `φ520×120 mm` |
-| `note` | 字符串 | 备注（可为空） | `粉末冶金盘` |
-
-**层级编号规则**：`level_code` 用 `.` 分隔表达父子层级，`bom_ingest.py` 自动根据此字段建立 `CHILD_OF` 关系。例如 `1.2.1` 的父节点为 `1.2`，祖父节点为 `1`。
-
-### 11.3 Neo4j 图模型
-
-```
-(涡扇发动机整机:Assembly {part_id:"ENG-001", weight_kg:2800, ...})
+(涡扇发动机:Assembly {part_id:"ENG-001"})
     └─[:CHILD_OF]─(高压涡轮模块:Assembly {part_id:"HPT-000"})
-                       ├─[:CHILD_OF]─(高压涡轮导向器:Assembly)
-                       │                  └─[:CHILD_OF]─(导向叶片:Part {material:"DD6（单晶）", qty:32})
-                       └─[:CHILD_OF]─(高压涡轮转子:Assembly)
-                                          ├─[:CHILD_OF]─(涡轮盘:Part {material:"GH4169"})
-                                          └─[:CHILD_OF]─(涡轮工作叶片:Part {qty:80})
+                       ├─[:CHILD_OF]─(涡轮盘:Part {material:"GH4169"})
+                       └─[:CHILD_OF]─(涡轮叶片:Part {qty:80, material:"DD6"})
 ```
 
-**为什么用 Neo4j 而不是 SQLite/ChromaDB？**
-BOM 的本质是图（树），查询"某个模块的所有子孙零件"需要递归，SQL 写起来复杂。Neo4j 的 Cypher 一行搞定：
+递归查询整棵子树（Cypher）：
 ```cypher
-MATCH (n)-[:CHILD_OF*]->(root {part_id:"HPT-000"}) RETURN n
+MATCH (n)-[:CHILD_OF*]->(root {part_id: "HPT-000"}) RETURN n
 ```
 
-### 11.4 `bom_ingest.py` 详解
-
-**流程**：读取 Excel → 校验列名 → 写入节点（MERGE 幂等）→ 建立 CHILD_OF 关系 → 打印统计
-
-**关键设计**：
-- `MERGE` 而非 `CREATE`：重复运行不报错，实现幂等性
-- `--clear` 参数：仅删除 BOM 节点，不影响 Neo4j 中其他数据
-- 分三批写入（Assembly / Part / Standard）：避免 Cypher label 动态拼接的注入风险
+### 9.4 Neo4j Docker 快速启动
 
 ```bash
-PYTHONUTF8=1 python bom_ingest.py                      # 增量写入
-PYTHONUTF8=1 python bom_ingest.py --file data/my.xlsx  # 指定文件
-PYTHONUTF8=1 python bom_ingest.py --clear              # 清空重建
-```
+docker run -d --name neo4j -p 7474:7474 -p 7687:7687 \
+  -e NEO4J_AUTH=neo4j/password neo4j:5-community
 
-### 11.5 `assembly_agent.py` 详解
-
-**架构**：LangChain `ReAct Agent`（Reasoning + Acting 循环），拥有两个工具：
-
-| 工具 | 数据源 | 输入 | 输出 |
-|------|--------|------|------|
-| `bom_query` | Neo4j | 自然语言问题（含模块/零件名） | 结构化零件清单文本 |
-| `knowledge_query` | ChromaDB | 技术问题 | 相关教材原文片段 |
-
-**ReAct 循环**（每次用户提问，Agent 自动执行）：
-```
-Thought: 需要先查 BOM 知道有哪些零件
-Action: bom_query("高压涡轮模块包含哪些零件")
-Observation: 【高压涡轮模块】包含：涡轮盘×1, 涡轮叶片×80, ...
-Thought: 再查工艺规范
-Action: knowledge_query("涡轮叶片装配工艺要求")
-Observation: [来源：航空发动机设计手册] 涡轮叶片安装...
-Thought: 已有足够信息
-Final Answer: 【装配方案】步骤1: ... 步骤2: ...
-```
-
-**降级机制**：
-- Neo4j 不可用时：`bom_query` 返回提示信息，Agent 仍可用 `knowledge_query` 回答
-- ChromaDB 不可用时：`knowledge_query` 返回提示信息，Agent 仍可用 `bom_query` 回答
-
-```bash
-PYTHONUTF8=1 python assembly_agent.py                          # 交互模式
-PYTHONUTF8=1 python assembly_agent.py --query "生成高压涡轮装配方案"  # 单次查询
-```
-
-### 11.6 Neo4j Docker 快速启动
-
-```bash
-# 首次启动（创建容器）
-docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:5-community
-
-
-# 后续每次启动
+# 后续重启
 docker start neo4j
 
-# 浏览器可视化（用户名 neo4j，密码 password）
-# http://localhost:7474
-```
-
-`.env` 中追加：
-```env
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASS=password
-```
-
-### 11.7 新增文件清单
-
-```
-rag-demo/
-├── bom_ingest.py              # BOM → Neo4j 入库脚本
-├── assembly_agent.py          # LangChain Agent（装配方案生成）
-└── data/
-    ├── test_bom.xlsx          # 测试 BOM（47 条，涡扇发动机）
-    └── generate_test_bom.py   # 生成测试 BOM 的脚本
+# Web 可视化
+# http://localhost:7474（用户名 neo4j，密码 password）
 ```
 
 ---
 
-## 12. FastAPI 后端
+## 10. React 前端详解
 
-`backend/` 目录将 `app.py` 中的所有后端逻辑抽离为独立 FastAPI 服务（`:8000`），`app.py` Gradio 继续在 `:7860` 运行，两者并行。
-
-### 文件结构
-
-```
-backend/
-├── main.py      # FastAPI app + lifespan（初始化 Embedding/ChromaDB/LLM）+ CORS + /health
-├── state.py     # AppState dataclass + FallbackLLMClient + LocalEmbeddingFunction
-├── deps.py      # Depends 函数（get_state / get_neo4j_cfg 等）
-├── sse.py       # 生成器→SSE 适配（log_gen_to_sse / chat_gen_to_sse）
-└── routers/
-    ├── ingest.py    # GET /ingest/status, POST /ingest（SSE）
-    ├── retrieve.py  # POST /retrieve（JSON）
-    ├── chat.py      # POST /chat（SSE）
-    ├── eval.py      # POST /eval/diagnose|judge|ragas（SSE）
-    ├── bom.py       # GET /bom/status, POST /bom/ingest（SSE）, POST /bom/query
-    └── assembly.py  # POST /assembly/chat（SSE）
-```
-
-### SSE 两种语义
-
-| 类型 | 接口 | 帧格式 | 前端处理 |
-|------|------|--------|---------|
-| 日志流 | /ingest、/eval/*、/bom/ingest | `{"log": "完整快照"}` + `[DONE]` | 覆盖式替换显示 |
-| 聊天流 | /chat、/assembly/chat | `{"delta": "增量"}` + `{"done":true,"sources_md":"..."}` | 追加式拼接 |
-
----
-
-## 13. React 前端
-
-`frontend/` 目录基于 Vite + React 18 + TypeScript + Tailwind CSS v4 构建，通过 Vite 代理调用 FastAPI。
-
-### 技术栈
+### 10.1 技术栈
 
 | 层级 | 选型 |
 |------|------|
 | 框架 | React 18 + TypeScript |
 | 构建 | Vite（`npm run dev` → `:5173`） |
-| 样式 | Tailwind CSS v4（`@tailwindcss/vite` 插件，无需 tailwind.config.js） |
-| 状态 | Zustand（预留，当前用 `useState` + hooks） |
-| Markdown | react-markdown + remark-gfm |
+| 样式 | Tailwind CSS v4（`@tailwindcss/vite` 插件） |
+| Markdown 渲染 | react-markdown + remark-gfm |
 
-### 核心设计：POST SSE
+### 10.2 POST SSE 实现
 
-浏览器原生 `EventSource` 只支持 GET；所有聊天/入库接口是 POST SSE，因此用 `fetch + ReadableStream` 手动解析：
+浏览器原生 `EventSource` 只支持 GET；所有聊天/入库接口是 POST，因此用 `fetch + ReadableStream`：
 
 ```
-fetch(url, {method:'POST', body:...})
+fetch(url, {method:'POST', body:JSON.stringify(...)})
   → res.body.getReader()
-  → 循环 read() → 解码 → 按 \n 拆行 → 找 "data: " 前缀 → JSON.parse
+  → 循环 read() → TextDecoder → 按 \n 拆行
+  → 找 "data: " 前缀 → JSON.parse(payload)
+  → yield SseFrame
 ```
 
-封装在 `src/hooks/usePostSSE.ts`（日志流）和 `src/hooks/useChat.ts`（聊天流）。
+日志类流（`usePostSSE`）：每帧覆盖显示 `frame.log`
+聊天类流（`useChat`）：中间帧追加 `frame.delta`，done 帧解析 `sources_md` 和 `image_urls`
 
-### 文件结构
+### 10.3 图片上传（`RagChat.tsx`）
 
+- **📷 按钮**：点击触发 `<input type="file" accept="image/*">`
+- **粘贴**：`onPaste` 事件从剪贴板 `items` 中提取 `image/*` 类型
+- **发送流程**：`pendingImage` 存在时，先调 `postVisionDescribe(file)` 获取描述，拼入消息前缀 `[图片内容：{description}]`，再正常走 `/chat`
+- **图片展示**：`useChat` 返回 `imageUrls`，回答完成后在来源脚注下方渲染缩略图（点击新标签页放大）
+
+### 10.4 Vite 代理
+
+`vite.config.ts` 中 `/api/*` → `http://localhost:8000`，前端无需处理 CORS。
+
+---
+
+## 11. 配置系统（.env）
+
+```env
+# ===== LLM 备用（SiliconFlow，必填）=====
+LLM_API_KEY=sk-xxx
+LLM_BASE_URL=https://api.siliconflow.cn/v1
+LLM_MODEL=Qwen/Qwen2.5-14B-Instruct
+
+# ===== MiniMax（主 LLM + Vision，可选但推荐）=====
+# 配置后：LLM 优先走 MiniMax，失败自动 fallback 到 SiliconFlow
+# Vision 功能（图片 Caption + 以图搜文）必须配置此项
+MINIMAX_API_KEY=your_minimax_key
+MINIMAX_BASE_URL=https://api.minimaxi.com/v1
+MINIMAX_MODEL=MiniMax-M2.5
+
+# ===== Neo4j（BOM 装配方案，可选）=====
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASS=password
 ```
-frontend/src/
-├── App.tsx                   # 顶层：Header + 双 Tab + Accordion 组件
-├── types/index.ts            # TS 类型（Message、BomStatus、SseFrame 等）
-├── api/client.ts             # 所有 API 调用封装（唯一入口）
-├── hooks/
-│   ├── usePostSSE.ts         # 日志类 SSE hook（log 覆盖式）
-│   └── useChat.ts            # 聊天类 SSE hook（delta 追加式）
-└── components/
-    ├── rag/
-    │   ├── KnowledgePanel.tsx  # 知识库入库 + 日志
-    │   ├── EvalPanel.tsx       # 三种评估 + 报告
-    │   └── RagChat.tsx         # RAG 问答聊天框
-    └── bom/
-        ├── Neo4jStatus.tsx     # Neo4j 状态检测
-        ├── BomIngest.tsx       # BOM 文件上传入库
-        └── AssemblyChat.tsx    # 装配方案融合问答
+
+**不配置 MINIMAX_API_KEY 的影响**：
+- 图片 Caption 生成不可用 → PDF 中的图片块被跳过，只入库文本块
+- 前端图片上传后的以图搜文功能返回 503 错误
+- 文字查图功能仍可用（如果之前入库过图片块的话）
+
+---
+
+## 12. 运行方式
+
+### 12.1 首次环境准备
+
+```bash
+# 1. 创建 conda 环境
+conda create -n rag_demo python=3.10
+conda activate rag_demo
+
+# 2. 安装依赖
+PYTHONUTF8=1 pip install -r requirements.txt
+
+# 3. 配置密钥
+cp .env.example .env
+# 编辑 .env，填写 API Key
+
+# 4. 前端依赖
+cd frontend && npm install && cd ..
 ```
 
-### Vite 代理配置
+### 12.2 启动服务
 
-`vite.config.ts` 中 `/api/*` 代理到 `localhost:8000`，前端请求 `/api/chat` → FastAPI `/chat`，浏览器不触发 CORS。
+```bash
+# 终端1：启动 FastAPI 后端
+PYTHONUTF8=1 python run_backend.py
+# 或：PYTHONUTF8=1 uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 终端2：启动 React 前端
+cd frontend && npm run dev
+# 访问 http://localhost:5173
+```
+
+### 12.3 知识库入库
+
+**方式 A：通过前端**（推荐）
+在 React 界面 → "知识库" Tab → 点击"开始入库"按钮，日志实时显示。
+
+**方式 B：命令行**
+```bash
+# 增量入库（已入库的文件不重复处理）
+PYTHONUTF8=1 python main_ingest.py
+
+# 清空后完整重建
+PYTHONUTF8=1 python main_ingest.py --clear
+
+# 只处理文本（跳过图片提取，无 MiniMax 时使用）
+PYTHONUTF8=1 python main_ingest.py --no-image
+```
+
+### 12.4 扫描版 PDF 预处理
+
+```bash
+# 先用 MinerU OCR 转 Markdown（首次需下载模型 ~2-4GB）
+PYTHONUTF8=1 python pdf_to_md.py
+# 生成 data/{书名}.md 后，再执行 main_ingest.py 入库
+```
+
+### 12.5 BOM 数据入库
+
+```bash
+# 入库 data/test_bom.xlsx
+PYTHONUTF8=1 python bom_ingest.py
+
+# 指定文件
+PYTHONUTF8=1 python bom_ingest.py --file data/my_bom.xlsx
+
+# 清空重建
+PYTHONUTF8=1 python bom_ingest.py --clear
+```
+
+---
+
+## 13. 常见问题与排查
+
+### Q: 后端启动时 `ModuleNotFoundError: No module named 'qdrant_client'`
+```bash
+pip install qdrant-client>=1.11
+```
+
+### Q: Chinese-CLIP 模型首次加载很慢
+首次运行自动从 HuggingFace 下载 `OFA-Sys/chinese-clip-vit-large-patch14`（约 2GB），国内网络慢可设置：
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+```
+
+### Q: 图片 Caption 生成失败（"Caption 失败，跳过"）
+检查 `.env` 中 `MINIMAX_API_KEY` 是否正确配置，以及 MiniMax API 配额是否充足。无 Caption 的图片块会被跳过（不影响文本块入库）。
+
+### Q: Qdrant `collection_exists` 返回 False 但数据库文件存在
+`QDRANT_DB_PATH` 是一个**目录**（不是单文件），路径为 `storage/qdrant.db/`。初始化时用 `os.makedirs(db_path, exist_ok=True)`，不要当成文件处理。
+
+### Q: `GET /images/xxx.png` 返回 404
+检查 `storage/images/` 目录是否存在。FastAPI `StaticFiles` 挂载依赖该目录在启动前存在，`backend/main.py` 的 `lifespan` 中已有 `os.makedirs(IMAGE_STORAGE_DIR, exist_ok=True)`。
+
+### Q: Reranker 加载失败
+CrossEncoder 约 280MB，加载失败时系统自动降级为按余弦相似度排序，不影响正常使用。如需使用：
+```bash
+pip install sentence-transformers
+# 首次使用自动下载 BAAI/bge-reranker-base
+```
+
+### Q: Windows 路径中文乱码
+所有 Python 命令前加 `PYTHONUTF8=1`：
+```bash
+PYTHONUTF8=1 python run_backend.py
+```
 
 ---
 
@@ -746,16 +644,12 @@ frontend/src/
 
 | 日期 | 变更内容 |
 |------|----------|
-| 2026-03-06 | 初始化项目，完成架构设计，deepdoc 集成，ChromaDB 入库 |
-| 2026-03-06 | 用 MinerU pipeline 替换 pymupdf4llm，支持扫描版 PDF OCR |
-| 2026-03-06 | 创建本文档，为所有代码文件添加中文注释 |
-| 2026-03-09 | 修复 Gradio 6.x 多轮对话报错（history 格式兼容 dict 和 list 两种形式） |
-| 2026-03-09 | 新增 `eval_rag.py`：RAG 性能评估工具，支持召回诊断和 LLM-as-Judge 两种模式 |
-| 2026-03-09 | `app.py` 新增"📊 性能评估"前端面板，召回诊断和 LLM 打分结果实时显示 |
-| 2026-03-09 | 调整 `app.py` 和 `main_chat.py` 的 SYSTEM_PROMPT，去掉"简洁"限制，改为详细输出 |
-| 2026-03-09 | `eval_rag.py` 新增 `--mode ragas`：实现 RAGAS 三指标（Context Relevance / Faithfulness / Answer Relevance） |
-| 2026-03-09 | `app.py` 性能评估面板新增"🧪 RAGAS 评估"按钮，走完整检索→生成→评估链路 |
-| 2026-03-09 | 新增 MiniMax 支持：`.env` 加 `MINIMAX_API_KEY/BASE_URL/MODEL`；`app.py` 引入 `FallbackLLMClient`（优先 MiniMax，失败降级 SiliconFlow）；`eval_rag.py` 同步支持 MiniMax 优先 |
-| 2026-03-12 | 新增 BOM-GraphRAG 扩展：`bom_ingest.py`（BOM→Neo4j）、`assembly_agent.py`（LangChain ReAct Agent）、`data/test_bom.xlsx`（47条涡扇发动机测试数据）；`requirements.txt` 追加 `neo4j`、`langchain-openai` |
-| 2026-03-18 | FastAPI 后端重构：新建 `backend/`（main.py/state.py/deps.py/sse.py + routers/），暴露 12 个 REST+SSE 接口，`run_backend.py` 启动脚本，`requirements.txt` 追加 fastapi/uvicorn/python-multipart |
-| 2026-03-18 | React 前端：新建 `frontend/`（Vite + React 18 + TypeScript + Tailwind CSS v4），双 Tab 布局，POST SSE 流式接入，全面替代 Gradio |
+| 2026-03-06 | 初始化项目：架构设计、deepdoc 集成、ChromaDB 入库 |
+| 2026-03-06 | MinerU pipeline 替换 pymupdf4llm，支持扫描版 PDF OCR |
+| 2026-03-09 | `eval_rag.py`：RAG 性能评估（召回诊断 / LLM-as-Judge / RAGAS） |
+| 2026-03-09 | MiniMax 主备 LLM 支持（`FallbackLLMClient`） |
+| 2026-03-12 | BOM-GraphRAG：`bom_ingest.py`（BOM→Neo4j）、`data/test_bom.xlsx`（47条涡扇发动机测试数据） |
+| 2026-03-18 | **FastAPI 后端重构**：`backend/` 目录，12 个 REST+SSE 接口 |
+| 2026-03-18 | **React 前端**：Vite + React 18 + TypeScript + Tailwind CSS v4，全面替代 Gradio |
+| 2026-03-20 | **图文检索重构**：向量库 ChromaDB → **Qdrant**（Windows 本地文件，无需 Docker）；`EmbeddingManager`（bge-m3 + Chinese-CLIP 双模型）；`image_captioner.py`（MiniMax Vision Caption）；`/vision/*` 路由；多查询+双路向量检索+CrossEncoder 重排；前端图片上传/粘贴/以图搜文/图片展示 |
+| 2026-03-20 | 清理过时文件：删除 `app.py`（Gradio UI）、`main_chat.py`、`eval_rag.py`、`assembly_agent.py`（已全部由 FastAPI + React 替代） |
