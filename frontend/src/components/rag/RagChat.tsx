@@ -19,6 +19,20 @@ const EXAMPLES = [
   '燃烧室的设计需要满足哪些基本要求？',
 ]
 
+// ReactMarkdown 自定义组件：图片加载失败时隐藏，成功时可点击放大
+const mdComponents = {
+  img: ({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => (
+    <img
+      src={src}
+      alt={alt || ''}
+      {...props}
+      className="max-w-full rounded border border-slate-200 my-2 cursor-zoom-in hover:border-blue-400 transition-colors"
+      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+      onClick={() => src && window.open(src, '_blank')}
+    />
+  ),
+}
+
 export default function RagChat() {
   const { messages, streamingText, sourcesMd, imageUrls, loading, sendMessage, clearMessages } = useChat()
   const [input, setInput] = useState('')
@@ -125,7 +139,7 @@ export default function RagChat() {
             >
               {msg.role === 'assistant' ? (
                 <div className="prose prose-sm max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{msg.content}</ReactMarkdown>
                 </div>
               ) : (
                 <span className="whitespace-pre-wrap">{msg.content}</span>
@@ -139,7 +153,7 @@ export default function RagChat() {
           <div className="flex justify-start">
             <div className="max-w-[80%] rounded-2xl px-4 py-2 text-sm bg-slate-100 text-slate-800">
               <div className="prose prose-sm max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingText}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{streamingText}</ReactMarkdown>
               </div>
               <span className="inline-block w-1.5 h-4 bg-blue-500 animate-pulse ml-0.5 align-middle" />
             </div>

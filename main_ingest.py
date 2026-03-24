@@ -154,7 +154,8 @@ def extract_images_from_pdf(file_path: str, output_dir: str,
 # 文档解析（文本块）
 # ==========================================
 
-def process_document(file_path: str, image_dir: Optional[str] = None) -> List[Dict]:
+def process_document(file_path: str, image_dir: Optional[str] = None,
+                     images_only: bool = False) -> List[Dict]:
     """
     解析单个文件，返回块列表。
 
@@ -163,13 +164,14 @@ def process_document(file_path: str, image_dir: Optional[str] = None) -> List[Di
       图片块：{"text": "",  "page": int, "chunk_type": "image", "image_path": str,
                "context_text": str}  # text 由调用方在生成 Caption 后填充
 
-    注意：图片块的 text 字段暂为空，需在 ingest 层调用 image_captioner 填充。
+    Args:
+        images_only: 为 True 时仅从 PDF 提取图片，跳过文本。用于有 .md 的 PDF。
     """
     ext = file_path.lower().split('.')[-1]
     results: List[Dict] = []
 
     try:
-        if ext in ('txt', 'md'):
+        if ext in ('txt', 'md') and not images_only:
             print(f"  使用 RAGFlowTxtParser 解析")
             if RAGFlowTxtParser:
                 parser = RAGFlowTxtParser()
@@ -190,18 +192,19 @@ def process_document(file_path: str, image_dir: Optional[str] = None) -> List[Di
                                     "chunk_type": "text", "image_path": ""})
 
         elif ext == 'pdf':
-            print(f"  使用 PyMuPDF 解析文本页")
-            with fitz.open(file_path) as pdf:
-                total_pages = len(pdf)
-                pages_with_text = 0
-                for page_num, page in enumerate(pdf, 1):
-                    page_text = (page.get_text("text") or "").strip()
-                    if page_text:
-                        pages_with_text += 1
-                        for chunk in _split_text(page_text):
-                            results.append({"text": chunk, "page": page_num,
-                                            "chunk_type": "text", "image_path": ""})
-                print(f"  共 {total_pages} 页，{pages_with_text} 页有文本")
+            if not images_only:
+                print(f"  使用 PyMuPDF 解析文本页")
+                with fitz.open(file_path) as pdf:
+                    total_pages = len(pdf)
+                    pages_with_text = 0
+                    for page_num, page in enumerate(pdf, 1):
+                        page_text = (page.get_text("text") or "").strip()
+                        if page_text:
+                            pages_with_text += 1
+                            for chunk in _split_text(page_text):
+                                results.append({"text": chunk, "page": page_num,
+                                                "chunk_type": "text", "image_path": ""})
+                    print(f"  共 {total_pages} 页，{pages_with_text} 页有文本")
 
             # 提取图片块（text 待 ingest 层填充）
             if image_dir:
@@ -240,11 +243,15 @@ def _make_doc_id(file_path: str) -> str:
 
 def ingest_to_qdrant(qdrant_client, embedding_mgr, file_path: str,
                      image_dir: str, minimax_client=None, minimax_model: str = "",
-                     batch_size: int = 32) -> int:
+                     batch_size: int = 32, images_only: bool = False) -> int:
     """
     解析单个文件并写入 Qdrant。
     文本块：text_vec（bge-m3），image_vec（零向量）
     图片块：先生成 Caption（调 Vision LLM），再编码 text_vec（Caption）+ image_vec（CLIP）
+    无 MiniMax 时，用页面上下文文字做降级 Caption（仍可用 CLIP 向量检索图片）。
+
+    Args:
+        images_only: 仅提取图片块（跳过文本），用于有 .md 的 PDF。
 
     Returns:
         成功写入的块数（含文本块和图片块）
@@ -254,7 +261,7 @@ def ingest_to_qdrant(qdrant_client, embedding_mgr, file_path: str,
 
     fname    = os.path.basename(file_path)
     doc_id   = _make_doc_id(file_path)
-    chunks   = process_document(file_path, image_dir=image_dir)
+    chunks   = process_document(file_path, image_dir=image_dir, images_only=images_only)
 
     if not chunks:
         return 0
@@ -297,7 +304,7 @@ def ingest_to_qdrant(qdrant_client, embedding_mgr, file_path: str,
         elif chunk["chunk_type"] == "image":
             image_path = chunk["image_path"]
 
-            # 生成 Caption（需要 MiniMax Vision 客户端）
+            # 生成 Caption（优先 MiniMax Vision，降级为页面上下文文字）
             caption = ""
             if minimax_client and minimax_model:
                 from backend.image_captioner import describe_image
@@ -305,8 +312,14 @@ def ingest_to_qdrant(qdrant_client, embedding_mgr, file_path: str,
                 caption = describe_image(minimax_client, minimax_model,
                                          image_path, chunk.get("context_text", ""))
             if not caption:
-                print(f"    ⚠️  Caption 生成失败，跳过: {os.path.basename(image_path)}")
-                continue
+                # 降级：用 PDF 页面上下文文字做 Caption（仍可用 CLIP 向量检索）
+                fallback = chunk.get("context_text", "").strip()
+                if fallback:
+                    caption = fallback
+                    print(f"    📝  使用页面文字做降级 Caption: {os.path.basename(image_path)}")
+                else:
+                    print(f"    ⚠️  无 Caption 也无页面文字，跳过: {os.path.basename(image_path)}")
+                    continue
 
             # 编码 Caption 文本向量（bge-m3）
             text_vec = embedding_mgr.encode_text([caption])[0].tolist()
@@ -361,22 +374,31 @@ def main():
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(IMAGE_DIR, exist_ok=True)
 
-    # 初始化 Qdrant
+    # 先初始化 EmbeddingManager（需要从模型获取 clip_dim 再创建 Qdrant Collection）
+    print(f"加载 Embedding 模型：{EMBEDDING_MODEL} + {CLIP_MODEL}")
+    from backend.embedding_manager import EmbeddingManager
+    embedding_mgr = EmbeddingManager(EMBEDDING_MODEL, CLIP_MODEL)
+
+    # 初始化 Qdrant（image_vec 维度从 EmbeddingManager 自动获取）
     from backend.main import _init_qdrant
-    qdrant_client = _init_qdrant(QDRANT_DB_PATH, COLLECTION_NAME)
+    qdrant_client = _init_qdrant(QDRANT_DB_PATH, COLLECTION_NAME, embedding_mgr.clip_dim)
 
     if args.clear:
         try:
             qdrant_client.delete_collection(COLLECTION_NAME)
             print(f"已清空: {COLLECTION_NAME}")
-            qdrant_client = _init_qdrant(QDRANT_DB_PATH, COLLECTION_NAME)
         except Exception:
             pass
-
-    # 初始化 EmbeddingManager
-    print(f"加载 Embedding 模型：{EMBEDDING_MODEL} + {CLIP_MODEL}")
-    from backend.embedding_manager import EmbeddingManager
-    embedding_mgr = EmbeddingManager(EMBEDDING_MODEL, CLIP_MODEL)
+        # 在同一个 client 上重建 collection（避免创建新 QdrantClient 导致文件锁冲突）
+        from qdrant_client.models import VectorParams, Distance
+        qdrant_client.create_collection(
+            collection_name=COLLECTION_NAME,
+            vectors_config={
+                "text_vec":  VectorParams(size=1024, distance=Distance.COSINE),
+                "image_vec": VectorParams(size=embedding_mgr.clip_dim, distance=Distance.COSINE),
+            },
+        )
+        print(f"已重建 Collection: {COLLECTION_NAME}（text_vec=1024, image_vec={embedding_mgr.clip_dim}）")
 
     # 初始化 MiniMax Vision 客户端（可选）
     minimax_client = None
@@ -394,29 +416,45 @@ def main():
             print("⚠️  未配置 MINIMAX_API_KEY，图片 Caption 生成不可用，仅入库文本块。")
 
     # 扫描 data/ 目录
-    files_to_process = [
+    all_files = [
         os.path.join(DATA_DIR, f) for f in os.listdir(DATA_DIR)
         if os.path.isfile(os.path.join(DATA_DIR, f))
     ]
-    # 跳过已有对应 .md 的 PDF
-    files_to_process = [
-        f for f in files_to_process
-        if not (f.lower().endswith('.pdf') and
-                os.path.exists(os.path.splitext(f)[0] + '.md'))
-    ]
 
-    if not files_to_process:
+    # 构建处理计划：.md 优先文本，对应 .pdf 仅提取图片
+    plan = []  # [(file_path, images_only), ...]
+    md_stems = set()
+    for f in all_files:
+        if f.lower().endswith('.md'):
+            md_stems.add(os.path.splitext(f)[0])
+            plan.append((f, False))  # .md → 文本块
+    for f in all_files:
+        if f.lower().endswith('.pdf'):
+            stem = os.path.splitext(f)[0]
+            if stem in md_stems:
+                if not args.no_image:
+                    plan.append((f, True))  # 有 .md → 仅提取图片
+            else:
+                plan.append((f, False))  # 无 .md → 文本+图片
+    # 其他格式文件
+    for f in all_files:
+        ext = f.lower().split('.')[-1]
+        if ext not in ('md', 'pdf', 'rar', 'xlsx', 'py'):
+            plan.append((f, False))
+
+    if not plan:
         print(f"在 {DATA_DIR} 目录下没有找到任何文件。")
         return
 
     total = 0
-    for file_path in files_to_process:
+    for file_path, img_only in plan:
         fname = os.path.basename(file_path)
-        print(f"\n>>>> 处理: {fname}")
+        mode = "（仅图片）" if img_only else ""
+        print(f"\n>>>> 处理: {fname} {mode}")
         _img_dir = None if args.no_image else IMAGE_DIR
         inserted = ingest_to_qdrant(
             qdrant_client, embedding_mgr, file_path, _img_dir,
-            minimax_client, minimax_model
+            minimax_client, minimax_model, images_only=img_only
         )
         print(f"  {fname} 入库 {inserted} 块。")
         total += inserted

@@ -18,6 +18,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
+      // 图片静态文件代理：/images/* → FastAPI:8000/images/*
+      '/images': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
 })

@@ -83,18 +83,27 @@ def _do_ingest(state: AppState, data_dir: str, clear_first: bool,
         return "\n".join(lines)
 
     os.makedirs(data_dir, exist_ok=True)
-    files = sorted([
+    all_files = sorted([
         f for f in os.listdir(data_dir)
         if os.path.isfile(os.path.join(data_dir, f))
     ])
-    # 跳过已有对应 .md 的 PDF
-    files = [
-        f for f in files
-        if not (f.lower().endswith('.pdf') and
-                os.path.exists(os.path.join(data_dir, os.path.splitext(f)[0] + '.md')))
-    ]
 
-    if not files:
+    # 构建处理计划：.md 优先文本，对应 .pdf 仅提取图片
+    plan = []  # [(fname, images_only), ...]
+    md_stems = set()
+    for f in all_files:
+        if f.lower().endswith('.md'):
+            md_stems.add(os.path.splitext(f)[0])
+            plan.append((f, False))
+    for f in all_files:
+        if f.lower().endswith('.pdf'):
+            stem = os.path.splitext(f)[0]
+            if stem in md_stems:
+                plan.append((f, True))   # 有 .md → 仅提取图片
+            else:
+                plan.append((f, False))  # 无 .md → 文本+图片
+
+    if not plan:
         yield emit("⚠️  data/ 目录下没有找到任何文件，请先放入文档。")
         return
 
@@ -109,14 +118,15 @@ def _do_ingest(state: AppState, data_dir: str, clear_first: bool,
                 yield emit(f"清空失败: {e}")
                 return
 
-    yield emit(f"📂  共发现 {len(files)} 个文件，开始处理…\n")
+    yield emit(f"📂  共发现 {len(plan)} 个文件，开始处理…\n")
 
     total_all = 0
-    for fname in files:
+    for fname, img_only in plan:
         file_path = os.path.join(data_dir, fname)
-        yield emit(f"▶  {fname}")
+        mode = "（仅图片）" if img_only else ""
+        yield emit(f"▶  {fname} {mode}")
 
-        chunk_dicts = process_document(file_path, image_dir=image_dir)
+        chunk_dicts = process_document(file_path, image_dir=image_dir, images_only=img_only)
         if not chunk_dicts:
             yield emit("   ⚠️  无有效内容，跳过")
             continue
@@ -161,7 +171,7 @@ def _do_ingest(state: AppState, data_dir: str, clear_first: bool,
             elif chunk["chunk_type"] == "image":
                 image_path = chunk["image_path"]
 
-                # 生成 Caption
+                # 生成 Caption（优先 MiniMax Vision，降级为页面上下文文字）
                 caption = ""
                 if state.minimax_client and state.minimax_model:
                     from backend.image_captioner import describe_image
@@ -171,8 +181,13 @@ def _do_ingest(state: AppState, data_dir: str, clear_first: bool,
                         image_path, chunk.get("context_text", "")
                     )
                 if not caption:
-                    yield emit(f"   ⚠️  Caption 失败，跳过: {os.path.basename(image_path)}")
-                    continue
+                    fallback = chunk.get("context_text", "").strip()
+                    if fallback:
+                        caption = fallback
+                        yield emit(f"   📝  使用页面文字做降级 Caption: {os.path.basename(image_path)}")
+                    else:
+                        yield emit(f"   ⚠️  无 Caption 也无页面文字，跳过: {os.path.basename(image_path)}")
+                        continue
 
                 # 编码 Caption → text_vec
                 text_vec = state.embedding_mgr.encode_text([caption])[0].tolist()

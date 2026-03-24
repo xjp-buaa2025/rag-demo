@@ -49,12 +49,12 @@ MINIMAX_BASE_URL   = os.getenv("MINIMAX_BASE_URL","https://api.minimaxi.com/v1")
 MINIMAX_MODEL      = os.getenv("MINIMAX_MODEL",   "MiniMax-M2.5")
 
 
-def _init_qdrant(db_path: str, collection_name: str):
+def _init_qdrant(db_path: str, collection_name: str, clip_dim: int = 768):
     """
     初始化 Qdrant 本地文件客户端，创建 Collection（如不存在）。
     使用命名多向量：
       text_vec  — bge-m3 1024维，余弦相似度（文本检索）
-      image_vec — Chinese-CLIP 1024维，余弦相似度（图片检索）
+      image_vec — Chinese-CLIP clip_dim维（默认768），余弦相似度（图片检索）
     Payload 字段（无需预先定义 Schema）：
       text、source、page、chunk_type、image_path、doc_id、chunk_index
     """
@@ -65,16 +65,25 @@ def _init_qdrant(db_path: str, collection_name: str):
     client = QdrantClient(path=db_path)
 
     if not client.collection_exists(collection_name):
-        print(f"[backend] 创建 Qdrant Collection: {collection_name}")
+        print(f"[backend] 创建 Qdrant Collection: {collection_name}（text_vec=1024, image_vec={clip_dim}）")
         client.create_collection(
             collection_name=collection_name,
             vectors_config={
                 "text_vec":  VectorParams(size=1024, distance=Distance.COSINE),
-                "image_vec": VectorParams(size=1024, distance=Distance.COSINE),
+                "image_vec": VectorParams(size=clip_dim, distance=Distance.COSINE),
             },
         )
         print(f"[backend] Qdrant Collection 创建完成。")
     else:
+        # 检查已有 collection 的 image_vec 维度是否匹配
+        try:
+            info = client.get_collection(collection_name)
+            existing_dim = info.config.params.vectors["image_vec"].size
+            if existing_dim != clip_dim:
+                print(f"[backend] ⚠️ 已有 Collection 的 image_vec 维度为 {existing_dim}，"
+                      f"当前模型需要 {clip_dim}。请执行 --clear 重建索引！")
+        except Exception:
+            pass
         print(f"[backend] Qdrant Collection 已存在（{collection_name}），直接使用。")
 
     return client
@@ -97,9 +106,9 @@ async def lifespan(app: FastAPI):
     embedding_mgr = EmbeddingManager(EMBEDDING_MODEL, CLIP_MODEL)
     print("[backend] Embedding 模型加载完成。")
 
-    # 2. Qdrant 本地文件初始化
+    # 2. Qdrant 本地文件初始化（image_vec 维度从 EmbeddingManager 自动获取）
     os.makedirs(IMAGE_STORAGE_DIR, exist_ok=True)
-    qdrant_client = _init_qdrant(QDRANT_DB_PATH, COLLECTION_NAME)
+    qdrant_client = _init_qdrant(QDRANT_DB_PATH, COLLECTION_NAME, embedding_mgr.clip_dim)
 
     # 3. Reranker（CrossEncoder，约 280MB，失败则降级为距离排序）
     reranker = None
@@ -147,6 +156,41 @@ async def lifespan(app: FastAPI):
         "pass": os.getenv("NEO4J_PASS", "password"),
     }
 
+    # 6. LangChain 组件初始化（渐进式，不影响原有功能）
+    try:
+        from backend.langchain_components.models import build_chat_model
+        from backend.langchain_components.retrievers import QdrantDualPathRetriever
+        from backend.langchain_components.memory import ChatMemoryManager
+
+        lc_chat_model = build_chat_model()
+        lc_retriever = QdrantDualPathRetriever(
+            qdrant_client=qdrant_client,
+            embedding_mgr=embedding_mgr,
+            reranker=reranker,
+            collection_name=COLLECTION_NAME,
+        )
+        lc_memory_manager = ChatMemoryManager(window_k=6)
+
+        app.state.app_state.lc_chat_model = lc_chat_model
+        app.state.app_state.lc_retriever = lc_retriever
+        app.state.app_state.lc_memory_manager = lc_memory_manager
+        print("[backend] LangChain 基础组件初始化完成（Models + Retriever + Memory）。")
+
+        # Agent + Tools（需要 neo4j_cfg，在 app.state 设置之后初始化）
+        try:
+            from backend.langchain_components.tools import create_tools
+            from backend.langchain_components.agents import build_rag_agent
+
+            lc_tools = create_tools(app.state.app_state, app.state.neo4j_cfg)
+            lc_agent = build_rag_agent(lc_chat_model, lc_tools)
+            app.state.app_state.lc_agent = lc_agent
+            print(f"[backend] LangChain Agent 初始化完成（{len(lc_tools)} 个工具）。")
+        except Exception as _agent_err:
+            print(f"[backend] LangChain Agent 初始化失败（{_agent_err}），Agent 模式不可用。")
+
+    except Exception as _lc_err:
+        print(f"[backend] LangChain 组件初始化失败（{_lc_err}），降级为原生模式。")
+
     count = app.state.app_state.get_doc_count()
     print(f"[backend] 初始化完成，知识库共 {count} 条文档块。LLM: {label}")
 
@@ -167,14 +211,14 @@ async def lifespan(app: FastAPI):
             print(f"[backend] 知识库为空，检测到 {len(_files)} 个文件，后台自动入库中…")
 
             def _bg_ingest():
-                # 后台自动入库：临时禁用 Vision（避免图片 Caption 拖慢启动）
-                # 用户手动点击"开始入库"时 minimax_client 会恢复，完整入库含图片块
+                # 后台自动入库：临时禁用 Vision（避免 API 调用拖慢启动）
+                # 图片块使用页面上下文文字做降级 Caption + CLIP 向量，仍可检索和显示
                 orig_minimax = _state_ref.minimax_client
                 _state_ref.minimax_client = None
                 try:
                     for _ in _bg_run_ingest(_state_ref, _data_dir, False):
                         pass
-                    print(f"[backend] 后台入库完成（仅文本块），共 {_state_ref.get_doc_count()} 条文档块。")
+                    print(f"[backend] 后台入库完成（图片用降级 Caption），共 {_state_ref.get_doc_count()} 条文档块。")
                 except Exception as _e:
                     print(f"[backend] 后台入库失败：{_e}")
                 finally:

@@ -52,7 +52,6 @@ class FallbackLLMClient:
 
 
 COLLECTION_NAME = "rag_knowledge"
-VECTOR_DIM = 1024  # bge-m3 和 Chinese-CLIP vit-large 均为 1024 维
 
 
 @dataclass
@@ -71,6 +70,12 @@ class AppState:
     # --- 可选组件 ---
     reranker: Optional[Any] = None         # CrossEncoder，None 则按距离排序
     neo4j_driver: Optional[Any] = None
+
+    # --- LangChain 组件（渐进式启用，由 lifespan 初始化）---
+    lc_chat_model: Optional[Any] = None       # FallbackChatModel（langchain_components.models）
+    lc_retriever: Optional[Any] = None        # QdrantDualPathRetriever（langchain_components.retrievers）
+    lc_memory_manager: Optional[Any] = None   # ChatMemoryManager（langchain_components.memory）
+    lc_agent: Optional[Any] = None            # AgentExecutor（langchain_components.agents）
 
     # --- 并发控制 ---
     is_ingesting: bool = False

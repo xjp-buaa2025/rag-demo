@@ -15,6 +15,7 @@ POST /chat
 """
 
 import json
+import re
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
@@ -31,7 +32,8 @@ MULTI_QUERY_COUNT = 2 # 额外生成的查询数
 
 SYSTEM_PROMPT = """你是一个专业的知识库问答助手。请严格根据提供的参考资料回答用户问题。
 如果参考资料中没有相关信息，请如实说明"知识库中没有找到相关内容"，不要凭空捏造。
-回答要详细、准确、有条理，尽量引用原文中的具体数据和技术细节，不要省略重要信息。"""
+回答要详细、准确、有条理，尽量引用原文中的具体数据和技术细节，不要省略重要信息。
+如果参考资料中包含图片（标记为"图片描述"的条目会附带图片URL），请在回答中使用 Markdown 图片语法 ![描述](URL) 展示相关图片。只使用参考资料中提供的图片URL，不要编造URL。"""
 
 
 class MessageItem(BaseModel):
@@ -98,12 +100,17 @@ def _multi_query_retrieve(state: AppState, queries: List[str],
             if cid not in seen or chunk["distance"] > seen[cid]["distance"]:
                 seen[cid] = chunk
 
-        # 路径2：Chinese-CLIP 图片检索
-        for chunk in qdrant_search_image(state.qdrant_client, state.embedding_mgr,
-                                          query, min(recall_k // 2, total)):
-            cid = chunk["id"]
-            if cid not in seen or chunk["distance"] > seen[cid]["distance"]:
-                seen[cid] = chunk
+        # 路径2：Chinese-CLIP 图片检索（兜底防护，维度修复后不应报错）
+        try:
+            for chunk in qdrant_search_image(state.qdrant_client, state.embedding_mgr,
+                                              query, min(recall_k // 2, total)):
+                cid = chunk["id"]
+                if cid not in seen or chunk["distance"] > seen[cid]["distance"]:
+                    seen[cid] = chunk
+        except Exception as e:
+            import traceback
+            print(f"[chat] ⚠️ CLIP 图片检索失败（{e}），跳过图片路径")
+            traceback.print_exc()
 
     return sorted(seen.values(), key=lambda c: c["distance"], reverse=True)
 
@@ -134,12 +141,183 @@ def chat(body: ChatRequest, request: Request, state: AppState = Depends(get_stat
     return chat_gen_to_sse(gen)
 
 
+def _format_context(chunks, broken_img_re=None):
+    """
+    将检索结果格式化为带来源标签的上下文字符串。
+    供 LangChain Chain 和原生路径共用。
+
+    Args:
+        chunks: 检索结果列表（dict 或 LangChain Document）
+    Returns:
+        格式化后的上下文字符串
+    """
+    if broken_img_re is None:
+        broken_img_re = re.compile(r'!?\[[^\]]*\]\(images/[^)]+\)\s*')
+
+    context_parts = []
+    for i, c in enumerate(chunks):
+        # 兼容 dict（原生路径）和 Document（LangChain 路径）
+        if hasattr(c, "page_content"):
+            text = c.page_content
+            source = c.metadata.get("source", "未知")
+            page = c.metadata.get("page", 0)
+            chunk_type = c.metadata.get("chunk_type", "text")
+            image_url = c.metadata.get("image_url")
+        else:
+            text = c["text"]
+            source = c["source"]
+            page = c.get("page", 0)
+            chunk_type = c.get("chunk_type", "text")
+            image_url = c.get("image_url")
+
+        label = f"[{i+1}] 来源：{source}"
+        if page:
+            label += f" 第{page}页"
+        if chunk_type == "image":
+            label += "（图片描述）"
+        text = broken_img_re.sub('', text)
+        part = f"{label}\n{text}"
+        if chunk_type == "image" and image_url:
+            part += f"\n图片URL：{image_url}"
+        context_parts.append(part)
+    return "\n\n".join(context_parts)
+
+
+def _build_sources_and_images(chunks):
+    """
+    从检索结果中提取参考来源 Markdown 和图片 URL 列表。
+    供 LangChain Chain 和原生路径共用。
+
+    Returns:
+        (sources_text: str, image_urls: list)
+    """
+    sources_text = ""
+    if chunks:
+        source_lines = ["\n\n---\n**📚 参考来源**\n"]
+        for i, c in enumerate(chunks, 1):
+            if hasattr(c, "page_content"):
+                text = c.page_content
+                source = c.metadata.get("source", "未知")
+                page = c.metadata.get("page", 0)
+                chunk_type = c.metadata.get("chunk_type", "text")
+                image_url = c.metadata.get("image_url")
+            else:
+                text = c["text"]
+                source = c["source"]
+                page = c.get("page", 0)
+                chunk_type = c.get("chunk_type", "text")
+                image_url = c.get("image_url")
+
+            page_info = f" · 第 {page} 页" if page else ""
+            type_tag = " 🖼️" if chunk_type == "image" else ""
+            snippet = text[:80].replace("\n", " ")
+            source_lines.append(f"**[{i}] {source}{page_info}{type_tag}**  \n_{snippet}…_\n")
+        sources_text = "\n".join(source_lines)
+
+    image_urls = []
+    for c in chunks:
+        if hasattr(c, "page_content"):
+            ct = c.metadata.get("chunk_type", "text")
+            iu = c.metadata.get("image_url")
+        else:
+            ct = c.get("chunk_type", "text")
+            iu = c.get("image_url")
+        if ct == "image" and iu:
+            image_urls.append(iu)
+
+    return sources_text, image_urls
+
+
 def _chat_gen(state: AppState, llm_model: str, message: str, history: List[MessageItem]):
     """RAG 问答生成器：多查询 + 双路检索 + 重排序 + 图片 URL 透传。"""
     if state.get_doc_count() == 0:
         yield "⚠️ 知识库为空，请先点击入库按钮导入文档。"
         return
 
+    # ===== 判断是否使用 LangChain 路径 =====
+    use_langchain = (
+        state.lc_chat_model is not None
+        and state.lc_retriever is not None
+        and state.lc_memory_manager is not None
+    )
+
+    if use_langchain:
+        yield from _chat_gen_langchain(state, message, history)
+    else:
+        yield from _chat_gen_native(state, llm_model, message, history)
+
+
+def _chat_gen_langchain(state: AppState, message: str, history: List[MessageItem]):
+    """LangChain 路径：使用 Chain + Retriever + Memory 组件。"""
+    from backend.langchain_components.chains import build_multi_query_chain, build_rag_chain
+    from backend.langchain_components.memory import ChatMemoryManager
+
+    lc = state.lc_chat_model
+    retriever = state.lc_retriever
+    memory_mgr = state.lc_memory_manager
+
+    # ===== 阶段一：多查询生成（通过 LangChain Chain）=====
+    try:
+        multi_query_chain = build_multi_query_chain(lc)
+        extra_queries = multi_query_chain.invoke({
+            "question": message, "count": MULTI_QUERY_COUNT
+        })
+        extra_queries = extra_queries[:MULTI_QUERY_COUNT]
+        print(f"[chat-lc] 多查询生成成功：{extra_queries}")
+    except Exception as e:
+        print(f"[chat-lc] 多查询生成失败（{e}），降级为单查询")
+        extra_queries = []
+
+    # ===== 阶段二+三：多查询分别检索 + 去重 + 重排序（通过 Retriever）=====
+    all_queries = [message] + extra_queries
+    try:
+        # 用多查询分别调 Retriever，合并去重
+        seen = {}
+        for q in all_queries:
+            for doc in retriever.invoke(q):
+                doc_id = doc.metadata.get("id", id(doc))
+                dist = doc.metadata.get("distance", 0)
+                if doc_id not in seen or dist > seen[doc_id].metadata.get("distance", 0):
+                    seen[doc_id] = doc
+        docs = sorted(seen.values(),
+                      key=lambda d: d.metadata.get("rerank_score") or d.metadata.get("distance", 0),
+                      reverse=True)[:TOP_K]
+    except Exception as e:
+        yield f"❌ 向量检索失败，请尝试重新入库。（{e}）"
+        return
+
+    if not docs:
+        yield "⚠️ 知识库为空，请先点击入库按钮导入文档。"
+        return
+
+    # ===== 阶段四：构建上下文 + 流式 LLM 调用（通过 LCEL Chain）=====
+    context = _format_context(docs)
+    lc_history = ChatMemoryManager.history_to_messages(history)
+    rag_chain = build_rag_chain(lc)
+
+    full_answer = ""
+    try:
+        for chunk in rag_chain.stream({
+            "context": context,
+            "question": message,
+            "history": lc_history,
+        }):
+            full_answer += chunk
+            yield full_answer
+    except Exception as e:
+        yield f"❌ LLM 调用失败：{e}"
+        return
+
+    # ===== 阶段五：追加参考来源 + 图片 URL =====
+    sources_text, image_urls = _build_sources_and_images(docs)
+    final = full_answer + sources_text
+    if image_urls:
+        final += _IMAGES_SEP + json.dumps(image_urls, ensure_ascii=False)
+    yield final
+
+
+def _chat_gen_native(state: AppState, llm_model: str, message: str, history: List[MessageItem]):
+    """原生路径（fallback）：使用 OpenAI SDK 直接调用，与原有逻辑完全一致。"""
     # ===== 阶段一：多查询生成（静默）=====
     extra_queries = _generate_extra_queries(state, llm_model, message, MULTI_QUERY_COUNT)
     all_queries = [message] + extra_queries
@@ -163,17 +341,7 @@ def _chat_gen(state: AppState, llm_model: str, message: str, history: List[Messa
         if item.role in ("user", "assistant"):
             messages.append({"role": item.role, "content": item.content or ""})
 
-    # 构建上下文：文本块直接引用，图片块引用 Caption
-    context_parts = []
-    for i, c in enumerate(chunks):
-        label = f"[{i+1}] 来源：{c['source']}"
-        if c.get("page"):
-            label += f" 第{c['page']}页"
-        if c.get("chunk_type") == "image":
-            label += "（图片描述）"
-        context_parts.append(f"{label}\n{c['text']}")
-    context = "\n\n".join(context_parts)
-
+    context = _format_context(chunks)
     user_content = f"参考资料：\n{context}\n\n用户问题：{message}" if chunks else message
     messages.append({"role": "user", "content": user_content})
 
@@ -195,23 +363,7 @@ def _chat_gen(state: AppState, llm_model: str, message: str, history: List[Messa
         return
 
     # ===== 阶段五：追加参考来源 + 图片 URL =====
-    sources_text = ""
-    if chunks:
-        source_lines = ["\n\n---\n**📚 参考来源**\n"]
-        for i, c in enumerate(chunks, 1):
-            page_info = f" · 第 {c['page']} 页" if c.get("page") else ""
-            type_tag = " 🖼️" if c.get("chunk_type") == "image" else ""
-            snippet = c["text"][:80].replace("\n", " ")
-            source_lines.append(f"**[{i}] {c['source']}{page_info}{type_tag}**  \n_{snippet}…_\n")
-        sources_text = "\n".join(source_lines)
-
-    # 收集检索到的图片 URL
-    image_urls = [
-        c["image_url"] for c in chunks
-        if c.get("chunk_type") == "image" and c.get("image_url")
-    ]
-
-    # 最后一次 yield：回答 + 来源 + 图片 URL 标记（sse.py 会解析）
+    sources_text, image_urls = _build_sources_and_images(chunks)
     final = full_answer + sources_text
     if image_urls:
         final += _IMAGES_SEP + json.dumps(image_urls, ensure_ascii=False)

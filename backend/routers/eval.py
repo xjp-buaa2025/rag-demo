@@ -260,16 +260,23 @@ def _run_judge(state: AppState, llm_model: str):
         context = "\n\n".join(
             f"[{j+1}] 来源: {c['source']}\n{c['text']}" for j, c in enumerate(chunks)
         )
-        prompt = JUDGE_PROMPT_TMPL.format(question=question, context=context)
+
+        # 优先使用 LangChain Judge Chain，否则走原生路径
         try:
-            resp = state.llm_client.chat.completions.create(
-                model=llm_model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.01,
-            )
-            raw = resp.choices[0].message.content.strip()
-            s, e = raw.find("{"), raw.rfind("}") + 1
-            scores = json.loads(raw[s:e]) if s >= 0 and e > s else {}
+            if state.lc_chat_model is not None:
+                from backend.langchain_components.chains import build_judge_chain
+                judge_chain = build_judge_chain(state.lc_chat_model)
+                scores = judge_chain.invoke({"question": question, "context": context})
+            else:
+                prompt = JUDGE_PROMPT_TMPL.format(question=question, context=context)
+                resp = state.llm_client.chat.completions.create(
+                    model=llm_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.01,
+                )
+                raw = resp.choices[0].message.content.strip()
+                s, e = raw.find("{"), raw.rfind("}") + 1
+                scores = json.loads(raw[s:e]) if s >= 0 and e > s else {}
         except Exception as ex:
             lines[-1] = f"  打分失败: {ex}"
             yield "\n".join(lines)

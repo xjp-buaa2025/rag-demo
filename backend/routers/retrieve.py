@@ -49,10 +49,11 @@ class RetrieveResponse(BaseModel):
 
 
 def _image_url(image_path: str) -> Optional[str]:
-    """将本地 image_path 转为前端可访问的 URL（/images/{filename}）。"""
+    """将本地 image_path 转为前端可访问的 URL（/images/{filename}），自动 URL 编码特殊字符。"""
     if not image_path:
         return None
-    return f"{IMAGE_SERVE_PREFIX}/{os.path.basename(image_path)}"
+    from urllib.parse import quote
+    return f"{IMAGE_SERVE_PREFIX}/{quote(os.path.basename(image_path))}"
 
 
 def _qdrant_point_to_dict(point) -> dict:
@@ -129,29 +130,60 @@ def retrieve(body: RetrieveRequest, state: AppState = Depends(get_state)):
       - 路径1：bge-m3 文字查文本块/Caption（text_vec）
       - 路径2：Chinese-CLIP 文字查图片（image_vec）
     合并去重后用 CrossEncoder 重排，返回 top_k 结果。
+
+    优先使用 LangChain Retriever（如已初始化），否则走原生路径。
     """
     total = state.get_doc_count()
     if total == 0:
         return RetrieveResponse(chunks=[])
 
+    # ===== LangChain 路径 =====
+    if state.lc_retriever is not None:
+        retriever = state.lc_retriever
+        # 动态调整 retriever 参数
+        retriever.top_k = body.top_k
+        retriever.use_rerank = body.use_rerank
+        recall_n = min(body.top_k * RETRIEVE_RECALL_MULTIPLIER, RETRIEVE_RECALL_MAX, total)
+        if not body.use_rerank or state.reranker is None:
+            recall_n = min(body.top_k, total)
+        retriever.recall_k = recall_n
+
+        docs = retriever.invoke(body.query)
+        chunks = [
+            ChunkResult(
+                text=doc.page_content,
+                source=doc.metadata.get("source", "未知"),
+                page=doc.metadata.get("page", 0),
+                distance=doc.metadata.get("distance", 0.0),
+                rerank_score=doc.metadata.get("rerank_score"),
+                chunk_type=doc.metadata.get("chunk_type", "text"),
+                image_url=doc.metadata.get("image_url"),
+            )
+            for doc in docs
+        ]
+        return RetrieveResponse(chunks=chunks)
+
+    # ===== 原生路径（fallback）=====
     recall_n = min(body.top_k * RETRIEVE_RECALL_MULTIPLIER, RETRIEVE_RECALL_MAX, total)
     if not body.use_rerank or state.reranker is None:
         recall_n = min(body.top_k, total)
 
-    # 路径1：文字检索（bge-m3）
     text_results = qdrant_search_text(
         state.qdrant_client, state.embedding_mgr, body.query, recall_n
     )
 
-    # 路径2：图片检索（Chinese-CLIP）
-    image_results = qdrant_search_image(
-        state.qdrant_client, state.embedding_mgr, body.query, min(body.top_k, total)
-    )
+    image_results = []
+    try:
+        image_results = qdrant_search_image(
+            state.qdrant_client, state.embedding_mgr, body.query, min(body.top_k, total)
+        )
+    except Exception as e:
+        import traceback
+        print(f"[retrieve] CLIP 图片检索失败（{e}），跳过图片路径")
+        traceback.print_exc()
 
-    # 合并去重（余弦相似度降序）
     candidates = merge_and_dedup(text_results, image_results)
 
-    # 重排序（CrossEncoder）
     if body.use_rerank and state.reranker is not None and candidates:
         try:
             pairs = [(body.query, c["text"]) for c in candidates]

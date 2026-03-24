@@ -14,13 +14,14 @@
 5. [数据流全景](#5-数据流全景)
 6. [文件结构说明](#6-文件结构说明)
 7. [后端代码详解](#7-后端代码详解)
-8. [图文检索详解](#8-图文检索详解)
-9. [BOM-GraphRAG 扩展](#9-bom-graphrag-扩展)
-10. [React 前端详解](#10-react-前端详解)
-11. [配置系统（.env）](#11-配置系统env)
-12. [运行方式](#12-运行方式)
-13. [常见问题与排查](#13-常见问题与排查)
-14. [变更日志](#14-变更日志)
+8. [LangChain 集成详解](#8-langchain-集成详解)
+9. [图文检索详解](#9-图文检索详解)
+10. [BOM-GraphRAG 扩展](#10-bom-graphrag-扩展)
+11. [React 前端详解](#11-react-前端详解)
+12. [配置系统（.env）](#12-配置系统env)
+13. [运行方式](#13-运行方式)
+14. [常见问题与排查](#14-常见问题与排查)
+15. [变更日志](#15-变更日志)
 
 ---
 
@@ -71,7 +72,7 @@
 | 字段 | 模型 | 用途 |
 |------|------|------|
 | `text_vec` | bge-m3（1024维） | 文本语义检索 |
-| `image_vec` | Chinese-CLIP（1024维） | 图片跨模态检索 |
+| `image_vec` | Chinese-CLIP（768维，projection_dim） | 图片跨模态检索 |
 
 文本块的 `image_vec` 填零向量；图片块的 `text_vec` 填 Caption 的 bge-m3 向量。
 
@@ -83,7 +84,7 @@
 |------|------|------|
 | 向量数据库 | **Qdrant**（本地文件模式） | `storage/qdrant.db`，无需 Docker，Windows 原生支持 |
 | 文本 Embedding | **BAAI/bge-m3**（1024维） | 本地推理，中英文均优秀 |
-| 图片 Embedding | **OFA-Sys/chinese-clip-vit-large-patch14**（1024维） | 中文 CLIP，图文跨模态 |
+| 图片 Embedding | **OFA-Sys/chinese-clip-vit-large-patch14**（768维） | 中文 CLIP，图文跨模态 |
 | 图片 Caption | **MiniMax M2.5 Vision** | PDF 图片→中文描述，入库时调用 |
 | Reranker | **BAAI/bge-reranker-base** | CrossEncoder 精排，约 280MB |
 | LLM（主） | MiniMax M2.5（远程 API） | 支持 Vision；failover 到 SiliconFlow |
@@ -140,13 +141,13 @@ data/*.pdf
     ↓ [bge-m3] 文本块向量化 → text_vec（1024维）
     ↓ [MiniMax Vision] 图片 → 中文 Caption
     ↓ [bge-m3] Caption 向量化 → 图片块 text_vec
-    ↓ [Chinese-CLIP] 图片 → image_vec（1024维）
+    ↓ [Chinese-CLIP] 图片 → image_vec（768维）
     ↓ Qdrant upsert → 双向量存储
        每个 Point：{text_vec, image_vec, text, source, page, chunk_type, image_path, doc_id}
 
 data/*.md / *.txt
     ↓ [RAGFlowTxtParser] deepdoc 解析 → 文本块
-    ↓ [bge-m3] 向量化 → text_vec；image_vec = [0]*1024
+    ↓ [bge-m3] 向量化 → text_vec；image_vec = [0]*768
     ↓ Qdrant upsert
 
 （扫描版 PDF 需先执行 pdf_to_md.py，用 MinerU OCR 生成 .md 文件）
@@ -193,13 +194,22 @@ rag-demo/
 │   ├── image_captioner.py    # MiniMax Vision 图片描述
 │   ├── deps.py               # FastAPI Depends（get_state / get_neo4j_cfg）
 │   ├── sse.py                # 生成器 → SSE 响应适配
+│   ├── langchain_components/ # LangChain 7 大组件集成层
+│   │   ├── __init__.py
+│   │   ├── models.py         # Models: FallbackChatModel（主备降级 ChatModel）
+│   │   ├── prompts.py        # Prompts: 所有 ChatPromptTemplate 统一管理
+│   │   ├── chains.py         # Chains: LCEL 工作流（rag/multi_query/assembly/judge）
+│   │   ├── memory.py         # Memory: ChatMemoryManager（滑动窗口对话历史）
+│   │   ├── tools.py          # Tools: rag_search/bom_query/vision/image_search/calculator
+│   │   ├── agents.py         # Agents: RAG Agent（动态选择工具）
+│   │   └── retrievers.py     # Retrievers: QdrantDualPathRetriever（双路检索+重排）
 │   └── routers/
 │       ├── ingest.py         # POST /ingest（SSE），GET /ingest/status
 │       ├── retrieve.py       # POST /retrieve（双路检索，JSON）
 │       ├── chat.py           # POST /chat（多查询+双路+重排，SSE）
 │       ├── eval.py           # POST /eval/diagnose|judge|ragas|ranked|retrieval|generation（SSE）
 │       ├── bom.py            # POST /bom/ingest（SSE），GET /bom/status，POST /bom/query
-│       ├── assembly.py       # POST /assembly/chat（SSE）
+│       ├── assembly.py       # POST /assembly/chat（SSE），POST /assembly/agent（Agent 模式）
 │       └── vision.py         # POST /vision/describe，POST /vision/search
 │
 ├── frontend/                 # React 前端
@@ -235,17 +245,18 @@ rag-demo/
 
 **lifespan 初始化顺序**：
 1. `EmbeddingManager` 加载（bge-m3 + Chinese-CLIP，约 2+2GB，首次需下载）
-2. `_init_qdrant(QDRANT_DB_PATH, COLLECTION_NAME)` — 创建或打开本地 Qdrant
+2. `_init_qdrant(QDRANT_DB_PATH, COLLECTION_NAME, clip_dim)` — 创建或打开本地 Qdrant
 3. `CrossEncoder("BAAI/bge-reranker-base")` — Reranker（失败则降级为距离排序）
 4. LLM 客户端配置（MINIMAX_API_KEY 存在则 MiniMax 为主，否则直接用 SiliconFlow）
 5. 构造 `AppState` 放入 `app.state.app_state`
-6. **兜底自动入库**：若 Qdrant 为空且 `data/` 有文件，后台线程触发 `_run_ingest`
+6. **LangChain 组件初始化**：`FallbackChatModel` + `QdrantDualPathRetriever` + `ChatMemoryManager` + Agent(5 工具)
+7. **兜底自动入库**：若 Qdrant 为空且 `data/` 有文件，后台线程触发 `_run_ingest`
 
 **`_init_qdrant`** 创建 Named Multi-Vector Collection：
 ```python
 vectors_config={
     "text_vec":  VectorParams(size=1024, distance=Distance.COSINE),
-    "image_vec": VectorParams(size=1024, distance=Distance.COSINE),
+    "image_vec": VectorParams(size=clip_dim, distance=Distance.COSINE),  # clip_dim=768
 }
 ```
 
@@ -273,14 +284,14 @@ class AppState:
 
 ```python
 class EmbeddingManager:
-    encode_text(texts) → np.ndarray(N, 1024)      # bge-m3，normalize
-    encode_texts_clip(texts) → np.ndarray(N, 1024) # Chinese-CLIP 文本编码器
-    encode_images_clip(images) → np.ndarray(N, 1024) # Chinese-CLIP 图片编码器
-    zero_image_vec() → List[float]                 # [0.0]*1024，文本块占位
+    clip_dim: int                                    # 从模型配置自动检测（768）
+    encode_text(texts) → np.ndarray(N, 1024)         # bge-m3，normalize
+    encode_texts_clip(texts) → np.ndarray(N, 768)    # Chinese-CLIP 文本编码器
+    encode_images_clip(images) → np.ndarray(N, 768)  # Chinese-CLIP 图片编码器
+    zero_image_vec() → List[float]                   # [0.0]*768，文本块占位
 ```
 
-**为什么同一个 1024 维可以用两个不同模型？**
-bge-m3 和 Chinese-CLIP vit-large-patch14 的输出维度恰好相同，因此 Qdrant Collection 的 `text_vec` 和 `image_vec` 索引参数完全一致。两者训练目标不同：bge-m3 优化文本语义相似度，Chinese-CLIP 优化图文跨模态对齐。
+**两个模型的向量维度不同**：bge-m3 输出 1024 维，Chinese-CLIP vit-large-patch14 的 `projection_dim` 为 768 维。Qdrant Collection 使用命名多向量，`text_vec`(1024) 和 `image_vec`(768) 各自独立索引。`clip_dim` 从模型 `config.projection_dim` 自动检测，无需硬编码。
 
 ### 7.4 `backend/image_captioner.py` — Vision Caption
 
@@ -355,9 +366,123 @@ def merge_and_dedup(text_results, image_results) -> List[dict]:
 
 ---
 
-## 8. 图文检索详解
+## 8. LangChain 集成详解
 
-### 8.1 PDF 图片提取（`main_ingest.py`）
+项目通过 `backend/langchain_components/` 模块将 LangChain 7 大核心组件集成到现有架构中。设计原则：**渐进式替换**——LangChain 组件不可用时自动降级到原生 Python 实现，前端 API 契约完全不变。
+
+### 8.1 Models (`models.py`)
+
+**`FallbackChatModel`**：自定义 `BaseChatModel` 子类，封装主备降级逻辑。
+
+```
+MiniMax M2.5 (primary)
+    ↓ 调用失败
+SiliconFlow Qwen2.5 (fallback)
+```
+
+- `_generate()` 和 `_stream()` 都支持降级，与 LCEL `.invoke()` / `.stream()` 完全兼容
+- `build_chat_model()` 从环境变量自动构建（读取 `MINIMAX_*` 和 `LLM_*` 配置）
+- 原 `FallbackLLMClient` 保留供 `main_ingest.py` CLI 使用
+
+### 8.2 Prompts (`prompts.py`)
+
+统一管理所有 `ChatPromptTemplate`，替换原来散落在各路由文件中的硬编码 prompt：
+
+| 模板 | 用途 | 输入变量 |
+|------|------|----------|
+| `RAG_QA_PROMPT` | RAG 问答 | `history`, `context`, `question` |
+| `MULTI_QUERY_PROMPT` | 多查询生成 | `count`, `question` |
+| `JUDGE_PROMPT` | LLM-as-Judge 评估 | `question`, `context` |
+| `ASSEMBLY_PROMPT` | 装配方案 | `history`, `sections`, `question` |
+| `VISION_CAPTION_PROMPT` | 图片描述 | `context_hint` |
+| `AGENT_SYSTEM_PROMPT` | Agent 工具路由 | `chat_history`, `input`, `agent_scratchpad` |
+| `RAGAS_*` 系列 | RAGAS 评估 | 各自不同 |
+
+使用 `MessagesPlaceholder` 支持对话历史注入，模板变量通过 `{name}` 语法动态填充。
+
+### 8.3 Retrievers (`retrievers.py`)
+
+**`QdrantDualPathRetriever`**：自定义 `BaseRetriever` 子类，封装双路检索 + 重排序。
+
+```
+query
+  ├→ bge-m3 编码 → 搜 text_vec（文本+Caption）
+  ├→ Chinese-CLIP 编码 → 搜 image_vec（图片块）
+  ↓ merge_and_dedup（ID 去重，保留 distance 最高）
+  ↓ CrossEncoder 重排序
+  → List[Document]（含 metadata: source, page, distance, chunk_type, image_url）
+```
+
+内部复用 `retrieve.py` 中的 `qdrant_search_text()` / `qdrant_search_image()` / `merge_and_dedup()`，这些底层函数完全不变。
+
+### 8.4 Chains (`chains.py`)
+
+用 LCEL（LangChain Expression Language）将组件串联成声明式工作流：
+
+| Chain | LCEL 结构 | 替换目标 |
+|-------|-----------|----------|
+| `build_rag_chain()` | `RAG_QA_PROMPT \| llm \| StrOutputParser` | `chat.py` 阶段四 |
+| `build_multi_query_chain()` | `MULTI_QUERY_PROMPT \| llm(temp=0.7) \| parse` | `chat.py` `_generate_extra_queries` |
+| `build_assembly_chain()` | `ASSEMBLY_PROMPT \| llm \| StrOutputParser` | `assembly.py` LLM 调用 |
+| `build_judge_chain()` | `JUDGE_PROMPT \| llm(temp=0.01) \| JSON parse` | `eval.py` Judge 打分 |
+
+**SSE 兼容方案**：`chain.stream()` 返回 token 增量，外层累积后 yield 完整文本，与 `chat_gen_to_sse()` 协议一致。
+
+### 8.5 Memory (`memory.py`)
+
+**`ChatMemoryManager`**：管理多会话对话历史。
+
+- `history_to_messages(history, max_messages=12)` — 将前端的 `[{role, content}]` 格式转为 LangChain `HumanMessage` / `AIMessage` 列表
+- `get_history(session_id)` — 按 session_id 获取 `InMemoryHistory` 实例（LRU 淘汰，上限 100 个）
+- `InMemoryHistory` 实现 `BaseChatMessageHistory` 接口，支持滑动窗口
+
+当前策略：前端仍发完整 history，后端通过 `history_to_messages()` 转换注入 Prompt。
+
+### 8.6 Tools (`tools.py`)
+
+5 个 `@tool` 装饰器定义的工具，通过 `create_tools(state, neo4j_cfg)` 工厂函数创建：
+
+| 工具 | 包装的函数 | 适用场景 |
+|------|-----------|---------|
+| `rag_search` | `qdrant_search_text()` | 技术原理、工艺参数 |
+| `bom_query` | `_query_bom_text()` | 零件编号、装配关系 |
+| `vision_describe` | `describe_image()` | 图片内容理解 |
+| `image_search` | `qdrant_search_image()` | 文字描述找图片 |
+| `calculator` | Python `eval` (沙箱) | 力矩/公差/面积计算 |
+
+### 8.7 Agents (`agents.py`)
+
+**`build_rag_agent()`**：构建 `AgentExecutor`（OpenAI Tools Agent 格式）。
+
+- 根据 `AGENT_SYSTEM_PROMPT` 中的指引，Agent 自主选择调用哪些工具
+- `max_iterations=5` 防止无限循环，`handle_parsing_errors=True` 优雅降级
+- 主要应用场景：`POST /assembly/agent`（独立路由，不影响原有 `/assembly/chat`）
+- `/chat` 保持用 Chain（流程固定，Agent 反而增加不确定性）
+
+### 8.8 路由中的双路径切换
+
+所有改造后的路由都保留了原生路径作为 fallback：
+
+```python
+def _chat_gen(state, llm_model, message, history):
+    use_langchain = (
+        state.lc_chat_model is not None
+        and state.lc_retriever is not None
+        and state.lc_memory_manager is not None
+    )
+    if use_langchain:
+        yield from _chat_gen_langchain(state, message, history)
+    else:
+        yield from _chat_gen_native(state, llm_model, message, history)
+```
+
+如果 LangChain 组件初始化失败（如缺少依赖），系统自动降级到原生模式，确保服务不中断。
+
+---
+
+## 9. 图文检索详解
+
+### 9.1 PDF 图片提取（`main_ingest.py`）
 
 ```python
 def extract_images_from_pdf(file_path, output_dir, min_width=100, min_height=100):
@@ -406,7 +531,7 @@ Chinese-CLIP 文本编码器（query）→ Qdrant image_vec 搜索
 
 ---
 
-## 9. BOM-GraphRAG 扩展
+## 10. BOM-GraphRAG 扩展
 
 ### 9.1 功能概述
 
@@ -415,9 +540,23 @@ Chinese-CLIP 文本编码器（query）→ Qdrant image_vec 搜索
 - **Qdrant 知识库**：查相关技术规范和工艺要求
 - **融合 Prompt**：BOM 数据 + 技术知识 → LLM 生成装配方案
 
-### 9.2 BOM 表格式规范
+### 9.2 BOM 入库支持的文件格式
 
-Excel 文件必须包含以下列：
+| 格式 | 处理方式 |
+|------|---------|
+| `.xlsx` | 直接读取，需包含标准列 |
+| `.pdf` | pdfplumber 提取表格/文本 → LLM 自动转换为标准格式 |
+| `.docx` | python-docx 提取段落和表格 → LLM 自动转换为标准格式 |
+| `.doc` | 不支持，需先另存为 `.docx` |
+
+**PDF/DOCX 智能转换流程**：
+1. 提取文档中的表格（转 Markdown table）和纯文本
+2. 大文档按页/表格边界分块（每段约 6000 字符）
+3. 逐段调用 LLM（temperature=0.1），输出标准 JSON 数组
+4. 合并所有段的解析结果，补全缺失字段（默认 qty=1, unit="件", category="Part"）
+5. LLM 会自动推断 level_code 层级、category 分类、零件编号等
+
+### 9.2.1 标准 BOM 列定义（Excel 格式要求）
 
 | 列名 | 类型 | 示例 |
 |------|------|------|
@@ -464,7 +603,7 @@ docker start neo4j
 
 ---
 
-## 10. React 前端详解
+## 11. React 前端详解
 
 ### 10.1 技术栈
 
@@ -503,7 +642,7 @@ fetch(url, {method:'POST', body:JSON.stringify(...)})
 
 ---
 
-## 11. 配置系统（.env）
+## 12. 配置系统（.env）
 
 ```env
 # ===== LLM 备用（SiliconFlow，必填）=====
@@ -531,7 +670,7 @@ NEO4J_PASS=password
 
 ---
 
-## 12. 运行方式
+## 13. 运行方式
 
 ### 12.1 首次环境准备
 
@@ -603,7 +742,7 @@ PYTHONUTF8=1 python bom_ingest.py --clear
 
 ---
 
-## 13. 常见问题与排查
+## 14. 常见问题与排查
 
 ### Q: 后端启动时 `ModuleNotFoundError: No module named 'qdrant_client'`
 ```bash
@@ -623,7 +762,13 @@ export HF_ENDPOINT=https://hf-mirror.com
 `QDRANT_DB_PATH` 是一个**目录**（不是单文件），路径为 `storage/qdrant.db/`。初始化时用 `os.makedirs(db_path, exist_ok=True)`，不要当成文件处理。
 
 ### Q: `GET /images/xxx.png` 返回 404
-检查 `storage/images/` 目录是否存在。FastAPI `StaticFiles` 挂载依赖该目录在启动前存在，`backend/main.py` 的 `lifespan` 中已有 `os.makedirs(IMAGE_STORAGE_DIR, exist_ok=True)`。
+**可能原因1**：`storage/images/` 目录不存在。FastAPI `StaticFiles` 挂载依赖该目录在启动前存在，`backend/main.py` 的 `lifespan` 中已有 `os.makedirs(IMAGE_STORAGE_DIR, exist_ok=True)`。
+
+**可能原因2**：`.md` 文件中包含外部转换工具（如 MinerU）生成的 `![](images/hash.jpg)` 引用，但对应的图片文件从未保存到项目中。`chat.py` 在构建 LLM 上下文时会自动清除这些断裂引用（正则 `!\[.*\]\(images/.*\)`），前端 ReactMarkdown 也会隐藏加载失败的图片。
+
+**可能原因3**：图片文件名含中文/空格/括号等特殊字符，URL 未编码。`retrieve.py` 的 `_image_url()` 已使用 `urllib.parse.quote()` 编码。
+
+**可能原因4**：前端 Vite 代理未转发 `/images` 路径。`vite.config.ts` 需配置 `/images` 代理到后端 `localhost:8000`。
 
 ### Q: Reranker 加载失败
 CrossEncoder 约 280MB，加载失败时系统自动降级为按余弦相似度排序，不影响正常使用。如需使用：
@@ -640,7 +785,7 @@ PYTHONUTF8=1 python run_backend.py
 
 ---
 
-## 14. 变更日志
+## 15. 变更日志
 
 | 日期 | 变更内容 |
 |------|----------|
@@ -653,3 +798,8 @@ PYTHONUTF8=1 python run_backend.py
 | 2026-03-18 | **React 前端**：Vite + React 18 + TypeScript + Tailwind CSS v4，全面替代 Gradio |
 | 2026-03-20 | **图文检索重构**：向量库 ChromaDB → **Qdrant**（Windows 本地文件，无需 Docker）；`EmbeddingManager`（bge-m3 + Chinese-CLIP 双模型）；`image_captioner.py`（MiniMax Vision Caption）；`/vision/*` 路由；多查询+双路向量检索+CrossEncoder 重排；前端图片上传/粘贴/以图搜文/图片展示 |
 | 2026-03-20 | 清理过时文件：删除 `app.py`（Gradio UI）、`main_chat.py`、`eval_rag.py`、`assembly_agent.py`（已全部由 FastAPI + React 替代） |
+| 2026-03-23 | **修复 Chinese-CLIP 维度不匹配**：`projection_dim` 实为 768 非 1024，拆分 `VECTOR_DIM` 为 `TEXT_DIM`(1024) + `clip_dim`(自动检测)，修复 Qdrant Collection 创建、`zero_image_vec`、空数组 fallback，需 `--clear` 重建索引 |
+| 2026-03-23 | **修复图片显示**：(1) Vite 代理新增 `/images` 路径转发到后端；(2) `_image_url()` URL 编码特殊字符文件名；(3) LLM 上下文中图片块附带实际 `image_url`，系统提示词指引 LLM 使用正确 URL；(4) 清除文本中外部工具遗留的断裂 `![](images/hash.jpg)` 引用（`!` 可选匹配）；(5) 前端 ReactMarkdown 自定义 `img` 组件，加载失败时隐藏 |
+| 2026-03-23 | **图片入库增强**：(1) 有 `.md` 的 PDF 不再完全跳过，改为仅从 PDF 提取图片（`images_only` 模式），`.md` 负责文本；(2) 无 MiniMax 时用 PDF 页面上下文文字做降级 Caption（仍可用 CLIP 向量检索图片）；(3) 后台自动入库也生成图片块 |
+| 2026-03-24 | **LangChain 集成**：`backend/langchain_components/` 模块，7 大核心组件全覆盖。(1) Models: `FallbackChatModel` 自定义 BaseChatModel 保留主备降级；(2) Prompts: 12 个 ChatPromptTemplate 统一管理；(3) Chains: LCEL 工作流（rag/multi_query/assembly/judge）；(4) Memory: `ChatMemoryManager` 滑动窗口；(5) Tools: 5 个 @tool（rag_search/bom_query/vision/image_search/calculator）；(6) Agents: RAG Agent + `/assembly/agent` 路由；(7) Retrievers: `QdrantDualPathRetriever` 双路检索。所有路由保留原生 fallback，LangChain 不可用时自动降级 |
+| 2026-03-24 | **BOM 多格式入库**：`/bom/ingest` 新增 PDF/DOCX 支持。(1) pdfplumber 提取表格 + 纯文本；(2) python-docx 提取 Word 段落和表格；(3) 提取内容按页/表格分块后调用 LLM 自动转换为标准 BOM JSON（level_code/part_id/category 等字段自动推断）；(4) 前端文件选择器扩展为 xlsx/pdf/docx；(5) 大文档分段处理避免 token 超限 |

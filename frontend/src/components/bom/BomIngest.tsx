@@ -25,8 +25,8 @@ export default function BomIngest() {
   return (
     <div className="border border-slate-200 rounded-lg p-4 bg-white space-y-3">
       <p className="text-xs text-slate-500">
-        Excel 列要求：level_code、part_id、part_name、category（Assembly/Part/Standard）、qty、unit 等。
-        不上传则使用默认 test_bom.xlsx。
+        支持 Excel(.xlsx)、PDF、Word(.docx) 格式。Excel 需包含标准列（level_code, part_id 等）；
+        PDF/Word 将由 AI 自动识别并转换为标准 BOM 格式。不上传则使用默认 test_bom.xlsx。
       </p>
 
       {/* 文件选择 */}
@@ -35,7 +35,7 @@ export default function BomIngest() {
           onClick={() => fileInputRef.current?.click()}
           className="px-3 py-1.5 text-sm border border-slate-300 rounded-md hover:bg-slate-50 transition-colors"
         >
-          📎 选择 Excel 文件
+          📎 选择 BOM 文件
         </button>
         <span className="text-sm text-slate-500 truncate max-w-xs">
           {file ? file.name : '未选择（将使用默认 test_bom.xlsx）'}
@@ -51,7 +51,7 @@ export default function BomIngest() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".xlsx"
+          accept=".xlsx,.pdf,.docx"
           className="hidden"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />

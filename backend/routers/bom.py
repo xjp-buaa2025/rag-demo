@@ -2,24 +2,33 @@
 backend/routers/bom.py — BOM 图数据库接口
 
 GET  /bom/status    — Neo4j 连接状态（JSON）
-POST /bom/ingest    — BOM Excel → Neo4j 入库（multipart 文件上传 + SSE 日志流）
+POST /bom/ingest    — BOM 文件 → Neo4j 入库（支持 xlsx/pdf/docx，multipart + SSE）
 POST /bom/query     — 关键词查询 BOM 图谱（JSON）
 
+支持 PDF/DOCX 上传：先提取文本/表格，再调用 LLM 自动转换为标准 BOM 格式。
 Neo4j 驱动懒加载：首次调用时建立连接，用 state.neo4j_lock 防止并发重复连接。
-迁移自 app.py：_get_neo4j()、check_neo4j_status()、run_bom_ingest_ui()、_query_bom_text()
 """
 
+import json
 import os
+import re
 import tempfile
 from typing import Optional
 
 import pandas as pd
+import pdfplumber
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import BaseModel
 
 from backend.deps import get_state, get_neo4j_cfg
 from backend.state import AppState
 from backend.sse import log_gen_to_sse
+
+try:
+    from docx import Document as DocxDocument
+    _DOCX_AVAILABLE = True
+except ImportError:
+    _DOCX_AVAILABLE = False
 
 router = APIRouter(prefix="/bom")
 
@@ -50,6 +59,185 @@ def _get_neo4j_driver(state: AppState, cfg: dict):
         except Exception:
             state.neo4j_driver = None
     return state.neo4j_driver
+
+
+# ==========================================
+# PDF / DOCX 文本提取
+# ==========================================
+
+def _extract_from_pdf(filepath: str) -> str:
+    """从 PDF 提取文本，优先提取表格（转 Markdown table），无表格则提取纯文本。"""
+    all_content = []
+    with pdfplumber.open(filepath) as pdf:
+        for i, page in enumerate(pdf.pages):
+            tables = page.extract_tables()
+            if tables:
+                for table in tables:
+                    if not table or not table[0]:
+                        continue
+                    header = table[0]
+                    md = "| " + " | ".join(str(c or "") for c in header) + " |\n"
+                    md += "| " + " | ".join("---" for _ in header) + " |\n"
+                    for row in table[1:]:
+                        md += "| " + " | ".join(str(c or "") for c in row) + " |\n"
+                    all_content.append(f"[Page {i + 1} Table]\n{md}")
+            else:
+                text = page.extract_text() or ""
+                if text.strip():
+                    all_content.append(f"[Page {i + 1}]\n{text}")
+    return "\n\n".join(all_content)
+
+
+def _extract_from_docx(filepath: str) -> str:
+    """从 DOCX 提取段落和表格（转 Markdown table）。"""
+    doc = DocxDocument(filepath)
+    all_content = []
+    for para in doc.paragraphs:
+        if para.text.strip():
+            all_content.append(para.text.strip())
+    for idx, table in enumerate(doc.tables):
+        rows = []
+        for row in table.rows:
+            rows.append([cell.text.strip() for cell in row.cells])
+        if rows:
+            header = rows[0]
+            md = "| " + " | ".join(header) + " |\n"
+            md += "| " + " | ".join("---" for _ in header) + " |\n"
+            for row in rows[1:]:
+                md += "| " + " | ".join(row) + " |\n"
+            all_content.append(f"[Table {idx + 1}]\n{md}")
+    return "\n\n".join(all_content)
+
+
+# ==========================================
+# LLM BOM 格式转换
+# ==========================================
+
+BOM_CONVERSION_PROMPT = """你是一个BOM（物料清单）数据结构化专家。请将以下文档内容解析为标准BOM格式的JSON数组。
+
+## 必填字段说明
+- level_code: 层级编码，如 "1", "1.1", "1.1.1"（用.分隔，表示父子关系层级）
+- part_id: 零件编号/图号（如文档中无编号，请根据零件名称生成如 P001, P002 格式的编号）
+- part_name: 零件中文名称
+- part_name_en: 零件英文名称（如无法确定，留空字符串）
+- category: 分类，必须是以下三者之一：
+  - "Assembly"：组件/总成（包含子零件的装配体）
+  - "Part"：零件（最底层不可拆分的零件）
+  - "Standard"：标准件（螺栓、螺母、垫圈、轴承等通用标准件）
+- qty: 数量（整数，默认1）
+- unit: 单位（件、个、套等，默认"件"）
+
+## 选填字段
+- material: 材料（如钛合金、不锈钢等，无则留空字符串）
+- weight_kg: 重量(kg)，数字字符串或空字符串
+- spec: 规格型号（无则留空字符串）
+- note: 备注（无则留空字符串）
+
+## 层级编码规则
+- 最顶层组件编码为 "1"（如有多个顶层则为 "1", "2", "3"...）
+- 子零件编码在父零件后追加，如 "1.1", "1.2"
+- 更深层级类推："1.1.1", "1.1.2"
+- 根据文档中的缩进、编号或上下文关系推断层级
+
+## 输出要求
+仅输出JSON数组，不要有任何其他说明文字。示例：
+```json
+[
+  {{"level_code":"1","part_id":"ASM-001","part_name":"高压压气机","part_name_en":"HPC","category":"Assembly","qty":1,"unit":"套","material":"","weight_kg":"","spec":"","note":""}},
+  {{"level_code":"1.1","part_id":"BLD-001","part_name":"第一级叶片","part_name_en":"Stage 1 Blade","category":"Part","qty":36,"unit":"件","material":"钛合金TC4","weight_kg":"0.5","spec":"","note":""}}
+]
+```
+
+## 待解析的文档内容：
+{content}"""
+
+
+def _split_for_llm(text: str, max_chars: int = 6000) -> list:
+    """按 [Page N] / [Table N] 标记分割文本，保证单个表格不被截断。"""
+    sections = re.split(r"(?=\[(?:Page|Table) \d+)", text)
+    chunks, current = [], ""
+    for section in sections:
+        if len(current) + len(section) > max_chars and current:
+            chunks.append(current)
+            current = section
+        else:
+            current += section
+    if current:
+        chunks.append(current)
+    return chunks if chunks else [text]
+
+
+def _parse_llm_json(raw: str) -> list:
+    """从 LLM 输出中提取 JSON 数组，容错处理。"""
+    raw = re.sub(r"```json\s*", "", raw)
+    raw = re.sub(r"```\s*", "", raw)
+    raw = raw.strip()
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, list) else [data]
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r"\[.*\]", raw, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+    return []
+
+
+def _llm_convert_to_bom(raw_text: str, state: AppState) -> tuple:
+    """
+    调用 LLM 将提取的原始文本转换为标准 BOM DataFrame。
+    返回 (DataFrame, log_messages: list[str])。
+    """
+    logs = []
+    chunks = _split_for_llm(raw_text)
+    logs.append(f"   文档分为 {len(chunks)} 段，开始 LLM 转换…")
+
+    all_records = []
+    for i, chunk in enumerate(chunks):
+        logs.append(f"   🤖 LLM 转换第 {i + 1}/{len(chunks)} 段…")
+        prompt = BOM_CONVERSION_PROMPT.format(content=chunk)
+        try:
+            resp = state.llm_client.chat.completions.create(
+                model=None,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+            )
+            raw_json = resp.choices[0].message.content
+            records = _parse_llm_json(raw_json)
+            logs.append(f"   ✅ 第 {i + 1} 段提取到 {len(records)} 条记录")
+            all_records.extend(records)
+        except Exception as e:
+            logs.append(f"   ⚠️ 第 {i + 1} 段 LLM 调用失败：{e}")
+
+    if not all_records:
+        return None, logs
+
+    df = pd.DataFrame(all_records)
+    # 补全缺失列
+    required = ["level_code", "part_id", "part_name", "part_name_en",
+                 "category", "qty", "unit"]
+    optional = ["material", "weight_kg", "spec", "note"]
+    for col in required + optional:
+        if col not in df.columns:
+            df[col] = ""
+    # 默认值
+    df["qty"] = pd.to_numeric(df["qty"], errors="coerce").fillna(1).astype(int)
+    df["unit"] = df["unit"].replace("", "件")
+    df["category"] = df["category"].replace("", "Part")
+    # 确保 level_code 和 part_id 存在
+    df = df.dropna(subset=["level_code", "part_id"])
+    df = df[df["level_code"].astype(str).str.strip() != ""]
+    df = df[df["part_id"].astype(str).str.strip() != ""]
+
+    for col in df.columns:
+        df[col] = df[col].fillna("").astype(str).str.strip()
+    df["qty"] = pd.to_numeric(df["qty"], errors="coerce").fillna(1).astype(int)
+
+    logs.append(f"   ✅ LLM 转换完成：共 {len(df)} 条有效记录")
+    return df, logs
 
 
 # ==========================================
@@ -91,7 +279,7 @@ def bom_status(state: AppState = Depends(get_state), cfg: dict = Depends(get_neo
 # POST /bom/ingest
 # ==========================================
 
-@router.post("/ingest", summary="BOM Excel 入库（SSE）")
+@router.post("/ingest", summary="BOM 文件入库（xlsx/pdf/docx，SSE）")
 def bom_ingest(
     request: Request,
     file: Optional[UploadFile] = File(default=None),
@@ -100,7 +288,8 @@ def bom_ingest(
     cfg: dict = Depends(get_neo4j_cfg),
 ):
     """
-    上传 BOM Excel 文件（可选，不传则用默认 test_bom.xlsx），写入 Neo4j。
+    上传 BOM 文件（xlsx/pdf/docx，可选），写入 Neo4j。
+    PDF/DOCX 会自动通过 LLM 转换为标准 BOM 格式。
     响应为 SSE 日志流。
     """
     bom_default = request.app.state.bom_default
@@ -135,18 +324,63 @@ def _run_bom_ingest(state: AppState, cfg: dict, file, clear_first: bool, bom_def
             yield emit(f"❌ 文件不存在：{filepath}")
             return
 
-        # 读取 Excel
-        yield emit("📖 读取 BOM 表…")
+        # 根据文件类型读取 BOM
+        ext = os.path.splitext(filepath)[1].lower()
+        yield emit(f"📖 读取 BOM 表（{ext}）…")
+
         try:
-            df = pd.read_excel(filepath, dtype=str)
-            df.columns = [c.strip().lower() for c in df.columns]
-            for col in ("material", "weight_kg", "spec", "note"):
-                if col not in df.columns:
-                    df[col] = ""
-            df = df.dropna(subset=["level_code", "part_id"])
-            for col in df.columns:
-                df[col] = df[col].fillna("").astype(str).str.strip()
-            df["qty"] = pd.to_numeric(df["qty"], errors="coerce").fillna(1).astype(int)
+            if ext in (".xlsx", ".xls"):
+                # Excel 直接读取
+                df = pd.read_excel(filepath, dtype=str)
+                df.columns = [c.strip().lower() for c in df.columns]
+                for col in ("material", "weight_kg", "spec", "note"):
+                    if col not in df.columns:
+                        df[col] = ""
+                df = df.dropna(subset=["level_code", "part_id"])
+                for col in df.columns:
+                    df[col] = df[col].fillna("").astype(str).str.strip()
+                df["qty"] = pd.to_numeric(df["qty"], errors="coerce").fillna(1).astype(int)
+
+            elif ext == ".pdf":
+                yield emit("📄 正在提取 PDF 内容…")
+                raw_text = _extract_from_pdf(filepath)
+                if not raw_text.strip():
+                    yield emit("❌ PDF 中未找到可识别的文本或表格")
+                    return
+                yield emit(f"✅ PDF 提取完成（{len(raw_text)} 字符）")
+                yield emit("🤖 调用 LLM 自动转换 BOM 格式…")
+                df, llm_logs = _llm_convert_to_bom(raw_text, state)
+                for log_line in llm_logs:
+                    yield emit(log_line)
+                if df is None or df.empty:
+                    yield emit("❌ LLM 未能从文档中提取有效 BOM 记录，请检查文档内容")
+                    return
+
+            elif ext == ".docx":
+                if not _DOCX_AVAILABLE:
+                    yield emit("❌ 缺少 python-docx，请运行：pip install python-docx")
+                    return
+                yield emit("📄 正在提取 DOCX 内容…")
+                raw_text = _extract_from_docx(filepath)
+                if not raw_text.strip():
+                    yield emit("❌ DOCX 中未找到可识别的文本或表格")
+                    return
+                yield emit(f"✅ DOCX 提取完成（{len(raw_text)} 字符）")
+                yield emit("🤖 调用 LLM 自动转换 BOM 格式…")
+                df, llm_logs = _llm_convert_to_bom(raw_text, state)
+                for log_line in llm_logs:
+                    yield emit(log_line)
+                if df is None or df.empty:
+                    yield emit("❌ LLM 未能从文档中提取有效 BOM 记录，请检查文档内容")
+                    return
+
+            elif ext == ".doc":
+                yield emit("❌ 不支持旧版 .doc 格式，请将文件另存为 .docx 后重新上传")
+                return
+            else:
+                yield emit(f"❌ 不支持的文件格式：{ext}（支持 xlsx/pdf/docx）")
+                return
+
             yield emit(f"✅ 读取成功：共 {len(df)} 条零件记录")
         except Exception as e:
             yield emit(f"❌ 读取失败：{e}")
