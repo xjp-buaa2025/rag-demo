@@ -77,6 +77,13 @@ class AppState:
     lc_memory_manager: Optional[Any] = None   # ChatMemoryManager（langchain_components.memory）
     lc_agent: Optional[Any] = None            # AgentExecutor（langchain_components.agents）
 
+    # --- LangGraph 管道（渐进式启用，由 lifespan 初始化）---
+    lg_rag_pipeline: Optional[Any] = None     # CompiledStateGraph（pipelines.factory.make_rag_pipeline）
+    lg_bom_pipeline: Optional[Any] = None     # CompiledStateGraph（pipelines.factory.make_bom_pipeline）
+
+    # --- deepdoc AI 解析引擎（PDF 精细化处理）---
+    deepdoc_engine: Optional[Any] = None      # backend.pipelines.deepdoc_wrapper.DeepDocEngine
+
     # --- 并发控制 ---
     is_ingesting: bool = False
     collection_lock: threading.Lock = field(default_factory=threading.Lock)

@@ -44,9 +44,11 @@ CLIP_MODEL         = "OFA-Sys/chinese-clip-vit-large-patch14"
 LLM_API_KEY        = os.getenv("LLM_API_KEY")
 LLM_BASE_URL       = os.getenv("LLM_BASE_URL",   "https://api.siliconflow.cn/v1")
 LLM_MODEL          = os.getenv("LLM_MODEL",       "Qwen/Qwen2.5-14B-Instruct")
-MINIMAX_API_KEY    = os.getenv("MINIMAX_API_KEY", "").strip()
-MINIMAX_BASE_URL   = os.getenv("MINIMAX_BASE_URL","https://api.minimaxi.com/v1")
-MINIMAX_MODEL      = os.getenv("MINIMAX_MODEL",   "MiniMax-M2.5")
+MINIMAX_API_KEY        = os.getenv("MINIMAX_API_KEY", "").strip()
+MINIMAX_BASE_URL       = os.getenv("MINIMAX_BASE_URL","https://api.minimaxi.com/v1")
+MINIMAX_MODEL          = os.getenv("MINIMAX_MODEL",   "MiniMax-M2.5")
+# Vision 专用 Key：图片入库 Caption 使用付费 Token，与对话 LLM 隔离
+MINIMAX_VISION_API_KEY = os.getenv("MINIMAX_VISION_API_KEY", "").strip() or MINIMAX_API_KEY
 
 
 def _init_qdrant(db_path: str, collection_name: str, clip_dim: int = 768):
@@ -126,14 +128,19 @@ async def lifespan(app: FastAPI):
         _primary  = OpenAI(api_key=MINIMAX_API_KEY, base_url=MINIMAX_BASE_URL)
         _fallback = OpenAI(api_key=LLM_API_KEY,     base_url=LLM_BASE_URL)
         llm_client = FallbackLLMClient(_primary, MINIMAX_MODEL, _fallback, LLM_MODEL)
-        minimax_client = _primary  # Vision API 专用，直接使用 MiniMax 原始 client
         label = f"MiniMax({MINIMAX_MODEL}) → fallback: {LLM_MODEL}"
     else:
         llm_client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
         label = LLM_MODEL
 
-    if minimax_client is None:
-        print("[backend] ⚠️ 未配置 MINIMAX_API_KEY，图片 Caption 生成功能不可用。")
+    # Vision 专用 client：优先用 MINIMAX_VISION_API_KEY（付费 Token，防并发限流）
+    # 若未单独配置则回退到 MINIMAX_API_KEY；两者都没有则 Vision 不可用
+    if MINIMAX_VISION_API_KEY:
+        minimax_client = OpenAI(api_key=MINIMAX_VISION_API_KEY, base_url=MINIMAX_BASE_URL)
+        if MINIMAX_VISION_API_KEY != MINIMAX_API_KEY:
+            print("[backend] Vision client 使用独立的 MINIMAX_VISION_API_KEY。")
+    else:
+        print("[backend] ⚠️ 未配置 MINIMAX_API_KEY / MINIMAX_VISION_API_KEY，图片 Caption 生成功能不可用。")
 
     # 5. 将所有单例存入 app.state，供路由通过 Depends(get_state) 获取
     app.state.app_state = AppState(
@@ -190,6 +197,27 @@ async def lifespan(app: FastAPI):
 
     except Exception as _lc_err:
         print(f"[backend] LangChain 组件初始化失败（{_lc_err}），降级为原生模式。")
+
+    # 7. deepdoc AI 解析引擎初始化（PDF 精细化处理，首次运行下载 ONNX 模型）
+    try:
+        from backend.pipelines.deepdoc_wrapper import DeepDocEngine
+        _state = app.state.app_state
+        _state.deepdoc_engine = DeepDocEngine()
+        print("[backend] deepdoc AI 解析引擎初始化完成（LayoutRecognizer + OCR + TSR 就绪）。")
+    except Exception as _dd_err:
+        print(f"[backend] deepdoc 初始化失败（{_dd_err}），PDF 精细化处理不可用，将回退基础路径。")
+
+    # 8. LangGraph 管道初始化（渐进式，不影响原有功能）
+    try:
+        from backend.pipelines.factory import make_rag_pipeline, make_bom_pipeline
+        _state = app.state.app_state
+        _neo4j_cfg = app.state.neo4j_cfg
+
+        _state.lg_rag_pipeline = make_rag_pipeline(_state, IMAGE_STORAGE_DIR)
+        _state.lg_bom_pipeline = make_bom_pipeline(_state, _neo4j_cfg)
+        print("[backend] LangGraph 管道初始化完成（RAG + BOM 管道已就绪）。")
+    except Exception as _lg_err:
+        print(f"[backend] LangGraph 管道初始化失败（{_lg_err}），管道模式不可用。")
 
     count = app.state.app_state.get_doc_count()
     print(f"[backend] 初始化完成，知识库共 {count} 条文档块。LLM: {label}")

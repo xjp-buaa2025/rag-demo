@@ -17,6 +17,7 @@
 8. [LangChain 集成详解](#8-langchain-集成详解)
 9. [图文检索详解](#9-图文检索详解)
 10. [BOM-GraphRAG 扩展](#10-bom-graphrag-扩展)
+10.1 [LangGraph 多步骤管道](#101-langgraph-多步骤管道)
 11. [React 前端详解](#11-react-前端详解)
 12. [配置系统（.env）](#12-配置系统env)
 13. [运行方式](#13-运行方式)
@@ -785,6 +786,126 @@ PYTHONUTF8=1 python run_backend.py
 
 ---
 
+## 10.1 LangGraph 多步骤管道
+
+`backend/pipelines/` 模块实现了两条基于 LangGraph StateGraph 的节点化数据处理管道。
+
+### 设计目标
+
+- 每个处理步骤是独立的可观测节点（函数）
+- 条件路由：按文件类型自动选择入口节点（PDF 走 deepdoc 精细化链，MD/TXT 走简单链）
+- SSE 实时日志：每个节点的输出通过 `sse_bridge` 实时推送前端
+- 渐进式接入：`/pipeline` 后缀路由与原有路由并行，不影响现有功能
+
+### RAG 管道（POST /ingest/pipeline）—— 统一智能入口
+
+```
+PDF 文件
+    ↓ detect_input（检测文件类型）
+    ↓ analyze_pdf_type（采样前10页，判断 text/scanned/mixed，仅用于日志）
+    ↓ deepdoc_parse_pdf（完整 deepdoc 流程：OCR + LayoutRecognizer + TSR + 文本合并）
+    ↓ extract_structure（ATA 章节识别，正则匹配 72-10-00 格式，产出 section_tree）
+    ↓ build_cross_refs（匹配 "See Figure X-Y" 等交叉引用，产出 cross_refs）
+    ↓ semantic_chunk（结构感知分块：ATA 边界/表格独立/WARNING 独立/步骤完整）
+    ↓ extract_figures（按 layout_regions 提取 figure 区域图片到磁盘）
+    ├─（有图形时）generate_tech_captions（航空技术图专用提示词 + MiniMax Vision API）
+    ↓ encode_text_vectors（bge-m3 编码 manual_chunks，payload 含 ata_section/figure_refs）
+    ├─（有图形时）encode_image_vectors（bge-m3(Caption) + CLIP(图片) → 双向量）
+    ↓ upsert_qdrant（先按 doc_id 删旧块，再批量写入）
+
+MD/TXT 文件（直接从 chunk_text 切入，跳过 deepdoc）
+    ↓ detect_input → chunk_text → encode_text_vectors → upsert_qdrant
+```
+
+### BOM 管道（POST /bom/ingest/pipeline）
+
+```
+PDF/DOCX 文件
+    ↓ detect_input
+    ↓ extract_tables（pdfplumber/python-docx 提取表格 → Markdown）
+    ↓ llm_to_csv（LLM 分段转换为标准 BOM JSON）
+    ↓ validate_bom_df（pandas 清洗、填默认值）
+    ↓ write_neo4j（MERGE 写入 Assembly/Part/Standard 节点 + CHILD_OF 关系）
+
+Excel/CSV 文件（直接从 load_table 切入，跳过 LLM 转换）
+    ↓ detect_input → load_table → validate_bom_df → write_neo4j
+```
+
+### deepdoc 集成架构
+
+RAGFlow deepdoc 的 AI 解析引擎通过 shim 层在本项目独立运行：
+
+**Shim 层**（`document_processing/` 目录，已在 sys.path 中）：
+
+| Shim 文件 | 替换的 RAGFlow 内部模块 |
+|-----------|------------------------|
+| `common/file_utils.py` | `get_project_base_directory()` → 返回项目根目录 |
+| `common/misc_utils.py` | `pip_install_torch()` (空实现)、`thread_pool_exec()` |
+| `common/settings.py` | `PARALLEL_DEVICES = 0` |
+| `rag/utils/lazy_image.py` | `ensure_pil_image()` → bytes/ndarray/PIL 统一转换 |
+| `rag/nlp/__init__.py` | `find_codec()` (chardet) + `rag_tokenizer` (jieba) |
+| `rag/prompts/generator.py` | `vision_llm_describe_prompt()` → 空实现（我们用 MiniMax） |
+
+**封装层**（`backend/pipelines/deepdoc_wrapper.py`）：
+
+```python
+class DeepDocEngine:
+    def __init__(self):
+        from deepdoc.parser.pdf_parser import RAGFlowPdfParser
+        self._parser = RAGFlowPdfParser()  # 加载 OCR + LayoutRecognizer + TSR + XGBoost
+
+    def parse_pdf(self, file_path, progress_callback=None) -> dict:
+        # 调用 parse_into_bboxes()，返回 {boxes, total_pages, is_english}
+        # boxes 中每个 dict：page_number, layout_type, text, image(PIL), positions
+
+    def analyze_pdf_type(self, file_path) -> str:
+        # 采样检测，返回 "text" | "scanned" | "mixed"
+```
+
+**注意**：`xgboost` 需固定在 2.x（`pip install "xgboost==2.1.4"`），3.x 移除了对 RAGFlow 下载的旧版 binary 模型格式的支持。
+
+### semantic_chunk 分块规则（核心价值）
+
+| 优先级 | 规则 | 说明 |
+|--------|------|------|
+| 1 | ATA Section 边界 | 识别 `title` 类型区域，绝不跨 section 分块 |
+| 2 | 表格独立 | `table` 类型区域单独成一个块 |
+| 3 | WARNING/CAUTION/NOTE | 匹配开头关键词，独立成块（chunk_type="alert"） |
+| 4 | 编号步骤 | 正则匹配 `1.`/`(a)`/`Step 1:` 等，chunk_type="step" |
+| 5 | 段落软上限 | ~1600 字符（约 800 token） |
+
+每个 chunk 的增强 payload：`ata_section, section_title, section_hierarchy, figure_refs, table_refs, has_warning, has_caution, doc_type: "maintenance_manual"`
+
+### 关键文件
+
+| 文件 | 职责 |
+|------|------|
+| `backend/pipelines/state.py` | `PipelineState` TypedDict，新增 `pdf_type/layout_regions/section_tree/cross_refs/manual_chunks/figure_records` |
+| `backend/pipelines/factory.py` | `make_rag_pipeline()` / `make_bom_pipeline()` 工厂，闭包绑定 AppState |
+| `backend/pipelines/deepdoc_wrapper.py` | `DeepDocEngine`：封装 `RAGFlowPdfParser`，提供 `parse_pdf()` 接口 |
+| `backend/pipelines/nodes_manual.py` | 7 个 deepdoc 精细化节点（analyze_pdf_type → generate_tech_captions） |
+| `backend/pipelines/nodes_rag.py` | RAG 节点（encode_text_vectors/encode_image_vectors 适配 manual_chunks/figure_records） |
+| `backend/pipelines/nodes_bom.py` | BOM 5 个节点函数 |
+| `backend/pipelines/routes.py` | 条件路由函数 |
+| `backend/pipelines/sse_bridge.py` | `pipeline_to_log_generator()`：LangGraph stream → SSE 适配 |
+
+### AppState 注入方式
+
+节点函数通过**闭包工厂**绑定 AppState，与 `langchain_components/tools.py` 的 `create_tools()` 模式一致：
+
+```python
+def make_rag_pipeline(app_state, image_dir):
+    def upsert_qdrant(state):
+        app_state.qdrant_client.upsert(...)  # 通过闭包访问
+    graph.add_node("upsert_qdrant", upsert_qdrant)
+    return graph.compile()
+```
+
+`app_state.deepdoc_engine` 在 `backend/main.py` lifespan 中初始化（步骤 7），
+失败时降级为 `None`，管道仍正常构建（`deepdoc_parse_pdf` 节点返回 error）。
+
+---
+
 ## 15. 变更日志
 
 | 日期 | 变更内容 |
@@ -803,3 +924,5 @@ PYTHONUTF8=1 python run_backend.py
 | 2026-03-23 | **图片入库增强**：(1) 有 `.md` 的 PDF 不再完全跳过，改为仅从 PDF 提取图片（`images_only` 模式），`.md` 负责文本；(2) 无 MiniMax 时用 PDF 页面上下文文字做降级 Caption（仍可用 CLIP 向量检索图片）；(3) 后台自动入库也生成图片块 |
 | 2026-03-24 | **LangChain 集成**：`backend/langchain_components/` 模块，7 大核心组件全覆盖。(1) Models: `FallbackChatModel` 自定义 BaseChatModel 保留主备降级；(2) Prompts: 12 个 ChatPromptTemplate 统一管理；(3) Chains: LCEL 工作流（rag/multi_query/assembly/judge）；(4) Memory: `ChatMemoryManager` 滑动窗口；(5) Tools: 5 个 @tool（rag_search/bom_query/vision/image_search/calculator）；(6) Agents: RAG Agent + `/assembly/agent` 路由；(7) Retrievers: `QdrantDualPathRetriever` 双路检索。所有路由保留原生 fallback，LangChain 不可用时自动降级 |
 | 2026-03-24 | **BOM 多格式入库**：`/bom/ingest` 新增 PDF/DOCX 支持。(1) pdfplumber 提取表格 + 纯文本；(2) python-docx 提取 Word 段落和表格；(3) 提取内容按页/表格分块后调用 LLM 自动转换为标准 BOM JSON（level_code/part_id/category 等字段自动推断）；(4) 前端文件选择器扩展为 xlsx/pdf/docx；(5) 大文档分段处理避免 token 超限 |
+| 2026-03-25 | **LangGraph 多步骤数据处理管道**：`backend/pipelines/` 模块，两条 StateGraph 管道。(1) **RAG 管道**（`/ingest/pipeline`）：detect_input → pdf_to_md（PDF 转 Markdown + 提取图片）→ generate_captions → chunk_text → encode_text_vectors → [encode_image_vectors] → upsert_qdrant；支持直接从 MD/TXT 文件切入跳过 PDF 转换；(2) **BOM 管道**（`/bom/ingest/pipeline`）：detect_input → extract_tables（PDF/DOCX）→ llm_to_csv → validate_bom_df → write_neo4j；支持直接从 Excel/CSV 切入跳过 LLM 转换；(3) 条件路由按文件类型灵活分流；(4) SSE 桥接层将节点日志实时推送前端；(5) 前端 BomIngest 增加"原生/LangGraph 管道"切换 toggle；原有接口全部保留为 fallback |
+| 2026-03-25 | **RAG 管道升级：集成 RAGFlow deepdoc AI 解析引擎**（PT6A 维修手册支持）。(1) **deepdoc Shim 层**：6 个 shim 文件（`document_processing/common/`、`rag/utils/`、`rag/prompts/`），使 `RAGFlowPdfParser` 在本项目独立运行，无需安装完整 RAGFlow；(2) **DeepDocEngine**（`backend/pipelines/deepdoc_wrapper.py`）：封装 `RAGFlowPdfParser.parse_into_bboxes()`，提供 `parse_pdf()` / `analyze_pdf_type()` 接口，首次初始化自动下载 ONNX 模型（LayoutRecognizer YOLOv10 + OCR + TableStructureRecognizer）；(3) **7 个新 LangGraph 节点**（`nodes_manual.py`）：analyze_pdf_type → deepdoc_parse_pdf → extract_structure（ATA 章节识别）→ build_cross_refs（"See Figure X-Y" 交叉引用）→ semantic_chunk（结构感知分块：section 边界/表格独立/WARNING 独立/步骤完整）→ extract_figures → generate_tech_captions（航空技术图专用提示词）；(4) **管道统一升级**：PDF 路径从旧的 pdf_to_md 简单提取切换为 deepdoc 精细化链，MD/TXT 旧路径不变；encode_text_vectors/encode_image_vectors 适配 manual_chunks/figure_records，payload 注入 ata_section、section_hierarchy、figure_refs 等增强字段；(5) **依赖修复**：xgboost 需固定 2.1.4（3.x 移除旧 binary 格式支持） |

@@ -1,7 +1,8 @@
 """
 backend/routers/ingest.py — 知识库入库接口
 
-POST /ingest          — 扫描 data/ 目录并入库（SSE 流式日志）
+POST /ingest          — 扫描 data/ 目录并入库（SSE 流式日志，原生模式）
+POST /ingest/pipeline — 单文件 LangGraph 管道入库（SSE 流式日志）
 GET  /ingest/status   — 返回当前知识库文档块数量（JSON）
 
 入库逻辑：
@@ -12,8 +13,9 @@ GET  /ingest/status   — 返回当前知识库文档块数量（JSON）
 
 import os
 import uuid
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import BaseModel
+from typing import Optional
 
 from backend.deps import get_state
 from backend.state import AppState, COLLECTION_NAME
@@ -43,6 +45,64 @@ def ingest(body: IngestRequest, request: Request, state: AppState = Depends(get_
     image_dir = request.app.state.image_dir
     gen = _run_ingest(state, data_dir, body.clear_first, image_dir)
     return log_gen_to_sse(gen)
+
+
+@router.post("/ingest/pipeline", summary="LangGraph 管道入库单文件（SSE）")
+def ingest_pipeline(
+    request: Request,
+    file: Optional[UploadFile] = File(default=None),
+    clear_first: bool = Form(default=False),
+    state: AppState = Depends(get_state),
+):
+    """
+    LangGraph 管道入库：上传单个文件（PDF/MD/TXT），通过节点化流程处理。
+    - PDF：pdf_to_md（转Markdown+提取图片）→ generate_captions → chunk_text → 向量化 → Qdrant
+    - MD/TXT：直接 chunk_text → 向量化 → Qdrant
+    响应为 SSE 日志流。
+    """
+    import tempfile
+    from backend.pipelines.sse_bridge import pipeline_to_log_generator
+
+    if state.lg_rag_pipeline is None:
+        def _err():
+            yield "❌ LangGraph RAG 管道未初始化，请检查后端日志"
+        return log_gen_to_sse(_err())
+
+    if file is None:
+        def _err():
+            yield "❌ 请上传文件（PDF/MD/TXT）"
+        return log_gen_to_sse(_err())
+
+    # 将上传文件写入临时目录
+    suffix = os.path.splitext(file.filename or "doc.pdf")[1] or ".pdf"
+    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    try:
+        tmp.write(file.file.read())
+        tmp.close()
+        tmp_path = tmp.name
+    except Exception as e:
+        def _err():
+            yield f"❌ 文件保存失败: {e}"
+        return log_gen_to_sse(_err())
+
+    image_dir = request.app.state.image_dir
+    initial_state = {
+        "file_path": tmp_path,
+        "pipeline_mode": "rag",
+        "clear_first": clear_first,
+        "log_messages": [f"[pipeline] 开始处理：{file.filename}"],
+    }
+
+    def _cleanup_gen():
+        try:
+            yield from pipeline_to_log_generator(state.lg_rag_pipeline, initial_state)
+        finally:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+    return log_gen_to_sse(_cleanup_gen())
 
 
 def _run_ingest(state: AppState, data_dir: str, clear_first: bool,

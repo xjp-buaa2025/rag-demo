@@ -9,25 +9,58 @@
 // ============================================================
 
 import { useRef, useState } from 'react'
-import { postBomIngest } from '../../api/client'
+import { postBomIngest, postBomIngestPipeline } from '../../api/client'
 import { usePostSSE } from '../../hooks/usePostSSE'
 
 export default function BomIngest() {
   const [file, setFile] = useState<File | null>(null)
+  const [usePipeline, setUsePipeline] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { run, log, loading, clear } = usePostSSE()
 
   const handleIngest = async (clearFirst: boolean) => {
     clear()
-    await run(postBomIngest(file, clearFirst))
+    if (usePipeline) {
+      await run(postBomIngestPipeline(file, clearFirst))
+    } else {
+      await run(postBomIngest(file, clearFirst))
+    }
   }
 
   return (
     <div className="border border-slate-200 rounded-lg p-4 bg-white space-y-3">
       <p className="text-xs text-slate-500">
-        支持 Excel(.xlsx)、PDF、Word(.docx) 格式。Excel 需包含标准列（level_code, part_id 等）；
+        支持 Excel(.xlsx/.csv)、PDF、Word(.docx) 格式。Excel/CSV 需包含标准列（level_code, part_id 等）；
         PDF/Word 将由 AI 自动识别并转换为标准 BOM 格式。不上传则使用默认 test_bom.xlsx。
       </p>
+
+      {/* 模式切换 */}
+      <div className="flex items-center gap-2 text-xs text-slate-600">
+        <span>模式：</span>
+        <button
+          onClick={() => setUsePipeline(false)}
+          className={`px-2 py-1 rounded border transition-colors ${
+            !usePipeline
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'border-slate-300 hover:bg-slate-50'
+          }`}
+        >
+          原生
+        </button>
+        <button
+          onClick={() => setUsePipeline(true)}
+          className={`px-2 py-1 rounded border transition-colors ${
+            usePipeline
+              ? 'bg-purple-600 text-white border-purple-600'
+              : 'border-slate-300 hover:bg-slate-50'
+          }`}
+        >
+          LangGraph 管道
+        </button>
+        {usePipeline && (
+          <span className="text-purple-500">（节点化处理：提取表格 → LLM 转换 → 清洗 → Neo4j）</span>
+        )}
+      </div>
 
       {/* 文件选择 */}
       <div className="flex items-center gap-3">
@@ -51,7 +84,7 @@ export default function BomIngest() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".xlsx,.pdf,.docx"
+          accept=".xlsx,.xls,.csv,.pdf,.docx"
           className="hidden"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
@@ -62,9 +95,11 @@ export default function BomIngest() {
         <button
           onClick={() => handleIngest(false)}
           disabled={loading}
-          className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className={`flex-1 px-3 py-2 text-sm text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
+            usePipeline ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'
+          }`}
         >
-          {loading ? '⏳ 入库中…' : '📥 入库（增量）'}
+          {loading ? '⏳ 入库中…' : usePipeline ? '🔀 管道入库（增量）' : '📥 入库（增量）'}
         </button>
         <button
           onClick={() => handleIngest(true)}

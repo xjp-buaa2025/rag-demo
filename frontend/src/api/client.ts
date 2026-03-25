@@ -122,6 +122,26 @@ export function postBomIngest(file: File | null, clearFirst: boolean) {
 }
 
 // ----------------------------------------------------------
+// LangGraph 管道入库（单文件 RAG，multipart SSE）
+// ----------------------------------------------------------
+export function postIngestPipeline(file: File, clearFirst: boolean) {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('clear_first', String(clearFirst))
+  return postSSE('/ingest/pipeline', form)
+}
+
+// ----------------------------------------------------------
+// LangGraph 管道 BOM 入库（multipart SSE）
+// ----------------------------------------------------------
+export function postBomIngestPipeline(file: File | null, clearFirst: boolean) {
+  const form = new FormData()
+  if (file) form.append('file', file)
+  form.append('clear_first', String(clearFirst))
+  return postSSE('/bom/ingest/pipeline', form)
+}
+
+// ----------------------------------------------------------
 // 装配方案问答（SSE）
 // ----------------------------------------------------------
 export function postAssemblyChat(message: string, history: Message[]) {
