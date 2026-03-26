@@ -67,7 +67,7 @@ class DecodeImage:
         return data
 
 
-class StandardizeImag:
+class StandardizeImage:
     """normalize image
     Args:
         mean (list): im - mean

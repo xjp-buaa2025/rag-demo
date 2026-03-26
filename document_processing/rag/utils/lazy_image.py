@@ -22,10 +22,9 @@ def ensure_pil_image(img_data):
     if isinstance(img_data, bytes):
         return PILImage.open(io.BytesIO(img_data)).convert("RGB")
     if isinstance(img_data, np.ndarray):
-        # OpenCV BGR → RGB
-        if img_data.ndim == 3 and img_data.shape[2] == 3:
-            img_data = img_data[:, :, ::-1]
-        return PILImage.fromarray(img_data.astype(np.uint8))
+        # numpy 数组直接返回，调用方通过 isinstance(pil, Image.Image) 判断
+        # 不强制转 PIL，避免 float32→uint8 数据损失（会破坏 NormalizeImage 后的精度）
+        return img_data
     raise TypeError(f"无法将 {type(img_data)} 转换为 PIL.Image")
 
 

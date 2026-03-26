@@ -24,7 +24,8 @@ from math import ceil
 logger = logging.getLogger(__name__)
 
 # 大 PDF 分批阈值：超过此页数则拆分为多个临时 PDF 分批处理
-CHUNK_SIZE = 200
+# 50页/批：每批 pdfplumber 渲染约 680MB，避免 200页/批的 2.7GB OOM 问题
+CHUNK_SIZE = 50
 
 # 确保 deepdoc 的 shim 层在 sys.path 中
 _DOC_PROCESSING = os.path.join(
@@ -53,7 +54,8 @@ class DeepDocEngine:
         self._parser = RAGFlowPdfParser()
         logger.info("DeepDocEngine 初始化完成")
 
-    def parse_pdf(self, file_path: str, progress_callback=None) -> dict:
+    def parse_pdf(self, file_path: str, progress_callback=None,
+                  zoomin: int = 3) -> dict:
         """
         完整解析 PDF 文件，返回结构化结果字典。
 
@@ -83,7 +85,8 @@ class DeepDocEngine:
         logger.info(f"开始解析 PDF: {os.path.basename(file_path)}（{total_pages} 页）")
 
         if total_pages <= CHUNK_SIZE:
-            return self._parse_single(file_path, total_pages, progress_callback)
+            return self._parse_single(file_path, total_pages, progress_callback,
+                                      zoomin=zoomin)
 
         # ── 大 PDF：分批处理 ──────────────────────────────────────
         num_chunks = ceil(total_pages / CHUNK_SIZE)
@@ -118,8 +121,8 @@ class DeepDocEngine:
                         if progress_callback:
                             progress_callback(overall, f"[批次{_cidx+1}] {msg}")
 
-                    chunk_boxes = self._parser.parse_into_bboxes(
-                        chunk_path, callback=_cb, zoomin=2
+                    chunk_boxes = self._parse_with_retry(
+                        chunk_path, callback=_cb, zoomin=zoomin
                     )
 
                     # 修正 page_number 为全局页码（deepdoc 返回的是批次内 1-based）
@@ -138,6 +141,22 @@ class DeepDocEngine:
                         f"  批次 {chunk_idx+1} 完成：{len(chunk_boxes)} 个块，"
                         f"有文本 {sum(1 for b in chunk_boxes if b.get('text','').strip())} 个"
                     )
+
+                    # ── 批次完成结构化汇报（走 progress_callback → 实时推送到前端）──
+                    if progress_callback:
+                        text_c = sum(1 for b in chunk_boxes
+                                     if b.get("layout_type") not in ("figure",))
+                        fig_c  = sum(1 for b in chunk_boxes
+                                     if b.get("layout_type") == "figure")
+                        tbl_c  = sum(1 for b in chunk_boxes
+                                     if b.get("layout_type") == "table")
+                        done_ratio = (chunk_idx + 1) / num_chunks
+                        progress_callback(
+                            done_ratio,
+                            f"[批次 {chunk_idx+1}/{num_chunks} 完成] "
+                            f"第 {start+1}-{end} 页 | "
+                            f"{len(chunk_boxes)} 区域（文本 {text_c}，表格 {tbl_c}，图形 {fig_c}）"
+                        )
                 finally:
                     try:
                         os.unlink(chunk_path)
@@ -151,15 +170,38 @@ class DeepDocEngine:
             "is_english": False,
         }
 
+    def _parse_with_retry(self, file_path: str, callback=None,
+                          zoomin: int = 3, max_zoomin: int = 9) -> list:
+        """
+        调用 parse_into_bboxes 并在结果为空时自动重试更高 zoomin。
+
+        补偿上游 pdf_parser.py 第 1518 行的重试逻辑 bug：
+        原始代码检查 len(self.boxes)==0，但 boxes 是 list-of-lists，
+        多页 PDF 即使全空也 len>0，导致重试永不触发。
+        """
+        boxes = self._parser.parse_into_bboxes(
+            file_path, callback=callback, zoomin=zoomin
+        )
+        if not boxes and zoomin < max_zoomin:
+            retry_zoomin = min(zoomin * 2, max_zoomin)
+            logger.warning(
+                f"deepdoc 返回 0 boxes (zoomin={zoomin})，"
+                f"重试 zoomin={retry_zoomin}"
+            )
+            boxes = self._parser.parse_into_bboxes(
+                file_path, callback=callback, zoomin=retry_zoomin
+            )
+        return boxes
+
     def _parse_single(self, file_path: str, total_pages: int,
-                      progress_callback=None) -> dict:
+                      progress_callback=None, zoomin: int = 3) -> dict:
         """单次 deepdoc 解析（小 PDF，<= CHUNK_SIZE 页）。"""
         def _cb(progress, msg=""):
             logger.debug(f"  [{progress*100:.0f}%] {msg}")
             if progress_callback:
                 progress_callback(progress, msg)
 
-        boxes = self._parser.parse_into_bboxes(file_path, callback=_cb, zoomin=2)
+        boxes = self._parse_with_retry(file_path, callback=_cb, zoomin=zoomin)
         total_pages = getattr(self._parser, "total_page", 0) or total_pages
         is_english = getattr(self._parser, "is_english", False)
 

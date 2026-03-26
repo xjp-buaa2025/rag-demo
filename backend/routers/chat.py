@@ -33,7 +33,8 @@ MULTI_QUERY_COUNT = 2 # 额外生成的查询数
 SYSTEM_PROMPT = """你是一个专业的知识库问答助手。请严格根据提供的参考资料回答用户问题。
 如果参考资料中没有相关信息，请如实说明"知识库中没有找到相关内容"，不要凭空捏造。
 回答要详细、准确、有条理，尽量引用原文中的具体数据和技术细节，不要省略重要信息。
-如果参考资料中包含图片（标记为"图片描述"的条目会附带图片URL），请在回答中使用 Markdown 图片语法 ![描述](URL) 展示相关图片。只使用参考资料中提供的图片URL，不要编造URL。"""
+如果参考资料中包含图片（标记为"图片描述"的条目会附带图片URL），请在回答中使用 Markdown 图片语法 ![描述](URL) 展示相关图片。只使用参考资料中提供的图片URL，不要编造URL。
+当参考资料中包含以 [FLOWCHART NODE] 或 [FLOWCHART PATH] 开头的条目时，这些内容来自技术手册的故障排查流程图。请严格按照 YES/NO 分支逻辑组织回答，明确说明每个判断点的条件和对应操作，不要合并或省略关键的判断步骤，以正确的顺序引导用户完成故障排查程序。"""
 
 
 class MessageItem(BaseModel):
@@ -132,6 +133,26 @@ def _rerank(state: AppState, question: str, candidates: List[dict],
     except Exception as e:
         print(f"[chat] Reranker 打分失败（{e}），降级为距离排序")
         return candidates[:top_k]
+
+
+_FAULT_KEYWORDS = frozenset([
+    "fault", "fail", "error", "problem", "issue", "troubleshoot",
+    "故障", "失效", "报错", "异常", "不工作", "无法", "排查", "诊断",
+])
+
+
+def _boost_flowchart_chunks(candidates: List[dict], query: str) -> List[dict]:
+    """
+    对故障诊断类查询，将 flowchart_path chunk 提前排序，
+    使其更可能进入 rerank 的 top_K 候选。
+    不修改 distance，只调整列表顺序。
+    """
+    q_lower = query.lower()
+    if not any(kw in q_lower for kw in _FAULT_KEYWORDS):
+        return candidates
+    paths = [c for c in candidates if c.get("chunk_type") == "flowchart_path"]
+    others = [c for c in candidates if c.get("chunk_type") != "flowchart_path"]
+    return paths + others
 
 
 @router.post("/chat", summary="RAG 流式问答（SSE）")
@@ -332,7 +353,8 @@ def _chat_gen_native(state: AppState, llm_model: str, message: str, history: Lis
         yield "⚠️ 知识库为空，请先点击入库按钮导入文档。"
         return
 
-    # ===== 阶段三：重排序（静默）=====
+    # ===== 阶段三：流程图提权 + 重排序（静默）=====
+    candidates = _boost_flowchart_chunks(candidates, message)
     chunks = _rerank(state, message, candidates, TOP_K)
 
     # ===== 阶段四：构建 messages 并流式调用 LLM =====

@@ -22,7 +22,8 @@ _CAPTION_PROMPT = (
 
 
 def describe_image(client, model: str, image_path: str,
-                   context_text: str = "") -> str:
+                   context_text: str = "", extra_prompt: str = "",
+                   max_tokens: int = 512) -> str:
     """
     将本地图片转为 base64，调用 MiniMax M2.5 Vision API 生成中文描述。
 
@@ -31,6 +32,7 @@ def describe_image(client, model: str, image_path: str,
         model:  MiniMax 模型名称（如 "MiniMax-M2.5"）
         image_path: 图片绝对路径
         context_text: 图片周边的文字（如图注、标题），可提升描述质量
+        extra_prompt: 自定义主提示词；非空时替换默认的 _CAPTION_PROMPT
 
     Returns:
         图片的中文描述字符串；失败时返回 ""
@@ -55,7 +57,7 @@ def describe_image(client, model: str, image_path: str,
     mime = mime_map.get(suffix, "image/png")
 
     # 构建 prompt（附加上下文文字有助于提升描述质量）
-    prompt = _CAPTION_PROMPT
+    prompt = extra_prompt if extra_prompt else _CAPTION_PROMPT
     if context_text:
         prompt += f"\n\n图片周边文字参考：{context_text}"
 
@@ -75,7 +77,7 @@ def describe_image(client, model: str, image_path: str,
                     }
                 ]
             }],
-            max_tokens=512,
+            max_tokens=max_tokens,
             temperature=0.3,
         )
         caption = response.choices[0].message.content.strip()

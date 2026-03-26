@@ -778,6 +778,85 @@ pip install sentence-transformers
 # 首次使用自动下载 BAAI/bge-reranker-base
 ```
 
+### Q: PDF 入库产出 0 chunks（deepdoc 路径）
+
+**症状**：上传 PDF 后日志显示 `分块完成，共 0 个块`，全程无报错。
+
+**已修复的根因（多层叠加）**：
+
+#### 根因 1：zoomin 过低导致扫描件 OCR 失败
+- 旧代码 `parse_into_bboxes(zoomin=2)` = 144 DPI，ONNX 文字检测器在此分辨率下对扫描件几乎检测不到文字框
+- **修复**：`deepdoc_parse_pdf` 节点根据 `pdf_type` 选择 zoomin（text=3/216DPI，mixed=4/288DPI，scanned=6/432DPI）
+- **文件**：`backend/pipelines/nodes_manual.py`（zoomin 映射）、`backend/pipelines/deepdoc_wrapper.py`（parse_pdf 接受 zoomin 参数）
+
+#### 根因 2：上游 pdf_parser.py 重试逻辑是死代码
+- `pdf_parser.py:1518` 检查 `len(self.boxes)==0`，但 `self.boxes` 是 list-of-lists，多页 PDF 即使全空长度也等于页数，重试永不触发
+- **修复**：在 `deepdoc_wrapper.py` 的 `_parse_with_retry()` 方法做 wrapper 层补偿，检测到 0 boxes 时自动用 `min(zoomin*2, 9)` 重试
+- **文件**：`backend/pipelines/deepdoc_wrapper.py:_parse_with_retry()`
+
+#### 根因 3：deepdoc 异常被静默吞没，降级链断裂
+- `except Exception as e: return {error: ...}` 直接 early return，跳过了后续 fitz/OCR 降级逻辑
+- 错误既不输出到控制台，也不出现在 SSE 日志（`error` 字段不被 SSE bridge 提取）
+- **修复**：改为 `logger.exception()` + 追加到 logs + 设空 result 继续执行降级链
+- **文件**：`backend/pipelines/nodes_manual.py:deepdoc_parse_pdf()` 的 except 块
+
+#### 根因 4：ONNX 数据类型不匹配 tensor(uint8) vs tensor(float)
+- 调用链：`pdf_parser.py:__ocr()` → `ocr.py:TextDetector.__call__()` → 预处理链 → ONNX
+- 表面原因：`vision/operators.py:70` 类名拼写错误 `StandardizeImag`（缺字母 e），导致 layout recognizer 预处理步骤被跳过
+- **更深根因**：`rag/utils/lazy_image.py:ensure_pil_image()` 的 numpy 分支调用 `astype(np.uint8)` 强制截断，`NormalizeImage` 正确输出 float32 后，`ToCHWImage` 调用 `ensure_pil_image(float32_array)` 时数据被转回 uint8
+- **修复**：(1) `operators.py:70` `StandardizeImag` → `StandardizeImage`；(2) `lazy_image.py:ensure_pil_image()` numpy 分支改为直接返回（不转 PIL），调用方 `isinstance(pil, Image.Image)` 为 False，float32 不被截断
+- **文件**：`document_processing/deepdoc/vision/operators.py`、`document_processing/rag/utils/lazy_image.py`
+- **⚠️ 状态**：根因 4 修复后需重启后端验证，如仍报 ONNXRuntimeError 请检查 `DetResizeForTest` 的输出类型
+
+#### 降级兜底机制（三层）
+即使 deepdoc 失败，系统自动按顺序尝试：
+1. deepdoc 高 DPI 重试（zoomin×2）
+2. fitz block 提取（`page.get_text("dict")`，适用文字型 PDF）
+3. OCR-only（300 DPI 渲染 + ONNX OCR，适用所有类型）
+
+**如果看到 `fitz block 提取完成：N 个区域`**：deepdoc ONNX 仍有问题，但 fitz 已正常产出 chunks，可先用这个结果。
+
+### Q: 大型 PDF（500+ 页）入库时前端日志沉默（看起来卡死）
+
+**症状**：`analyze_pdf_type` 节点结束后，前端日志停止更新长达 20-60 分钟，后台无错误输出但有 `WARNING:root:Miss outlines` + jieba/KMeans 日志。
+
+**根因**：这是**正常行为**，进程并未卡死。
+- LangGraph `pipeline.stream()` 每完成一个节点才 yield 一次
+- `deepdoc_parse_pdf` 是单节点，1020页分21批（每批50页），全部完成才上报日志
+- `Miss outlines` = PDF 无书签目录（无害警告），出现后进入 OCR/Layout 分析阶段
+- sklearn KMeans + jieba 是 deepdoc 内部的栏目分列和中文处理，属正常流程
+
+**已修复（2026-03-26）**：
+- `CHUNK_SIZE` 200→50，避免 pdfplumber 渲染 200页×216DPI = 2.7GB OOM
+- `analyze_pdf_type` 节点完成时预报："⚠ 大型文档：1020 页，将分 21 批解析"
+- SSE 实时进度流：pipeline 移入后台线程，每批完成即推送到前端（无需等节点结束）
+
+**前端预期效果**（每批约 30-90 秒刷新一次）：
+```
+[analyze_pdf_type] ⚠ 大型文档：1020 页，将分 21 批解析（每批 50 页）
+[deepdoc_parse]   [4%] [批次1] OCR finished (23.1s)
+[deepdoc_parse]   [4%] [批次 1/21 完成] 第 1-50 页 | 132 区域（文本 128，表格 2，图形 2）
+[deepdoc_parse]   [9%] [批次 2/21 完成] ...
+```
+
+---
+
+### Q: 大型 PDF 入库后图片块数量为 0（MiniMax 始终不消耗 token）
+
+**症状**：PDF 入库完成，文本块正常，但 image chunk 为 0，MiniMax Vision API 无任何调用记录。
+
+**根因 1（已修复）**：内存 OOM 导致 deepdoc OCR 静默失败
+- `CHUNK_SIZE=200` → pdfplumber 单批渲染 ~2.7GB → 机器换页极度缓慢 → OCR 超时/失败
+- 文本空洞率 >80% → fitz fallback 触发 → 旧版 fitz fallback 只处理 `block["type"]==0`（文本），完全跳过 `type==1`（嵌入图片）→ 图片全丢
+
+**根因 2（已修复）**：fitz fallback 路径不提取图片
+- `nodes_manual.py` 的 fitz fallback 仅遍历文本 block，图片 block 被跳过
+- 修复后：`block["type"]==1` 时用 `fitz.Pixmap` 裁剪区域，保存为 PNG 到 `image_dir`
+
+**MiniMax 调用时机**：它在管道最末尾的 `generate_tech_captions` 节点调用，需等所有21批解析完 + figure_records 非空才会消耗 token。如果 deepdoc 在大型 PDF 上未检测到 figure 区域（向量图/无边界框），fitz fallback 的图片提取是最终兜底手段。
+
+---
+
 ### Q: Windows 路径中文乱码
 所有 Python 命令前加 `PYTHONUTF8=1`：
 ```bash
@@ -925,4 +1004,6 @@ def make_rag_pipeline(app_state, image_dir):
 | 2026-03-24 | **LangChain 集成**：`backend/langchain_components/` 模块，7 大核心组件全覆盖。(1) Models: `FallbackChatModel` 自定义 BaseChatModel 保留主备降级；(2) Prompts: 12 个 ChatPromptTemplate 统一管理；(3) Chains: LCEL 工作流（rag/multi_query/assembly/judge）；(4) Memory: `ChatMemoryManager` 滑动窗口；(5) Tools: 5 个 @tool（rag_search/bom_query/vision/image_search/calculator）；(6) Agents: RAG Agent + `/assembly/agent` 路由；(7) Retrievers: `QdrantDualPathRetriever` 双路检索。所有路由保留原生 fallback，LangChain 不可用时自动降级 |
 | 2026-03-24 | **BOM 多格式入库**：`/bom/ingest` 新增 PDF/DOCX 支持。(1) pdfplumber 提取表格 + 纯文本；(2) python-docx 提取 Word 段落和表格；(3) 提取内容按页/表格分块后调用 LLM 自动转换为标准 BOM JSON（level_code/part_id/category 等字段自动推断）；(4) 前端文件选择器扩展为 xlsx/pdf/docx；(5) 大文档分段处理避免 token 超限 |
 | 2026-03-25 | **LangGraph 多步骤数据处理管道**：`backend/pipelines/` 模块，两条 StateGraph 管道。(1) **RAG 管道**（`/ingest/pipeline`）：detect_input → pdf_to_md（PDF 转 Markdown + 提取图片）→ generate_captions → chunk_text → encode_text_vectors → [encode_image_vectors] → upsert_qdrant；支持直接从 MD/TXT 文件切入跳过 PDF 转换；(2) **BOM 管道**（`/bom/ingest/pipeline`）：detect_input → extract_tables（PDF/DOCX）→ llm_to_csv → validate_bom_df → write_neo4j；支持直接从 Excel/CSV 切入跳过 LLM 转换；(3) 条件路由按文件类型灵活分流；(4) SSE 桥接层将节点日志实时推送前端；(5) 前端 BomIngest 增加"原生/LangGraph 管道"切换 toggle；原有接口全部保留为 fallback |
+| 2026-03-26 | **修复大型 PDF（1000+页）OOM卡住 + 图片丢失 + 进度实时流**。**(1) OOM 修复**：`CHUNK_SIZE` 200→50，pdfplumber 单批内存从 ~2.7GB 降到 ~680MB；text PDF 的 `zoomin` 3→2（DPI 216→144），再省 40%。**(2) 图片提取修复**：fitz fallback 路径新增 `block["type"]==1` 处理，用 `fitz.Pixmap` 裁剪保存嵌入图片；修复了"fallback 触发后图片全丢"的 bug（`backend/pipelines/nodes_manual.py`）。**(3) 实时进度流**：引入 `threading.Thread + queue.Queue` 侧信道机制，绕过 LangGraph 单节点完成才 yield 的限制，实现每批（约 30-90s）即时推送进度到前端 SSE。具体：`AppState._ingest_progress_q` 作为侧信道（不经过 LangGraph 状态机）；`sse_bridge.py` 重写为后台线程运行 pipeline + 主线程消费队列；`nodes_manual.py _progress` 回调同时写队列；`deepdoc_wrapper.py` 批次完成后调用 `progress_callback` 发结构化汇报；`ingest.py` 路由创建 Queue 并注入。**(4) 批次预警**：`analyze_pdf_type` 节点完成时（前端立即可见）显示"⚠ 大型文档：N 页，将分 X 批解析，请勿关闭页面"。 |
+| 2026-03-26 | **修复 deepdoc 管道 0 chunks 问题（4 层根因全修）**。(1) zoomin 参数化：`parse_pdf()` 支持传入 zoomin，`nodes_manual.py` 按 pdf_type 映射（scanned=6/432DPI、mixed=4、text=3）；(2) wrapper 层补偿上游重试死代码：`_parse_with_retry()` 检测 0 boxes 时自动 zoomin×2 重试；(3) 异常不再 early return：改为 `logger.exception()` + 追加日志 + 空 result，fitz/OCR 降级链保持完整；(4) ONNX uint8/float 类型错误：`operators.py` 类名拼写修复（`StandardizeImag`→`StandardizeImage`）+ `lazy_image.py` 的 `ensure_pil_image()` numpy 分支改为直接返回不强制转 uint8；(5) OCR-only 降级扩展到所有 PDF 类型（去掉 `pdf_type in scanned/mixed` 限制）。当前状态：fitz 降级已验证可产出 chunks（测试文字型 PDF：17256区域/3829块），deepdoc ONNX 路径根因 4 修复待下次重启验证 |
 | 2026-03-25 | **RAG 管道升级：集成 RAGFlow deepdoc AI 解析引擎**（PT6A 维修手册支持）。(1) **deepdoc Shim 层**：6 个 shim 文件（`document_processing/common/`、`rag/utils/`、`rag/prompts/`），使 `RAGFlowPdfParser` 在本项目独立运行，无需安装完整 RAGFlow；(2) **DeepDocEngine**（`backend/pipelines/deepdoc_wrapper.py`）：封装 `RAGFlowPdfParser.parse_into_bboxes()`，提供 `parse_pdf()` / `analyze_pdf_type()` 接口，首次初始化自动下载 ONNX 模型（LayoutRecognizer YOLOv10 + OCR + TableStructureRecognizer）；(3) **7 个新 LangGraph 节点**（`nodes_manual.py`）：analyze_pdf_type → deepdoc_parse_pdf → extract_structure（ATA 章节识别）→ build_cross_refs（"See Figure X-Y" 交叉引用）→ semantic_chunk（结构感知分块：section 边界/表格独立/WARNING 独立/步骤完整）→ extract_figures → generate_tech_captions（航空技术图专用提示词）；(4) **管道统一升级**：PDF 路径从旧的 pdf_to_md 简单提取切换为 deepdoc 精细化链，MD/TXT 旧路径不变；encode_text_vectors/encode_image_vectors 适配 manual_chunks/figure_records，payload 注入 ata_section、section_hierarchy、figure_refs 等增强字段；(5) **依赖修复**：xgboost 需固定 2.1.4（3.x 移除旧 binary 格式支持） |

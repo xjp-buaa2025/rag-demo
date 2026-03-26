@@ -89,6 +89,9 @@ class AppState:
     collection_lock: threading.Lock = field(default_factory=threading.Lock)
     neo4j_lock: threading.Lock = field(default_factory=threading.Lock)
 
+    # --- 入库进度队列（侧信道，供 deepdoc 节点回调写入，sse_bridge 消费）---
+    _ingest_progress_q: Optional[Any] = field(default=None)
+
     def get_doc_count(self) -> int:
         """查询 Qdrant collection 中的文档块总数。"""
         try:

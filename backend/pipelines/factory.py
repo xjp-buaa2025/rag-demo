@@ -8,6 +8,7 @@ backend/pipelines/factory.py — LangGraph 管道工厂函数
 图结构：
   RAG: detect_input -> [pdf_to_md -> generate_captions ->] chunk_text
        -> encode_text_vectors -> [encode_image_vectors ->] upsert_qdrant
+       PDF路径: ... -> generate_tech_captions -> extract_flowchart_structure -> encode_text_vectors
 
   BOM: detect_input -> [extract_tables -> llm_to_csv ->] load_table
        -> validate_bom_df -> write_neo4j
@@ -37,7 +38,7 @@ def make_rag_pipeline(app_state: Any, image_dir: str):
     构建 RAG 知识库入库管道（统一智能入口）。
 
     路由逻辑：
-    - PDF 文件 -> analyze_pdf_type -> deepdoc_parse_pdf -> extract_structure
+    - PDF 文件 -> analyze_pdf_type -> deepdoc_parse_pdf -> vision_layout_agent -> extract_structure
                 -> build_cross_refs -> semantic_chunk -> extract_figures
                 -> [generate_tech_captions ->] encode_text_vectors
                 -> [encode_image_vectors ->] upsert_qdrant
@@ -83,7 +84,8 @@ def make_rag_pipeline(app_state: Any, image_dir: str):
 
     # ── PDF 精细化链 ──────────────────────────────────────────
     graph.add_edge("analyze_pdf_type", "deepdoc_parse_pdf")
-    graph.add_edge("deepdoc_parse_pdf", "extract_structure")
+    graph.add_edge("deepdoc_parse_pdf", "vision_layout_agent")
+    graph.add_edge("vision_layout_agent", "extract_structure")
     graph.add_edge("extract_structure", "build_cross_refs")
     graph.add_edge("build_cross_refs", "semantic_chunk")
     graph.add_edge("semantic_chunk", "extract_figures")
@@ -98,7 +100,8 @@ def make_rag_pipeline(app_state: Any, image_dir: str):
         },
     )
 
-    graph.add_edge("generate_tech_captions", "encode_text_vectors")
+    graph.add_edge("generate_tech_captions", "extract_flowchart_structure")
+    graph.add_edge("extract_flowchart_structure", "encode_text_vectors")
 
     # ── MD/TXT 简单链 ─────────────────────────────────────────
     graph.add_edge("chunk_text", "encode_text_vectors")

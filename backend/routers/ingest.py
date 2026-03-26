@@ -60,6 +60,7 @@ def ingest_pipeline(
     - MD/TXT：直接 chunk_text → 向量化 → Qdrant
     响应为 SSE 日志流。
     """
+    import queue
     import tempfile
     from backend.pipelines.sse_bridge import pipeline_to_log_generator
 
@@ -86,6 +87,12 @@ def ingest_pipeline(
         return log_gen_to_sse(_err())
 
     image_dir = request.app.state.image_dir
+
+    # 创建进度队列：deepdoc 节点通过 app_state._ingest_progress_q 写入，
+    # sse_bridge 消费并实时推送到前端（绕过 LangGraph 节点完成才 yield 的限制）
+    progress_q = queue.Queue()
+    state._ingest_progress_q = progress_q
+
     initial_state = {
         "file_path": tmp_path,
         "pipeline_mode": "rag",
@@ -95,8 +102,11 @@ def ingest_pipeline(
 
     def _cleanup_gen():
         try:
-            yield from pipeline_to_log_generator(state.lg_rag_pipeline, initial_state)
+            yield from pipeline_to_log_generator(
+                state.lg_rag_pipeline, initial_state, progress_queue=progress_q
+            )
         finally:
+            state._ingest_progress_q = None  # 清理侧信道
             try:
                 os.remove(tmp_path)
             except Exception:
