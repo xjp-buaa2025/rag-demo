@@ -110,4 +110,18 @@ def create_tools(state, neo4j_cfg: dict):
         except Exception as e:
             return f"计算错误：{e}"
 
-    return [rag_search, bom_query, vision_describe, image_search, calculator]
+    @tool
+    def procedure_chain_query(question: str) -> str:
+        """查询装配工序链。适用于询问装配步骤、操作顺序、工具需求、技术规范等问题。返回从知识图谱提取的有序装配步骤列表（包含工具和规范）。"""
+        from backend.routers.bom import _query_procedure_chain, _query_bom_text
+
+        _, proc_text = _query_procedure_chain(state, neo4j_cfg, question)
+        bom_text = _query_bom_text(state, neo4j_cfg, question)
+        parts = []
+        if proc_text:
+            parts.append(proc_text)
+        if bom_text:
+            parts.append(f"【相关零件清单】\n{bom_text}")
+        return "\n\n".join(parts) if parts else "知识图谱中未找到相关装配工序。"
+
+    return [rag_search, bom_query, procedure_chain_query, vision_describe, image_search, calculator]

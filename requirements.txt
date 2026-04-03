@@ -41,9 +41,18 @@ tiktoken
 # Graph Database (BOM → Neo4j)
 neo4j
 
+# CAD 模型解析（STEP/STP 文件 → 装配树 + 配合约束 + 空间邻接）
+# 安装方式：conda install -c conda-forge pythonocc-core
+# pip 安装不稳定，强烈建议通过 conda-forge 安装
+# pythonocc-core
+
 # Web/API integration for custom Skills in future
 requests
 aiohttp
+
+# 混合检索（BM25 稀疏检索）
+rank-bm25>=0.2.2    # BM25Okapi 实现
+jieba>=0.42.1       # 中文分词（与英文 regex 双轨分词）
 
 # FastAPI 后端（重构自 app.py）
 fastapi>=0.111

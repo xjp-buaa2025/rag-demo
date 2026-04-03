@@ -183,6 +183,8 @@ def _do_ingest(state: AppState, data_dir: str, clear_first: bool,
                 state.qdrant_client.delete_collection(COLLECTION_NAME)
                 from backend.main import _init_qdrant, QDRANT_DB_PATH
                 state.qdrant_client = _init_qdrant(QDRANT_DB_PATH, COLLECTION_NAME)
+                if state.bm25_manager is not None:
+                    state.bm25_manager.reset()
                 yield emit("🗑️  已清空旧数据，重新开始入库…")
             except Exception as e:
                 yield emit(f"清空失败: {e}")
@@ -215,6 +217,8 @@ def _do_ingest(state: AppState, data_dir: str, clear_first: bool,
             )
         except Exception:
             pass
+        if state.bm25_manager is not None:
+            state.bm25_manager.remove_by_doc_id(doc_id)
 
         points = []
         for i, chunk in enumerate(chunk_dicts):
@@ -293,6 +297,16 @@ def _do_ingest(state: AppState, data_dir: str, clear_first: bool,
             state.qdrant_client.upsert(collection_name=COLLECTION_NAME, points=batch)
             end = min(start + batch_size, total)
             yield emit(f"   [{end}/{total}] 已写入…")
+
+        # 更新 BM25 索引（仅文本块，图片块不参与 BM25）
+        if state.bm25_manager is not None:
+            text_pairs = [
+                (p.id, p.payload["text"])
+                for p in points
+                if p.payload.get("chunk_type") == "text"
+            ]
+            if text_pairs:
+                state.bm25_manager.add_documents(text_pairs, doc_id=doc_id)
 
         yield emit(f"   ✅  {fname} 入库完成（{total} 块）")
         total_all += total

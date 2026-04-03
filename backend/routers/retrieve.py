@@ -110,6 +110,85 @@ def qdrant_search_image(qdrant_client, embedding_mgr, query: str, n: int) -> Lis
     return [_qdrant_point_to_dict(p) for p in results.points]
 
 
+def bm25_search_text(bm25_manager, query: str, n: int) -> List[dict]:
+    """
+    BM25 关键词检索。返回 [{"id": uuid, "bm25_score": float}, ...] 轻量结构（无 payload）。
+    bm25_manager 为 None 或索引为空时返回 []。
+    """
+    if bm25_manager is None:
+        return []
+    try:
+        hits = bm25_manager.search(query, n)
+        return [{"id": pid, "bm25_score": score} for pid, score in hits]
+    except Exception as e:
+        print(f"[retrieve] BM25 检索异常（{e}）")
+        return []
+
+
+def reciprocal_rank_fusion(
+    dense_results: List[dict],
+    bm25_results: List[dict],
+    k: int = 60,
+) -> List[dict]:
+    """
+    RRF 融合两路排名结果。
+    公式：RRF(d) = Σ 1/(k + rank_i(d))，rank 从 1 开始。
+    以 dense_results 的完整 payload 为基准；
+    仅出现在 BM25 而不在 dense 中的文档跳过（payload 不可用）。
+    返回按 RRF 分数降序排列的 dict 列表，distance 字段替换为 rrf_score。
+    """
+    dense_rank = {c["id"]: i + 1 for i, c in enumerate(dense_results)}
+    bm25_rank  = {c["id"]: i + 1 for i, c in enumerate(bm25_results)}
+
+    all_ids = set(dense_rank) | set(bm25_rank)
+    rrf_scores: dict = {}
+    for cid in all_ids:
+        score = 0.0
+        if cid in dense_rank:
+            score += 1.0 / (k + dense_rank[cid])
+        if cid in bm25_rank:
+            score += 1.0 / (k + bm25_rank[cid])
+        rrf_scores[cid] = score
+
+    id_to_chunk = {c["id"]: c for c in dense_results}
+    fused = []
+    for cid, rrf_score in sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True):
+        if cid in id_to_chunk:
+            chunk = dict(id_to_chunk[cid])
+            chunk["distance"] = rrf_score   # 覆盖原 cosine distance，保持接口一致
+            chunk["rrf_score"] = rrf_score
+            fused.append(chunk)
+        # 仅出现在 BM25 中的 id：跳过（dense 未召回，payload 无法还原）
+
+    return fused
+
+
+def hybrid_search_text(
+    qdrant_client, embedding_mgr, bm25_manager,
+    query: str, n: int,
+) -> List[dict]:
+    """
+    混合文本检索：Dense(bge-m3) + BM25，通过 RRF(k=60) 融合。
+    - bm25_manager 为 None 时降级为纯 Dense 检索
+    - BM25 侧召回数为 n*2（计算廉价，多召回增加 RRF 融合覆盖面）
+    - 任何 BM25 异常自动降级，不影响 Dense 检索结果
+    返回 schema 与 qdrant_search_text 相同。
+    """
+    dense_results = qdrant_search_text(qdrant_client, embedding_mgr, query, n)
+
+    if not bm25_manager or not dense_results:
+        return dense_results
+
+    try:
+        bm25_hits = bm25_search_text(bm25_manager, query, n * 2)
+        if not bm25_hits:
+            return dense_results
+        return reciprocal_rank_fusion(dense_results, bm25_hits, k=60)
+    except Exception as e:
+        print(f"[retrieve] BM25 混合检索失败（{e}），降级为纯 Dense")
+        return dense_results
+
+
 def merge_and_dedup(text_results: List[dict], image_results: List[dict]) -> List[dict]:
     """
     合并两路检索结果，按 ID 去重，保留同一块中 distance 最高（最相关）的版本。
@@ -168,8 +247,8 @@ def retrieve(body: RetrieveRequest, state: AppState = Depends(get_state)):
     if not body.use_rerank or state.reranker is None:
         recall_n = min(body.top_k, total)
 
-    text_results = qdrant_search_text(
-        state.qdrant_client, state.embedding_mgr, body.query, recall_n
+    text_results = hybrid_search_text(
+        state.qdrant_client, state.embedding_mgr, state.bm25_manager, body.query, recall_n
     )
 
     image_results = []

@@ -341,6 +341,8 @@ def make_rag_nodes(app_state: Any, image_dir: str):
                 app_state.qdrant_client.delete_collection(COLLECTION_NAME)
                 from backend.main import _init_qdrant, QDRANT_DB_PATH
                 app_state.qdrant_client = _init_qdrant(QDRANT_DB_PATH, COLLECTION_NAME)
+                if app_state.bm25_manager is not None:
+                    app_state.bm25_manager.reset()
                 logs.append("[upsert] 已清空旧数据")
             except Exception as e:
                 logs.append(f"[upsert] 清空失败: {e}")
@@ -357,6 +359,8 @@ def make_rag_nodes(app_state: Any, image_dir: str):
             )
         except Exception:
             pass
+        if app_state.bm25_manager is not None:
+            app_state.bm25_manager.remove_by_doc_id(doc_id)
 
         # 反序列化 PointStruct
         points = [_deserialize_point(p) for p in serialized_points]
@@ -370,6 +374,17 @@ def make_rag_nodes(app_state: Any, image_dir: str):
             app_state.qdrant_client.upsert(collection_name=COLLECTION_NAME, points=batch)
             end = min(start + batch_size, total)
             logs.append(f"  [{end}/{total}] 已写入…")
+
+        # 更新 BM25 索引（仅文本块，图片块不参与 BM25）
+        if app_state.bm25_manager is not None:
+            text_pairs = [
+                (p.id, p.payload["text"])
+                for p in points
+                if p.payload.get("chunk_type") == "text"
+            ]
+            if text_pairs:
+                app_state.bm25_manager.add_documents(text_pairs, doc_id=doc_id)
+                logs.append(f"[upsert] BM25 索引已更新（{len(text_pairs)} 个文本块）")
 
         count = app_state.get_doc_count()
         logs.append(f"[upsert] 完成！本次入库 {total} 块，知识库共 {count} 条")

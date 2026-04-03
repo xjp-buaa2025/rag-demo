@@ -278,12 +278,37 @@ def make_bom_nodes(app_state: Any, neo4j_cfg: dict):
             return {"error": f"Neo4j 写入失败: {e}", "log_messages": logs}
 
     # ------------------------------------------------------------------
+    # 新增节点：bom_to_triples（联合KG管道专用）
+    # ------------------------------------------------------------------
+
+    def bom_to_triples(state: dict) -> dict:
+        """
+        将已清洗的 BOM DataFrame JSON 转换为标准三元组格式，
+        填入 state["bom_kg_triples"] 和 state["bom_entities"]。
+
+        委托给 nodes_kg_unified.bom_to_triples_node，在此注册为 BOM 管道节点，
+        使联合 KG 管道的 bom 阶段可以直接复用整条 BOM 链。
+        """
+        try:
+            from backend.pipelines.nodes_kg_unified import make_unified_kg_nodes
+            _unified = make_unified_kg_nodes(app_state, neo4j_cfg)
+            return _unified["bom_to_triples"](state)
+        except Exception as e:
+            return {
+                "bom_kg_triples": [],
+                "bom_entities":   {},
+                "log_messages":   [f"[BOM→Triples] 调用失败：{e}"],
+                "current_node":   "bom_to_triples",
+            }
+
+    # ------------------------------------------------------------------
     # 返回节点字典
     # ------------------------------------------------------------------
     return {
-        "extract_tables": extract_tables,
-        "llm_to_csv": llm_to_csv,
-        "load_table": load_table,
+        "extract_tables":  extract_tables,
+        "llm_to_csv":      llm_to_csv,
+        "load_table":      load_table,
         "validate_bom_df": validate_bom_df,
-        "write_neo4j": write_neo4j,
+        "write_neo4j":     write_neo4j,
+        "bom_to_triples":  bom_to_triples,
     }

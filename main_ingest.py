@@ -55,10 +55,11 @@ CLIP_MODEL      = "OFA-Sys/chinese-clip-vit-large-patch14"
 
 def _split_text(text: str, chunk_size: int = 500) -> List[str]:
     """
-    按中文句子边界切分文本，每块不超过 chunk_size 字。
-    500字≈2-5段正文，是语义完整性与检索精度的平衡点。
+    按中英文句子边界切分文本，每块不超过 chunk_size 字。
+    500字≈2-5段中文正文，或80-100个英文单词，是语义完整性与检索精度的平衡点。
+    支持：中文句末标点（。！？）、英文句末标点后接空白（.!? + space）、换行符。
     """
-    sentences = re.split(r'(?<=[。！？\n])', text)
+    sentences = re.split(r'(?<=[。！？])|(?<=[.!?])\s+|\n', text)
     chunks, current = [], ""
     for sent in sentences:
         if len(current) + len(sent) > chunk_size and current:

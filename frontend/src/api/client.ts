@@ -8,7 +8,7 @@
 // 非 SSE 接口返回普通 Promise<T>。
 // ============================================================
 
-import type { HealthResponse, IngestStatus, BomStatus, Chunk, Message, SseFrame } from '../types'
+import type { HealthResponse, IngestStatus, BomStatus, Chunk, Message, SseFrame, KgGraphData, KgTaskCreateResponse, KgTaskStatus } from '../types'
 
 const BASE = '/api'
 
@@ -92,8 +92,16 @@ export async function postRetrieve(query: string, topK = 4): Promise<{ chunks: C
 // ----------------------------------------------------------
 // RAG 问答（SSE）
 // ----------------------------------------------------------
-export function postChat(message: string, history: Message[]) {
-  return postSSE('/chat', { message, history })
+export function postChat(
+  message: string,
+  history: Message[],
+  imageChunks?: Array<{ text: string; source: string; page: number; distance: number; image_url?: string }>
+) {
+  return postSSE('/chat', {
+    message,
+    history,
+    ...(imageChunks && imageChunks.length > 0 ? { image_chunks: imageChunks } : {}),
+  })
 }
 
 // ----------------------------------------------------------
@@ -146,6 +154,53 @@ export function postBomIngestPipeline(file: File | null, clearFirst: boolean) {
 // ----------------------------------------------------------
 export function postAssemblyChat(message: string, history: Message[]) {
   return postSSE('/assembly/chat', { message, history })
+}
+
+// ----------------------------------------------------------
+// 知识图谱可视化数据（JSON）
+// ----------------------------------------------------------
+export async function getKgGraph(keyword?: string, limit?: number): Promise<KgGraphData> {
+  const params = new URLSearchParams()
+  if (keyword) params.set('keyword', keyword)
+  if (limit) params.set('limit', String(limit))
+  const qs = params.toString()
+  const res = await fetch(`${BASE}/bom/kg/graph${qs ? `?${qs}` : ''}`)
+  return res.json()
+}
+
+// ----------------------------------------------------------
+// 联合 KG 构建任务接口
+// ----------------------------------------------------------
+
+/** POST /kg/task/create — 创建任务，返回 task_id */
+export async function kgTaskCreate(): Promise<KgTaskCreateResponse> {
+  const res = await fetch(`${BASE}/kg/task/create`, { method: 'POST' })
+  if (!res.ok) throw new Error(`创建 KG 任务失败: ${res.status}`)
+  return res.json()
+}
+
+/**
+ * POST /kg/task/{taskId}/upload — 上传单文件并处理（SSE）
+ * stage: 'bom' | 'cad' | 'manual'
+ */
+export function kgTaskUpload(taskId: string, stage: 'bom' | 'cad' | 'manual', file: File, clearFirst = false) {
+  const form = new FormData()
+  form.append('stage', stage)
+  form.append('file', file)
+  form.append('clear_first', String(clearFirst))
+  return postSSE(`/kg/task/${taskId}/upload`, form)
+}
+
+/** POST /kg/task/{taskId}/merge — 触发三源合并+写库（SSE），无需 body */
+export function kgTaskMerge(taskId: string) {
+  return postSSE(`/kg/task/${taskId}/merge`)
+}
+
+/** GET /kg/task/{taskId}/status — 查询各阶段完成情况 */
+export async function kgTaskStatus(taskId: string): Promise<KgTaskStatus> {
+  const res = await fetch(`${BASE}/kg/task/${taskId}/status`)
+  if (!res.ok) throw new Error(`查询 KG 任务状态失败: ${res.status}`)
+  return res.json()
 }
 
 // ----------------------------------------------------------

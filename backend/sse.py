@@ -9,20 +9,22 @@ backend/sse.py — 生成器 → SSE StreamingResponse 适配层
 
 2. Chat 类（chat、assembly_chat）：
    每次 yield 完整的累积回答文本（逐 token 累积）。
-   最后一条包含 [__IMAGES__] 标记（可选），用于携带检索到的图片 URL。
+   最后一条追加 _SOURCES_JSON_SEP + JSON 格式的结构化来源列表。
    SSE 端：
      中间帧：{"delta": new_part}
-     最后帧：{"done": true, "sources_md": "...", "image_urls": [...]}
+     最后帧：{"done": true, "sources": [...Citation...], "image_urls": [...]}
 """
 
 import json
 from typing import Iterator
 from fastapi.responses import StreamingResponse
 
-# Chat 生成器中用于分隔回答正文与参考来源的标志字符串
-_SOURCES_SEP = "\n\n---\n"
-# 用于分隔参考来源与图片 URL 列表的标志字符串
+# Chat 生成器中用于分隔回答正文与结构化来源 JSON 的标志字符串
+_SOURCES_JSON_SEP = "\n\n[__SOURCES_JSON__]"
+# 兼容旧版：图片 URL 分隔符（已废弃，图片信息现在内嵌在 sources JSON 中）
 _IMAGES_SEP = "\n\n[__IMAGES__]"
+# 阶段状态标记前缀（生成器 yield 此前缀的字符串，SSE 层转为 stage 帧）
+_STAGE_PREFIX = "__STAGE__:"
 
 
 def _sse_data(payload: dict) -> str:
@@ -56,14 +58,13 @@ def chat_gen_to_sse(gen: Iterator) -> StreamingResponse:
     """
     将 chat / assembly_chat 生成器转为 SSE StreamingResponse。
     - 中间帧：data: {"delta": "<本次新增文本>"}\n\n
-    - 最后帧：data: {"done": true, "sources_md": "<参考来源 Markdown>",
-                      "image_urls": ["<url1>", ...]}\n\n
+    - 最后帧：data: {"done": true, "sources": [...Citation...], "image_urls": [...]}\n\n
 
     生成器约定：
-      最后一次 yield 的字符串可选地在末尾追加：
-        \n\n[__IMAGES__]["<url1>","<url2>"]
-      sse.py 识别并解析该标记，提取 image_urls 放入 done 帧。
-      sources_md 以 _SOURCES_SEP 为分隔符从回答体中提取。
+      最后一次 yield 的字符串在末尾追加：
+        \n\n[__SOURCES_JSON__][{...}, ...]
+      sse.py 识别并解析该标记，提取结构化 Citation 列表放入 done 帧。
+      image_urls 从 sources 中自动提取（chunk_type=="image" 且有 image_url）。
     """
     def event_stream():
         prev_len = 0
@@ -73,8 +74,13 @@ def chat_gen_to_sse(gen: Iterator) -> StreamingResponse:
                 if not isinstance(snapshot, str):
                     snapshot = str(snapshot)
 
-                # 计算 delta（去掉 [__IMAGES__] 尾缀后的部分）
-                visible = snapshot.split(_IMAGES_SEP, 1)[0] if _IMAGES_SEP in snapshot else snapshot
+                # 阶段标记检测：emit stage 帧，不更新 prev_len
+                if snapshot.startswith(_STAGE_PREFIX):
+                    yield _sse_data({"stage": snapshot[len(_STAGE_PREFIX):]})
+                    continue
+
+                # 计算 delta（去掉 _SOURCES_JSON_SEP 及其后内容，只发送回答正文增量）
+                visible = snapshot.split(_SOURCES_JSON_SEP, 1)[0]
                 delta = visible[prev_len:]
                 prev_len = len(visible)
                 last_snapshot = snapshot
@@ -89,22 +95,21 @@ def chat_gen_to_sse(gen: Iterator) -> StreamingResponse:
             yield _sse_data({"error": str(e)})
             return
 
-        # 解析 image_urls
-        image_urls = []
-        if _IMAGES_SEP in last_snapshot:
-            body_part, img_json = last_snapshot.split(_IMAGES_SEP, 1)
+        # 解析结构化来源 JSON
+        sources = []
+        if _SOURCES_JSON_SEP in last_snapshot:
+            _, sources_raw = last_snapshot.split(_SOURCES_JSON_SEP, 1)
             try:
-                image_urls = json.loads(img_json)
+                sources = json.loads(sources_raw)
             except Exception:
-                image_urls = []
-            last_snapshot = body_part
+                sources = []
 
-        # 提取 sources_md
-        sources_md = ""
-        if _SOURCES_SEP in last_snapshot:
-            _, sources_md = last_snapshot.split(_SOURCES_SEP, 1)
-            sources_md = _SOURCES_SEP + sources_md
+        # 从 sources 中提取图片 URL（chunk_type=="image" 且有 image_url）
+        image_urls = [
+            s["image_url"] for s in sources
+            if s.get("chunk_type") == "image" and s.get("image_url")
+        ]
 
-        yield _sse_data({"done": True, "sources_md": sources_md, "image_urls": image_urls})
+        yield _sse_data({"done": True, "sources": sources, "image_urls": image_urls})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

@@ -49,6 +49,9 @@ MINIMAX_BASE_URL       = os.getenv("MINIMAX_BASE_URL","https://api.minimaxi.com/
 MINIMAX_MODEL          = os.getenv("MINIMAX_MODEL",   "MiniMax-M2.5")
 # Vision 专用 Key：图片入库 Caption 使用付费 Token，与对话 LLM 隔离
 MINIMAX_VISION_API_KEY = os.getenv("MINIMAX_VISION_API_KEY", "").strip() or MINIMAX_API_KEY
+VISION_API_KEY  = os.getenv("VISION_API_KEY",  "").strip()
+VISION_BASE_URL = os.getenv("VISION_BASE_URL", LLM_BASE_URL)
+VISION_MODEL    = os.getenv("VISION_MODEL",    "Qwen/Qwen3-VL-8B-Instruct")
 
 
 def _init_qdrant(db_path: str, collection_name: str, clip_dim: int = 768):
@@ -124,6 +127,7 @@ async def lifespan(app: FastAPI):
 
     # 4. LLM 客户端（主备降级）
     minimax_client = None
+    minimax_model  = MINIMAX_MODEL
     if MINIMAX_API_KEY:
         _primary  = OpenAI(api_key=MINIMAX_API_KEY, base_url=MINIMAX_BASE_URL)
         _fallback = OpenAI(api_key=LLM_API_KEY,     base_url=LLM_BASE_URL)
@@ -133,14 +137,17 @@ async def lifespan(app: FastAPI):
         llm_client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
         label = LLM_MODEL
 
-    # Vision 专用 client：优先用 MINIMAX_VISION_API_KEY（付费 Token，防并发限流）
-    # 若未单独配置则回退到 MINIMAX_API_KEY；两者都没有则 Vision 不可用
-    if MINIMAX_VISION_API_KEY:
-        minimax_client = OpenAI(api_key=MINIMAX_VISION_API_KEY, base_url=MINIMAX_BASE_URL)
-        if MINIMAX_VISION_API_KEY != MINIMAX_API_KEY:
-            print("[backend] Vision client 使用独立的 MINIMAX_VISION_API_KEY。")
+    # Vision 专用 client：优先用 VISION_* 配置（SiliconFlow Qwen-VL，支持 data URI inline base64）
+    # 回退到 MINIMAX_VISION_API_KEY；两者都没有则 Vision 不可用
+    _vision_key = VISION_API_KEY or MINIMAX_VISION_API_KEY
+    _vision_url = VISION_BASE_URL if VISION_API_KEY else MINIMAX_BASE_URL
+    _vision_mdl = VISION_MODEL    if VISION_API_KEY else MINIMAX_MODEL
+    if _vision_key:
+        minimax_client = OpenAI(api_key=_vision_key, base_url=_vision_url)
+        minimax_model  = _vision_mdl
+        print(f"[backend] Vision client: {_vision_mdl} @ {_vision_url}")
     else:
-        print("[backend] ⚠️ 未配置 MINIMAX_API_KEY / MINIMAX_VISION_API_KEY，图片 Caption 生成功能不可用。")
+        print("[backend] ⚠️ 未配置 Vision Key，图片描述功能不可用。")
 
     # 5. 将所有单例存入 app.state，供路由通过 Depends(get_state) 获取
     app.state.app_state = AppState(
@@ -149,7 +156,7 @@ async def lifespan(app: FastAPI):
         llm_client=llm_client,
         active_model_label=label,
         minimax_client=minimax_client,
-        minimax_model=MINIMAX_MODEL,
+        minimax_model=minimax_model,
         reranker=reranker,
     )
     app.state.llm_model      = LLM_MODEL
@@ -209,15 +216,53 @@ async def lifespan(app: FastAPI):
 
     # 8. LangGraph 管道初始化（渐进式，不影响原有功能）
     try:
-        from backend.pipelines.factory import make_rag_pipeline, make_bom_pipeline
+        from backend.pipelines.factory import make_rag_pipeline, make_bom_pipeline, make_cad_pipeline
         _state = app.state.app_state
         _neo4j_cfg = app.state.neo4j_cfg
 
-        _state.lg_rag_pipeline = make_rag_pipeline(_state, IMAGE_STORAGE_DIR)
+        _state.lg_rag_pipeline = make_rag_pipeline(_state, IMAGE_STORAGE_DIR, _neo4j_cfg)
         _state.lg_bom_pipeline = make_bom_pipeline(_state, _neo4j_cfg)
-        print("[backend] LangGraph 管道初始化完成（RAG + BOM 管道已就绪）。")
+        try:
+            _state.lg_cad_pipeline = make_cad_pipeline(_state, _neo4j_cfg)
+            print("[backend] LangGraph 管道初始化完成（RAG + BOM + CAD 管道已就绪）。")
+        except Exception as _cad_err:
+            print(f"[backend] CAD 管道初始化失败（{_cad_err}），STEP 文件解析不可用。")
+            print("[backend] LangGraph 管道初始化完成（RAG + BOM 管道已就绪）。")
     except Exception as _lg_err:
         print(f"[backend] LangGraph 管道初始化失败（{_lg_err}），管道模式不可用。")
+
+    # 9. 联合 KG 构建管道 + 任务管理器初始化
+    try:
+        from backend.pipelines.factory import make_unified_kg_pipeline
+        from backend.kg_task_manager import KGTaskManager
+        _state = app.state.app_state
+        _state.lg_kg_pipeline  = make_unified_kg_pipeline(_state, IMAGE_STORAGE_DIR, app.state.neo4j_cfg)
+        _state.kg_task_manager = KGTaskManager(ttl_seconds=7200)
+        print("[backend] 联合 KG 构建管道初始化完成（lg_kg_pipeline + KGTaskManager 已就绪）。")
+    except Exception as _kg_err:
+        print(f"[backend] 联合 KG 管道初始化失败（{_kg_err}），/kg 端点不可用。")
+
+    # 10. BM25 索引初始化（混合检索支持）
+    try:
+        from backend.bm25_manager import BM25Manager
+        _bm25_path = os.path.join(_ROOT, "storage", "bm25_index.pkl")
+        _bm25_mgr = BM25Manager(index_path=_bm25_path)
+        if not _bm25_mgr.has_index():
+            _qdrant_count = app.state.app_state.get_doc_count()
+            if _qdrant_count > 0:
+                print(f"[backend] BM25 索引不存在，从 Qdrant 重建（约 {_qdrant_count} 个块）…")
+                _rebuilt = _bm25_mgr.rebuild_from_qdrant(qdrant_client, COLLECTION_NAME)
+                print(f"[backend] BM25 索引重建完成，共 {_rebuilt} 个文本块。")
+            else:
+                print("[backend] 知识库为空，BM25 索引待入库后自动更新。")
+        else:
+            print(f"[backend] BM25 索引已加载（{_bm25_mgr.doc_count()} 个文档）。")
+        app.state.app_state.bm25_manager = _bm25_mgr
+        # 将 bm25_manager 注入已初始化的 LangChain Retriever
+        if app.state.app_state.lc_retriever is not None:
+            app.state.app_state.lc_retriever.bm25_manager = _bm25_mgr
+    except Exception as _bm25_err:
+        print(f"[backend] BM25 初始化失败（{_bm25_err}），混合检索降级为纯 Dense。")
 
     count = app.state.app_state.get_doc_count()
     print(f"[backend] 初始化完成，知识库共 {count} 条文档块。LLM: {label}")
@@ -297,14 +342,16 @@ app.mount("/images", StaticFiles(directory=_image_dir), name="images")
 from backend.routers import (  # noqa: E402
     ingest, retrieve, chat, eval as eval_router, bom, assembly, vision
 )
+from backend.routers import kg as _kg_router  # noqa: E402
 
-app.include_router(ingest.router,       tags=["知识库"])
-app.include_router(retrieve.router,     tags=["检索"])
-app.include_router(chat.router,         tags=["问答"])
-app.include_router(eval_router.router,  tags=["评估"])
-app.include_router(bom.router,          tags=["BOM"])
-app.include_router(assembly.router,     tags=["装配"])
-app.include_router(vision.router,       tags=["视觉"])
+app.include_router(ingest.router,        tags=["知识库"])
+app.include_router(retrieve.router,      tags=["检索"])
+app.include_router(chat.router,          tags=["问答"])
+app.include_router(eval_router.router,   tags=["评估"])
+app.include_router(bom.router,           tags=["BOM"])
+app.include_router(assembly.router,      tags=["装配"])
+app.include_router(vision.router,        tags=["视觉"])
+app.include_router(_kg_router.router,    prefix="/kg", tags=["KG联合构建"])
 
 
 # ==========================================

@@ -5,7 +5,7 @@ POST /chat
   请求体：{"message": "用户问题", "history": [...OpenAI messages 格式...]}
   响应：SSE 流
     中间帧：data: {"delta": "<新增文本>"}\n\n
-    最后帧：data: {"done": true, "sources_md": "...", "image_urls": [...]}\n\n
+    最后帧：data: {"done": true, "sources": [...Citation...], "image_urls": [...]}\n\n
 
 检索策略：
   1. 多查询：LLM 生成额外查询（静默），多查询分别检索
@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from backend.deps import get_state, get_llm_model
 from backend.state import AppState, COLLECTION_NAME
-from backend.sse import chat_gen_to_sse, _IMAGES_SEP
+from backend.sse import chat_gen_to_sse, _SOURCES_JSON_SEP
 
 router = APIRouter()
 
@@ -33,6 +33,10 @@ MULTI_QUERY_COUNT = 2 # 额外生成的查询数
 SYSTEM_PROMPT = """你是一个专业的知识库问答助手。请严格根据提供的参考资料回答用户问题。
 如果参考资料中没有相关信息，请如实说明"知识库中没有找到相关内容"，不要凭空捏造。
 回答要详细、准确、有条理，尽量引用原文中的具体数据和技术细节，不要省略重要信息。
+
+**重要：引用标注要求**
+参考资料已按编号 [1][2][3]... 标注。在回答中，每引用某条资料的具体内容时，请在该句末尾紧跟对应编号，格式为 [编号]，例如："涡扇发动机的风扇压比通常在1.3到1.8之间 [1]。"若同时引用多条，则写 [1][3]。请务必引用，不要遗漏。
+
 如果参考资料中包含图片（标记为"图片描述"的条目会附带图片URL），请在回答中使用 Markdown 图片语法 ![描述](URL) 展示相关图片。只使用参考资料中提供的图片URL，不要编造URL。
 当参考资料中包含以 [FLOWCHART NODE] 或 [FLOWCHART PATH] 开头的条目时，这些内容来自技术手册的故障排查流程图。请严格按照 YES/NO 分支逻辑组织回答，明确说明每个判断点的条件和对应操作，不要合并或省略关键的判断步骤，以正确的顺序引导用户完成故障排查程序。"""
 
@@ -42,9 +46,18 @@ class MessageItem(BaseModel):
     content: str
 
 
+class ImageChunkInput(BaseModel):
+    text: str
+    source: str = "上传图片"
+    page: int = 0
+    distance: float = 1.0
+    image_url: Optional[str] = None
+
+
 class ChatRequest(BaseModel):
     message: str
     history: List[MessageItem] = []
+    image_chunks: Optional[List[ImageChunkInput]] = None
 
 
 def _generate_extra_queries(state: AppState, llm_model: str,
@@ -54,11 +67,15 @@ def _generate_extra_queries(state: AppState, llm_model: str,
     SSE 约束：此函数绝不 yield，在 LLM 流式输出前静默完成。
     """
     prompt = (
-        f"请为以下问题从{count}个不同角度生成{count}个补充检索查询。\n"
-        "要求：\n1. 每个查询独占一行，无需编号或其他符号\n"
-        "2. 与原问题表达不同，侧重不同方面或使用不同关键词\n"
-        "3. 保持简洁，不超过50字\n\n"
-        f"原问题：{original_question}\n\n仅输出{count}个查询，每行一个："
+        f"Please generate {count} supplementary search queries for the following question "
+        f"from {count} different angles.\n"
+        "Requirements:\n"
+        "1. One query per line, no numbering or symbols\n"
+        "2. Use different expressions, focus on different aspects or keywords\n"
+        "3. Keep concise (under 50 words per query)\n"
+        "4. IMPORTANT: Use the SAME language as the original question\n\n"
+        f"Original question: {original_question}\n\n"
+        f"Output {count} queries, one per line:"
     )
     try:
         resp = state.llm_client.chat.completions.create(
@@ -85,7 +102,7 @@ def _multi_query_retrieve(state: AppState, queries: List[str],
     返回按 distance 降序排列的候选块列表（Qdrant 余弦相似度越高越相关）。
     SSE 约束：此函数绝不 yield。
     """
-    from backend.routers.retrieve import qdrant_search_text, qdrant_search_image
+    from backend.routers.retrieve import hybrid_search_text, qdrant_search_image
 
     total = state.get_doc_count()
     if total == 0:
@@ -95,8 +112,9 @@ def _multi_query_retrieve(state: AppState, queries: List[str],
     seen: dict = {}
 
     for query in queries:
-        # 路径1：bge-m3 文本检索
-        for chunk in qdrant_search_text(state.qdrant_client, state.embedding_mgr, query, n):
+        # 路径1：bge-m3 Dense + BM25 混合文本检索（RRF 融合）
+        for chunk in hybrid_search_text(state.qdrant_client, state.embedding_mgr,
+                                        state.bm25_manager, query, n):
             cid = chunk["id"]
             if cid not in seen or chunk["distance"] > seen[cid]["distance"]:
                 seen[cid] = chunk
@@ -158,7 +176,15 @@ def _boost_flowchart_chunks(candidates: List[dict], query: str) -> List[dict]:
 @router.post("/chat", summary="RAG 流式问答（SSE）")
 def chat(body: ChatRequest, request: Request, state: AppState = Depends(get_state)):
     llm_model = request.app.state.llm_model
-    gen = _chat_gen(state, llm_model, body.message, body.history)
+    img_chunks = None
+    if body.image_chunks:
+        img_chunks = [
+            {"id": f"clip_upload_{i}", "chunk_type": "image",
+             "text": c.text, "source": c.source, "page": c.page,
+             "distance": c.distance, "image_url": c.image_url}
+            for i, c in enumerate(body.image_chunks)
+        ]
+    gen = _chat_gen(state, llm_model, body.message, body.history, img_chunks)
     return chat_gen_to_sse(gen)
 
 
@@ -204,52 +230,43 @@ def _format_context(chunks, broken_img_re=None):
     return "\n\n".join(context_parts)
 
 
-def _build_sources_and_images(chunks):
+def _build_sources(chunks) -> list:
     """
-    从检索结果中提取参考来源 Markdown 和图片 URL 列表。
+    从检索结果中提取结构化来源列表（Citation），供前端侧边栏溯源展示。
     供 LangChain Chain 和原生路径共用。
 
     Returns:
-        (sources_text: str, image_urls: list)
+        list of Citation dicts:
+          {id, source, page, chunk_type, text, image_url}
     """
-    sources_text = ""
-    if chunks:
-        source_lines = ["\n\n---\n**📚 参考来源**\n"]
-        for i, c in enumerate(chunks, 1):
-            if hasattr(c, "page_content"):
-                text = c.page_content
-                source = c.metadata.get("source", "未知")
-                page = c.metadata.get("page", 0)
-                chunk_type = c.metadata.get("chunk_type", "text")
-                image_url = c.metadata.get("image_url")
-            else:
-                text = c["text"]
-                source = c["source"]
-                page = c.get("page", 0)
-                chunk_type = c.get("chunk_type", "text")
-                image_url = c.get("image_url")
-
-            page_info = f" · 第 {page} 页" if page else ""
-            type_tag = " 🖼️" if chunk_type == "image" else ""
-            snippet = text[:80].replace("\n", " ")
-            source_lines.append(f"**[{i}] {source}{page_info}{type_tag}**  \n_{snippet}…_\n")
-        sources_text = "\n".join(source_lines)
-
-    image_urls = []
-    for c in chunks:
+    sources = []
+    for i, c in enumerate(chunks, 1):
         if hasattr(c, "page_content"):
-            ct = c.metadata.get("chunk_type", "text")
-            iu = c.metadata.get("image_url")
+            text = c.page_content
+            source = c.metadata.get("source", "未知")
+            page = c.metadata.get("page", 0)
+            chunk_type = c.metadata.get("chunk_type", "text")
+            image_url = c.metadata.get("image_url")
         else:
-            ct = c.get("chunk_type", "text")
-            iu = c.get("image_url")
-        if ct == "image" and iu:
-            image_urls.append(iu)
+            text = c["text"]
+            source = c["source"]
+            page = c.get("page", 0)
+            chunk_type = c.get("chunk_type", "text")
+            image_url = c.get("image_url")
 
-    return sources_text, image_urls
+        sources.append({
+            "id": i,
+            "source": source,
+            "page": page,
+            "chunk_type": chunk_type,
+            "text": text,
+            "image_url": image_url,
+        })
+    return sources
 
 
-def _chat_gen(state: AppState, llm_model: str, message: str, history: List[MessageItem]):
+def _chat_gen(state: AppState, llm_model: str, message: str, history: List[MessageItem],
+              image_chunks=None):
     """RAG 问答生成器：多查询 + 双路检索 + 重排序 + 图片 URL 透传。"""
     if state.get_doc_count() == 0:
         yield "⚠️ 知识库为空，请先点击入库按钮导入文档。"
@@ -263,12 +280,12 @@ def _chat_gen(state: AppState, llm_model: str, message: str, history: List[Messa
     )
 
     if use_langchain:
-        yield from _chat_gen_langchain(state, message, history)
+        yield from _chat_gen_langchain(state, message, history, image_chunks)
     else:
-        yield from _chat_gen_native(state, llm_model, message, history)
+        yield from _chat_gen_native(state, llm_model, message, history, image_chunks)
 
 
-def _chat_gen_langchain(state: AppState, message: str, history: List[MessageItem]):
+def _chat_gen_langchain(state: AppState, message: str, history: List[MessageItem], image_chunks=None):
     """LangChain 路径：使用 Chain + Retriever + Memory 组件。"""
     from backend.langchain_components.chains import build_multi_query_chain, build_rag_chain
     from backend.langchain_components.memory import ChatMemoryManager
@@ -278,6 +295,7 @@ def _chat_gen_langchain(state: AppState, message: str, history: List[MessageItem
     memory_mgr = state.lc_memory_manager
 
     # ===== 阶段一：多查询生成（通过 LangChain Chain）=====
+    yield "__STAGE__:正在生成多角度检索查询..."
     try:
         multi_query_chain = build_multi_query_chain(lc)
         extra_queries = multi_query_chain.invoke({
@@ -290,6 +308,7 @@ def _chat_gen_langchain(state: AppState, message: str, history: List[MessageItem
         extra_queries = []
 
     # ===== 阶段二+三：多查询分别检索 + 去重 + 重排序（通过 Retriever）=====
+    yield "__STAGE__:正在向量检索知识库..."
     all_queries = [message] + extra_queries
     try:
         # 用多查询分别调 Retriever，合并去重
@@ -311,7 +330,26 @@ def _chat_gen_langchain(state: AppState, message: str, history: List[MessageItem
         yield "⚠️ 知识库为空，请先点击入库按钮导入文档。"
         return
 
+    # 注入 CLIP 以图搜图的图片块
+    if image_chunks:
+        from langchain_core.documents import Document
+        existing_ids = {d.metadata.get("id") for d in docs}
+        for ic in image_chunks:
+            if ic.get("id") not in existing_ids:
+                docs.append(Document(
+                    page_content=ic["text"],
+                    metadata={
+                        "id": ic.get("id"),
+                        "source": ic.get("source", "上传图片"),
+                        "page": ic.get("page", 0),
+                        "chunk_type": "image",
+                        "image_url": ic.get("image_url"),
+                        "distance": ic.get("distance", 1.0),
+                    }
+                ))
+
     # ===== 阶段四：构建上下文 + 流式 LLM 调用（通过 LCEL Chain）=====
+    yield "__STAGE__:正在生成回答..."
     context = _format_context(docs)
     lc_history = ChatMemoryManager.history_to_messages(history)
     rag_chain = build_rag_chain(lc)
@@ -329,21 +367,21 @@ def _chat_gen_langchain(state: AppState, message: str, history: List[MessageItem
         yield f"❌ LLM 调用失败：{e}"
         return
 
-    # ===== 阶段五：追加参考来源 + 图片 URL =====
-    sources_text, image_urls = _build_sources_and_images(docs)
-    final = full_answer + sources_text
-    if image_urls:
-        final += _IMAGES_SEP + json.dumps(image_urls, ensure_ascii=False)
-    yield final
+    # ===== 阶段五：追加结构化来源 JSON（供前端溯源侧边栏使用）=====
+    sources = _build_sources(docs)
+    yield full_answer + _SOURCES_JSON_SEP + json.dumps(sources, ensure_ascii=False)
 
 
-def _chat_gen_native(state: AppState, llm_model: str, message: str, history: List[MessageItem]):
+def _chat_gen_native(state: AppState, llm_model: str, message: str, history: List[MessageItem],
+                     image_chunks=None):
     """原生路径（fallback）：使用 OpenAI SDK 直接调用，与原有逻辑完全一致。"""
-    # ===== 阶段一：多查询生成（静默）=====
+    # ===== 阶段一：多查询生成 =====
+    yield "__STAGE__:正在生成多角度检索查询..."
     extra_queries = _generate_extra_queries(state, llm_model, message, MULTI_QUERY_COUNT)
     all_queries = [message] + extra_queries
 
-    # ===== 阶段二：双路多查询检索 + 去重（静默）=====
+    # ===== 阶段二：双路多查询检索 + 去重 =====
+    yield "__STAGE__:正在向量检索知识库..."
     try:
         candidates = _multi_query_retrieve(state, all_queries, RECALL_K)
     except Exception as e:
@@ -353,11 +391,20 @@ def _chat_gen_native(state: AppState, llm_model: str, message: str, history: Lis
         yield "⚠️ 知识库为空，请先点击入库按钮导入文档。"
         return
 
-    # ===== 阶段三：流程图提权 + 重排序（静默）=====
+    # ===== 阶段三：流程图提权 + 重排序 =====
+    yield "__STAGE__:正在对检索结果重排序..."
     candidates = _boost_flowchart_chunks(candidates, message)
     chunks = _rerank(state, message, candidates, TOP_K)
 
+    # 注入 CLIP 以图搜图的图片块（前端上传图片时传来，去重合并）
+    if image_chunks:
+        existing_ids = {c.get("id") for c in chunks}
+        for ic in image_chunks:
+            if ic.get("id") not in existing_ids:
+                chunks.append(ic)
+
     # ===== 阶段四：构建 messages 并流式调用 LLM =====
+    yield "__STAGE__:正在生成回答..."
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for item in history[-12:]:
         if item.role in ("user", "assistant"):
@@ -384,9 +431,6 @@ def _chat_gen_native(state: AppState, llm_model: str, message: str, history: Lis
         yield f"❌ LLM 调用失败：{e}"
         return
 
-    # ===== 阶段五：追加参考来源 + 图片 URL =====
-    sources_text, image_urls = _build_sources_and_images(chunks)
-    final = full_answer + sources_text
-    if image_urls:
-        final += _IMAGES_SEP + json.dumps(image_urls, ensure_ascii=False)
-    yield final
+    # ===== 阶段五：追加结构化来源 JSON（供前端溯源侧边栏使用）=====
+    sources = _build_sources(chunks)
+    yield full_answer + _SOURCES_JSON_SEP + json.dumps(sources, ensure_ascii=False)

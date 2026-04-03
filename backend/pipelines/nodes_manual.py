@@ -1139,6 +1139,159 @@ def make_manual_nodes(app_state: Any, image_dir: str) -> dict:
         }
 
     # ------------------------------------------------------------------
+    # 节点 7c：extract_visual_kg — 从爆炸图/装配图中抽取零件结构三元组
+    # ------------------------------------------------------------------
+
+    _VISUAL_KG_KEYWORDS = [
+        "爆炸图", "装配图", "结构图", "剖视图", "示意图", "分解图", "安装图",
+        "exploded", "assembly drawing", "cross-section",
+    ]
+
+    _VISUAL_KG_PROMPT = """\
+你是航空发动机装配领域的图纸分析专家。请分析这张装配示意图/爆炸图，抽取其中可见的零件结构关系。
+
+要求：
+1. 识别图中标注的零件名称（含序号标注，如"①高压压气机"）
+2. 抽取 isPartOf 关系（哪个零件属于哪个组件）
+3. 识别零件间的配合界面（matesWith）
+4. 仅输出图中明确可见的信息，不要推测
+
+输出格式（严格JSON，不包含其他内容）：
+{"parts":[{"id":"v1","name":"零件名","parent":"父组件名或null"}],"mates":[{"part_a":"零件A","part_b":"零件B","interface":"配合面描述或空字符串"}]}
+"""
+
+    def extract_visual_kg(state: dict) -> dict:
+        """节点7c：从含爆炸图/装配图关键词的图片中，用视觉LLM抽取 isPartOf/matesWith 三元组。"""
+        figure_records = state.get("figure_records") or []
+        captions = {r["image_path"]: r.get("caption_text", "") for r in figure_records}
+
+        # 也从 captions 列表里补充（RAG 管道生成的图片描述）
+        for cap_rec in (state.get("captions") or []):
+            ip = cap_rec.get("image_path", "")
+            if ip and ip not in captions:
+                captions[ip] = cap_rec.get("caption", "")
+
+        # 筛选爆炸图/装配图
+        target_images = [
+            (ip, cap) for ip, cap in captions.items()
+            if any(kw in cap for kw in _VISUAL_KG_KEYWORDS)
+        ]
+
+        if not target_images:
+            return {
+                "visual_kg_triples": [],
+                "log_messages": ["[VisualKG] 无爆炸图/装配图，跳过视觉抽取"],
+                "current_node": "extract_visual_kg",
+            }
+
+        # 需要视觉 LLM
+        if not (hasattr(app_state, "minimax_client") and app_state.minimax_client
+                and hasattr(app_state, "minimax_model") and app_state.minimax_model):
+            return {
+                "visual_kg_triples": [],
+                "log_messages": [
+                    f"[VisualKG] 检测到 {len(target_images)} 张装配图，"
+                    "但视觉 LLM 不可用，跳过"
+                ],
+                "current_node": "extract_visual_kg",
+            }
+
+        import base64, json as _json, re as _re, os as _os
+
+        visual_triples = []
+        logs = [f"[VisualKG] 处理 {len(target_images)} 张装配图…"]
+
+        for image_path, caption in target_images:
+            if not _os.path.exists(image_path):
+                continue
+            try:
+                # 读图并转 base64
+                with open(image_path, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode()
+                ext = _os.path.splitext(image_path)[1].lower().lstrip(".")
+                mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
+                        "png": "image/png"}.get(ext, "image/jpeg")
+
+                resp = app_state.minimax_client.chat.completions.create(
+                    model=app_state.minimax_model,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {"type": "image_url",
+                             "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                            {"type": "text", "text": _VISUAL_KG_PROMPT},
+                        ],
+                    }],
+                    temperature=0.1,
+                )
+                raw = resp.choices[0].message.content or ""
+                m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+                if not m:
+                    continue
+                data = _json.loads(m.group())
+
+                # 转换为标准 KG triple 格式
+                entities, relations = [], []
+                vid_to_name: dict = {}
+                for p in data.get("parts", []):
+                    pid = p.get("id", f"v{len(entities)+1}")
+                    vid_to_name[pid] = p.get("name", "")
+                    entities.append({
+                        "id": pid,
+                        "type": "Part",
+                        "text": p.get("name", ""),
+                        "description": f"从装配图中识别的零件（来源图片：{_os.path.basename(image_path)}）",
+                    })
+                    if p.get("parent"):
+                        # 确保父节点也有实体
+                        parent_id = f"vp_{p['parent']}"
+                        if not any(e["text"] == p["parent"] for e in entities):
+                            entities.append({
+                                "id": parent_id,
+                                "type": "Assembly",
+                                "text": p["parent"],
+                                "description": f"从装配图中识别的组件（来源图片：{_os.path.basename(image_path)}）",
+                            })
+                        relations.append({
+                            "head": pid, "tail": parent_id,
+                            "type": "isPartOf", "weight": 7,
+                        })
+
+                for mate in data.get("mates", []):
+                    pa, pb = mate.get("part_a", ""), mate.get("part_b", "")
+                    if not pa or not pb:
+                        continue
+                    ea = next((e["id"] for e in entities if e["text"] == pa), None)
+                    eb = next((e["id"] for e in entities if e["text"] == pb), None)
+                    if ea and eb:
+                        relations.append({
+                            "head": ea, "tail": eb,
+                            "type": "matesWith", "weight": 7,
+                        })
+
+                if entities:
+                    visual_triples.append({
+                        "entities": entities,
+                        "relations": relations,
+                        "chunk_id": f"visual_{_os.path.basename(image_path)}",
+                        "ata_section": "视觉抽取",
+                        "source": "visual",
+                    })
+                    logs.append(
+                        f"  {_os.path.basename(image_path)}: "
+                        f"抽取 {len(entities)} 个实体，{len(relations)} 条关系"
+                    )
+            except Exception as exc:
+                logs.append(f"  {_os.path.basename(image_path)}: 抽取失败（{exc}）")
+
+        logs.append(f"[VisualKG] 完成，共抽取 {len(visual_triples)} 张图片的结构三元组")
+        return {
+            "visual_kg_triples": visual_triples,
+            "log_messages": logs,
+            "current_node": "extract_visual_kg",
+        }
+
+    # ------------------------------------------------------------------
     # 节点 8：vision_layout_agent
     # ------------------------------------------------------------------
 
@@ -1349,5 +1502,6 @@ def make_manual_nodes(app_state: Any, image_dir: str) -> dict:
         "extract_figures": extract_figures,
         "generate_tech_captions": generate_tech_captions,
         "extract_flowchart_structure": extract_flowchart_structure,
+        "extract_visual_kg": extract_visual_kg,
         "vision_layout_agent": vision_layout_agent,
     }

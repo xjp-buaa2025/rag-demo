@@ -12,11 +12,20 @@ def detect_input(state: dict) -> dict:
     """检测文件扩展名，设置 file_ext 字段。"""
     file_path = state["file_path"]
     ext = os.path.splitext(file_path)[1].lower().lstrip(".")
-    return {
+    result = {
         "file_ext": ext,
         "current_node": "detect_input",
-        "log_messages": [f"[detect_input] 文件类型: .{ext} | 管道: {state.get('pipeline_mode', '?')}"],
+        "log_messages": [
+            f"[detect_input] 文件类型: .{ext} | 管道: {state.get('pipeline_mode', '?')}"
+            f" | stage: {state.get('kg_task_stage', '-')}"
+        ],
     }
+    # 明确透传 KG 路由字段，防止 LangGraph 版本差异导致字段丢失
+    if "kg_task_stage" in state:
+        result["kg_task_stage"] = state["kg_task_stage"]
+    if "kg_task_id" in state:
+        result["kg_task_id"] = state["kg_task_id"]
+    return result
 
 
 def error_handler(state: dict) -> dict:

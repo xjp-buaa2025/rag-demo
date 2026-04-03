@@ -80,9 +80,17 @@ class AppState:
     # --- LangGraph 管道（渐进式启用，由 lifespan 初始化）---
     lg_rag_pipeline: Optional[Any] = None     # CompiledStateGraph（pipelines.factory.make_rag_pipeline）
     lg_bom_pipeline: Optional[Any] = None     # CompiledStateGraph（pipelines.factory.make_bom_pipeline）
+    lg_cad_pipeline: Optional[Any] = None     # CompiledStateGraph（pipelines.factory.make_cad_pipeline）
+    lg_kg_pipeline:  Optional[Any] = None     # CompiledStateGraph（pipelines.factory.make_unified_kg_pipeline）
+
+    # --- 联合 KG 构建任务管理器 ---
+    kg_task_manager: Optional[Any] = None     # backend.kg_task_manager.KGTaskManager
 
     # --- deepdoc AI 解析引擎（PDF 精细化处理）---
     deepdoc_engine: Optional[Any] = None      # backend.pipelines.deepdoc_wrapper.DeepDocEngine
+
+    # --- BM25 混合检索 ---
+    bm25_manager: Optional[Any] = None     # backend.bm25_manager.BM25Manager
 
     # --- 并发控制 ---
     is_ingesting: bool = False

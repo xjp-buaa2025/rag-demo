@@ -8,7 +8,7 @@ PipelineState 是两条管道（RAG / BOM）共享的统一状态类型。
 from __future__ import annotations
 
 from operator import add
-from typing import Annotated, List, Literal, Optional, TypedDict
+from typing import Annotated, Literal, Optional, TypedDict
 
 
 class PipelineState(TypedDict, total=False):
@@ -17,7 +17,7 @@ class PipelineState(TypedDict, total=False):
     # === 输入 ===
     file_path: str                      # 源文件绝对路径
     file_ext: str                       # 扩展名（不含点）：pdf / docx / md / txt / xlsx / csv
-    pipeline_mode: Literal["rag", "bom"]
+    pipeline_mode: Literal["rag", "bom", "kg"]
     clear_first: bool
 
     # === RAG 中间产物 ===
@@ -48,8 +48,34 @@ class PipelineState(TypedDict, total=False):
     #   referencing_chunks, context_text}]
     figure_records: list[dict]
 
+    # === CAD 解析产物 ===
+    cad_assembly_tree: dict       # STEP 装配层级树（嵌套 dict）
+    cad_constraints: list[dict]   # 配合约束列表 [{part_a, part_b, constraint_type, interface}]
+    cad_adjacency: list[dict]     # 空间邻接关系列表 [{part_a, part_b, gap_mm}]
+
+    # === 知识图谱产物 ===
+    kg_triples: list[dict]          # LLM 提取的原始三元组（手册）
+    kg_aligned_triples: list[dict]  # 实体对齐后的三元组
+    kg_dag_valid: bool              # precedes 关系 DAG 校验结果
+    kg_stats: dict                  # 入库统计 {nodes, relations, errors}
+
+    # === 视觉抽取 KG 产物 ===
+    visual_kg_triples: list[dict]   # 从爆炸图/装配图中抽取的额外三元组
+
+    # === KG 验证产物 ===
+    kg_verification_report: dict    # {total, verified, low_conf, inconsistent, details: list}
+
     # === 进度追踪 ===
     log_messages: Annotated[list[str], add]   # 各节点追加日志，reducer 自动合并
+
+    # === 联合KG构建：多源中间产物 ===
+    bom_kg_triples: list[dict]      # BOM 转换的标准三元组（与 kg_triples 格式一致）
+    bom_entities: dict               # {normalize(part_name) -> {gid, part_id, part_name, type}}
+    cad_kg_triples: list[dict]      # CAD 转换的标准三元组
+    cad_entities: dict               # {normalize(part_name) -> {gid, part_name, type}}
+    merged_kg_triples: list[dict]   # 三源合并后的三元组（供 align/verify 消费）
+    kg_task_id: str                  # 批量任务 UUID
+    kg_task_stage: str               # "bom"|"cad"|"manual"|"merge"
 
     # === 状态标记 ===
     current_node: str

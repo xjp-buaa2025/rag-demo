@@ -39,6 +39,7 @@ class QdrantDualPathRetriever(BaseRetriever):
     qdrant_client: Any = None
     embedding_mgr: Any = None
     reranker: Any = None
+    bm25_manager: Optional[Any] = None     # BM25Manager，None 时降级为纯 Dense 检索
     collection_name: str = "rag_knowledge"
     recall_k: int = Field(default=8, description="每路检索的初始召回数")
     top_k: int = Field(default=4, description="最终返回的文档数")
@@ -65,7 +66,7 @@ class QdrantDualPathRetriever(BaseRetriever):
         from backend.routers.retrieve import (
             merge_and_dedup,
             qdrant_search_image,
-            qdrant_search_text,
+            hybrid_search_text,
         )
 
         total = self._get_doc_count()
@@ -74,9 +75,9 @@ class QdrantDualPathRetriever(BaseRetriever):
 
         n = min(self.recall_k, total)
 
-        # 路径 1：bge-m3 文本检索
-        text_results = qdrant_search_text(
-            self.qdrant_client, self.embedding_mgr, query, n
+        # 路径 1：Dense + BM25 混合文本检索（RRF 融合）
+        text_results = hybrid_search_text(
+            self.qdrant_client, self.embedding_mgr, self.bm25_manager, query, n
         )
 
         # 路径 2：Chinese-CLIP 图片检索（兜底防护）

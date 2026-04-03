@@ -289,7 +289,7 @@ def bom_status(state: AppState = Depends(get_state), cfg: dict = Depends(get_neo
 # POST /bom/ingest
 # ==========================================
 
-@router.post("/ingest/pipeline", summary="LangGraph 管道 BOM 入库（SSE）")
+@router.post("/ingest/pipeline", summary="LangGraph 管道 BOM/CAD 入库（SSE）")
 def bom_ingest_pipeline(
     request: Request,
     file: Optional[UploadFile] = File(default=None),
@@ -298,27 +298,23 @@ def bom_ingest_pipeline(
     cfg: dict = Depends(get_neo4j_cfg),
 ):
     """
-    LangGraph 管道 BOM 入库：
-    - PDF/DOCX：extract_tables → llm_to_csv → validate_bom_df → write_neo4j
-    - Excel/CSV：load_table → validate_bom_df → write_neo4j
+    LangGraph 管道入库（BOM 与 CAD 统一入口）：
+    - STEP/STP → lg_cad_pipeline（parse_cad_step → cad_to_kg_triples）
+    - PDF/DOCX  → lg_bom_pipeline（extract_tables → llm_to_csv → write_neo4j）
+    - Excel/CSV → lg_bom_pipeline（load_table → validate_bom_df → write_neo4j）
+    两条管道均在后台线程运行（同 RAG 管道），LLM 调用期间实时推送进度日志。
     响应为 SSE 日志流。
     """
+    import queue
     from backend.pipelines.sse_bridge import pipeline_to_log_generator
-
-    if state.lg_bom_pipeline is None:
-        def _err():
-            yield "❌ LangGraph BOM 管道未初始化，请检查后端日志"
-        return log_gen_to_sse(_err())
 
     bom_default = request.app.state.bom_default
 
     if file is None:
-        # 使用默认 BOM 文件
         filepath = bom_default
         filename = os.path.basename(filepath)
         tmp_path = None
     else:
-        # 将上传文件写入临时目录
         suffix = os.path.splitext(file.filename or "bom.xlsx")[1] or ".xlsx"
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(file.file.read())
@@ -331,17 +327,43 @@ def bom_ingest_pipeline(
             yield f"❌ 文件不存在：{filepath}"
         return log_gen_to_sse(_err())
 
+    # 根据扩展名选择管道
+    ext = os.path.splitext(filename or "")[1].lower()
+    is_cad = ext in (".step", ".stp")
+
+    if is_cad:
+        pipeline = state.lg_cad_pipeline
+        mode = "cad"
+        if pipeline is None:
+            def _err():
+                yield "❌ LangGraph CAD 管道未初始化，请检查后端日志"
+            return log_gen_to_sse(_err())
+    else:
+        pipeline = state.lg_bom_pipeline
+        mode = "bom"
+        if pipeline is None:
+            def _err():
+                yield "❌ LangGraph BOM 管道未初始化，请检查后端日志"
+            return log_gen_to_sse(_err())
+
     initial_state = {
         "file_path": filepath,
-        "pipeline_mode": "bom",
+        "pipeline_mode": mode,
         "clear_first": clear_first,
-        "log_messages": [f"[pipeline] 开始处理 BOM：{filename}"],
+        "log_messages": [f"[pipeline] 开始处理（{mode.upper()}）：{filename}"],
     }
+
+    # 使用进度队列 + 后台线程，避免 LLM 调用期间 SSE 静默挂起
+    # 同时挂到 state._ingest_progress_q，让节点内部（如 KG 节点）可通过侧信道推送中间进度
+    progress_q = queue.Queue()
+    state._ingest_progress_q = progress_q
 
     def _cleanup_gen():
         try:
-            yield from pipeline_to_log_generator(state.lg_bom_pipeline, initial_state)
+            yield from pipeline_to_log_generator(pipeline, initial_state,
+                                                  progress_queue=progress_q)
         finally:
+            state._ingest_progress_q = None  # 清理侧信道
             if tmp_path and os.path.exists(tmp_path):
                 try:
                     os.remove(tmp_path)
@@ -552,6 +574,229 @@ def bom_query(body: BomQueryRequest, state: AppState = Depends(get_state), cfg: 
     return {"bom_text": bom_text}
 
 
+# ==========================================
+# GET /bom/kg/graph — 知识图谱可视化数据
+# ==========================================
+
+@router.get("/kg/graph", summary="获取知识图谱可视化数据（D3 力导向图）")
+def kg_graph(
+    keyword: str = "",
+    limit: int = 200,
+    state: AppState = Depends(get_state),
+    cfg: dict = Depends(get_neo4j_cfg),
+):
+    """
+    返回 Neo4j 中所有类型的节点和关系，格式化为 D3 力导向图数据。
+
+    - keyword 为空：返回全图（截断到 limit）
+    - keyword 非空：返回包含该关键词的节点及其 1 跳邻居
+    """
+    driver = _get_neo4j_driver(state, cfg)
+    if driver is None:
+        return {"nodes": [], "links": [], "error": "Neo4j 未连接"}
+
+    nodes_map: dict = {}   # id → node dict
+    links: list = []
+    seen_links: set = set()
+
+    def _node_id(n) -> str:
+        """优先使用 kg_id，其次 part_id，兜底 elementId。"""
+        return n.get("kg_id") or n.get("part_id") or str(n.element_id)
+
+    def _node_label(n) -> str:
+        return n.get("kg_name") or n.get("part_name") or "?"
+
+    def _add_node(n):
+        nid = _node_id(n)
+        if nid in nodes_map:
+            return nid
+        labels_list = list(n.labels) if hasattr(n, 'labels') else []
+        node_type = labels_list[0] if labels_list else "Unknown"
+        nodes_map[nid] = {
+            "id": nid,
+            "label": _node_label(n),
+            "type": node_type,
+        }
+        # 附加有用属性
+        for key in ("part_id", "kg_name", "part_name", "ata_section", "material",
+                     "spec", "qty", "unit", "weight_kg", "seq_no"):
+            val = n.get(key)
+            if val is not None:
+                nodes_map[nid][key] = val
+        return nid
+
+    def _add_link(src_id: str, tgt_id: str, rel_type: str):
+        key = (src_id, rel_type, tgt_id)
+        if key not in seen_links:
+            seen_links.add(key)
+            links.append({"source": src_id, "target": tgt_id, "type": rel_type})
+
+    with driver.session() as session:
+        if keyword.strip():
+            # 关键词模式：匹配节点 + 1 跳邻居
+            rows = session.run("""
+                MATCH (n)
+                WHERE n.kg_name CONTAINS $kw
+                   OR n.part_name CONTAINS $kw
+                   OR (n.ata_section IS NOT NULL AND n.ata_section CONTAINS $kw)
+                WITH n LIMIT $lim
+                OPTIONAL MATCH (n)-[r]-(m)
+                RETURN n, r, m
+            """, kw=keyword.strip(), lim=limit).data()
+        else:
+            # 全图模式
+            rows = session.run("""
+                MATCH (n)
+                WITH n LIMIT $lim
+                OPTIONAL MATCH (n)-[r]->(m)
+                RETURN n, r, m
+            """, lim=limit).data()
+
+        for row in rows:
+            n = row.get("n")
+            if n is not None:
+                _add_node(n)
+
+            m = row.get("m")
+            r = row.get("r")
+            if m is not None and r is not None:
+                mid = _add_node(m)
+                nid = _node_id(n)
+                rel_type = r.type if hasattr(r, 'type') else str(type(r))
+                _add_link(nid, mid, rel_type)
+
+    return {"nodes": list(nodes_map.values()), "links": links}
+
+
+def _topological_sort_kahn(nodes: list, edges: list, node_data: dict) -> list:
+    """
+    Kahn 算法拓扑排序，返回有序 node_data 列表。
+    孤立节点（无 precedes 关系）按 seq_no 追加到末尾。
+    """
+    from collections import deque, defaultdict
+
+    in_degree: dict = defaultdict(int)
+    adj: dict = defaultdict(list)
+    node_set = set(nodes)
+
+    for u, v in edges:
+        if u in node_set and v in node_set:
+            adj[u].append(v)
+            in_degree[v] += 1
+
+    def _seq_key(nid: str) -> float:
+        d = node_data.get(nid, {})
+        s = d.get("seq_no")
+        try:
+            return float(s) if s is not None else 9999.0
+        except (TypeError, ValueError):
+            return 9999.0
+
+    queue = deque(
+        sorted([n for n in node_set if in_degree[n] == 0], key=_seq_key)
+    )
+    result: list = []
+    sorted_node_ids: set = set()
+    while queue:
+        node = queue.popleft()
+        result.append(node_data[node])
+        sorted_node_ids.add(node)
+        for neighbor in sorted(adj[node], key=_seq_key):
+            in_degree[neighbor] -= 1
+            if in_degree[neighbor] == 0:
+                queue.append(neighbor)
+
+    # 追加孤立节点（有环或无 precedes 边的节点）
+    for n in sorted(node_set - sorted_node_ids, key=_seq_key):
+        result.append(node_data[n])
+    return result
+
+
+def _query_procedure_chain(
+    state: AppState, cfg: dict, question: str
+) -> tuple[list, str]:
+    """
+    查询 precedes 关系链，返回 (有序步骤列表, 格式化文本)。
+
+    流程：
+      1. 按关键词查 Procedure 种子节点
+      2. 沿 precedes 链扩展（最多 5 跳）
+      3. 拉取 Tool / Specification 信息
+      4. Python 层 Kahn 拓扑排序
+      5. 格式化输出
+
+    Returns:
+        (ordered_steps, formatted_text)
+    """
+    driver = _get_neo4j_driver(state, cfg)
+    if driver is None:
+        return [], ""
+
+    kw = question[:20]
+
+    with driver.session() as session:
+        cnt = session.run(
+            "MATCH (p:Procedure) RETURN count(p) AS cnt"
+        ).single()
+        if not cnt or cnt["cnt"] == 0:
+            return [], ""
+
+        seed_rows = session.run("""
+            MATCH (p:Procedure)
+            WHERE p.kg_name CONTAINS $kw
+               OR (p.ata_section IS NOT NULL AND p.ata_section CONTAINS $kw)
+            RETURN p.kg_id AS proc_id, p.kg_name AS proc_name,
+                   p.ata_section AS ata_section, p.seq_no AS seq_no
+            LIMIT 20
+        """, kw=kw).data()
+
+        if not seed_rows:
+            return [], ""
+
+        seed_ids = [r["proc_id"] for r in seed_rows]
+
+        chain_rows = session.run("""
+            MATCH (start:Procedure)-[:precedes*0..5]->(n:Procedure)
+            WHERE start.kg_id IN $seed_ids
+            WITH DISTINCT n
+            OPTIONAL MATCH (n)-[:requires]->(t:Tool)
+            OPTIONAL MATCH (n)-[:specifiedBy]->(s:Specification)
+            RETURN n.kg_id AS proc_id, n.kg_name AS proc_name,
+                   n.seq_no AS seq_no, n.ata_section AS ata_section,
+                   collect(DISTINCT t.kg_name) AS tools,
+                   collect(DISTINCT (
+                       COALESCE(s.spec_value, '') + COALESCE(s.spec_unit, '')
+                   )) AS specs
+        """, seed_ids=seed_ids).data()
+
+        if not chain_rows:
+            return [], ""
+
+        all_ids = [r["proc_id"] for r in chain_rows]
+        edge_rows = session.run("""
+            MATCH (a:Procedure)-[:precedes]->(b:Procedure)
+            WHERE a.kg_id IN $all_ids AND b.kg_id IN $all_ids
+            RETURN a.kg_id AS from_id, b.kg_id AS to_id
+        """, all_ids=all_ids).data()
+
+    node_data = {r["proc_id"]: r for r in chain_rows}
+    edges = [(e["from_id"], e["to_id"]) for e in edge_rows]
+    ordered = _topological_sort_kahn(list(node_data.keys()), edges, node_data)
+
+    lines = ["【装配工序（有序）】"]
+    for i, step in enumerate(ordered, 1):
+        tools = "、".join(t for t in (step.get("tools") or []) if t)
+        specs = "、".join(s for s in (step.get("specs") or []) if s)
+        line = f"  步骤{i}：{step['proc_name']}"
+        if tools:
+            line += f"  工具：{tools}"
+        if specs:
+            line += f"  规范：{specs}"
+        lines.append(line)
+
+    return ordered, "\n".join(lines)
+
+
 def _query_bom_text(state: AppState, cfg: dict, question: str) -> str:
     """BOM 图谱查询，迁移自 app.py _query_bom_text()。"""
     driver = _get_neo4j_driver(state, cfg)
@@ -599,3 +844,137 @@ def _query_bom_text(state: AppState, cfg: dict, question: str) -> str:
                         f"  - {p['name']}({p['id']}) ×{p['qty']}{p['unit']}{mat}{spec}{note}"
                     )
         return "\n".join(lines) if lines else ""
+
+
+def _query_bom_entities(state: AppState, cfg: dict, question: str) -> dict:
+    """
+    BOM 图谱结构化查询：返回独立实体列表和关系列表，供细粒度溯源使用。
+    每个 Neo4j 节点和每条 CHILD_OF 边分别作为独立 Citation。
+    无 Neo4j 连接时返回 {"entities": [], "relations": []}，不抛异常。
+    """
+    driver = _get_neo4j_driver(state, cfg)
+    if driver is None:
+        return {"entities": [], "relations": []}
+
+    KNOWN_KEYWORDS = [
+        "风扇", "压气机", "高压压气机", "低压压气机", "燃烧室",
+        "高压涡轮", "低压涡轮", "涡轮", "附件", "尾喷管",
+        "叶片", "涡轮盘", "火焰筒", "喷嘴", "机匣", "转子", "静子",
+    ]
+    keywords = [kw for kw in KNOWN_KEYWORDS if kw in question] or [question[:15]]
+
+    seen_entities: dict = {}      # part_id → entity dict（按 part_id 去重）
+    seen_rel_keys: set = set()    # (from_id, rel_type, to_id)
+    relations: list = []
+
+    def _safe(val):
+        """将 None 转为空字符串，保留数值类型。"""
+        if val is None:
+            return ""
+        if isinstance(val, str):
+            return val
+        return val  # int / float 原样保留
+
+    with driver.session() as session:
+        for kw in keywords:
+            # ── 查询 A：匹配节点本身（附带直接父节点信息）──────────
+            for r in session.run("""
+                MATCH (n) WHERE n.part_name CONTAINS $kw
+                OPTIONAL MATCH (n)-[:CHILD_OF]->(parent)
+                RETURN labels(n)[0]      AS entity_type,
+                       n.part_id         AS part_id,
+                       n.part_name       AS part_name,
+                       n.part_name_en    AS part_name_en,
+                       n.qty             AS qty,
+                       n.unit            AS unit,
+                       n.material        AS material,
+                       n.weight_kg       AS weight_kg,
+                       n.spec            AS spec,
+                       n.note            AS note,
+                       n.level_code      AS level_code,
+                       parent.part_id    AS parent_id,
+                       parent.part_name  AS parent_name
+                LIMIT 30
+            """, kw=kw).data():
+                pid = r.get("part_id")
+                if pid and pid not in seen_entities:
+                    seen_entities[pid] = {
+                        "entity_type":  _safe(r.get("entity_type")) or "Part",
+                        "part_id":      _safe(r.get("part_id")),
+                        "part_name":    _safe(r.get("part_name")),
+                        "part_name_en": _safe(r.get("part_name_en")),
+                        "qty":          r.get("qty"),
+                        "unit":         _safe(r.get("unit")),
+                        "material":     _safe(r.get("material")),
+                        "weight_kg":    r.get("weight_kg"),
+                        "spec":         _safe(r.get("spec")),
+                        "note":         _safe(r.get("note")),
+                        "level_code":   _safe(r.get("level_code")),
+                        "parent_id":    r.get("parent_id"),
+                        "parent_name":  r.get("parent_name"),
+                    }
+
+            # ── 查询 B：直接子节点（depth=1）──────────────────────
+            for r in session.run("""
+                MATCH (n) WHERE n.part_name CONTAINS $kw
+                MATCH (child)-[:CHILD_OF]->(n)
+                RETURN labels(child)[0]   AS entity_type,
+                       child.part_id      AS part_id,
+                       child.part_name    AS part_name,
+                       child.part_name_en AS part_name_en,
+                       child.qty          AS qty,
+                       child.unit         AS unit,
+                       child.material     AS material,
+                       child.weight_kg    AS weight_kg,
+                       child.spec         AS spec,
+                       child.note         AS note,
+                       child.level_code   AS level_code,
+                       n.part_id          AS parent_id,
+                       n.part_name        AS parent_name
+                LIMIT 50
+            """, kw=kw).data():
+                pid = r.get("part_id")
+                if pid and pid not in seen_entities:
+                    seen_entities[pid] = {
+                        "entity_type":  _safe(r.get("entity_type")) or "Part",
+                        "part_id":      _safe(r.get("part_id")),
+                        "part_name":    _safe(r.get("part_name")),
+                        "part_name_en": _safe(r.get("part_name_en")),
+                        "qty":          r.get("qty"),
+                        "unit":         _safe(r.get("unit")),
+                        "material":     _safe(r.get("material")),
+                        "weight_kg":    r.get("weight_kg"),
+                        "spec":         _safe(r.get("spec")),
+                        "note":         _safe(r.get("note")),
+                        "level_code":   _safe(r.get("level_code")),
+                        "parent_id":    r.get("parent_id"),
+                        "parent_name":  r.get("parent_name"),
+                    }
+
+            # ── 查询 C：CHILD_OF 关系边（去重）──────────────────────
+            for r in session.run("""
+                MATCH (n) WHERE n.part_name CONTAINS $kw
+                MATCH (child)-[rel:CHILD_OF]->(n)
+                RETURN type(rel)          AS rel_type,
+                       labels(child)[0]   AS from_type,
+                       child.part_id      AS from_id,
+                       child.part_name    AS from_name,
+                       labels(n)[0]       AS to_type,
+                       n.part_id          AS to_id,
+                       n.part_name        AS to_name
+                LIMIT 60
+            """, kw=kw).data():
+                key = (r.get("from_id"), r.get("rel_type"), r.get("to_id"))
+                if all(key) and key not in seen_rel_keys:
+                    seen_rel_keys.add(key)
+                    relations.append({
+                        "rel_type":  _safe(r.get("rel_type")),
+                        "from_type": _safe(r.get("from_type")),
+                        "from_id":   _safe(r.get("from_id")),
+                        "from_name": _safe(r.get("from_name")),
+                        "to_type":   _safe(r.get("to_type")),
+                        "to_id":     _safe(r.get("to_id")),
+                        "to_name":   _safe(r.get("to_name")),
+                    })
+
+    return {"entities": list(seen_entities.values()), "relations": relations}

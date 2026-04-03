@@ -66,3 +66,51 @@ def route_after_extract_figures(state: dict) -> str:
     if state.get("figure_records"):
         return "generate_tech_captions"
     return "encode_text_vectors"
+
+
+def route_after_upsert(state: dict) -> str:
+    """upsert_qdrant 之后：有装配相关文本块时进入 KG 提取链，否则终止。"""
+    from langgraph.graph import END
+    if state.get("error"):
+        return END
+    chunks = state.get("manual_chunks") or state.get("text_chunks") or []
+    _PROCEDURE_KEYWORDS = [
+        "装配", "安装", "拆卸", "步骤", "工序", "拧紧",
+        "扭矩", "间隙", "公差", "工具", "锁紧", "对准",
+    ]
+    for chunk in chunks:
+        text = chunk.get("text", "")
+        if any(kw in text for kw in _PROCEDURE_KEYWORDS):
+            return "extract_kg_triples"
+    return END
+
+
+def route_cad_by_ext(state: dict) -> str:
+    """CAD 分支：STEP/STP 文件进入解析，其他文件类型报错。"""
+    ext = state.get("file_ext", "").lower()
+    if ext in ("stp", "step"):
+        return "parse_cad_step"
+    return "error_handler"
+
+
+def route_kg_by_stage(state: dict) -> str:
+    """
+    联合 KG 管道主路由：按 kg_task_stage 分流到各阶段入口节点。
+
+    "bom"    → bom_entry    （BOM 文件处理链）
+    "cad"    → cad_entry    （CAD 文件处理链）
+    "manual" → manual_entry （维修手册处理链）
+    "merge"  → merge_entry  （三源合并+写库链）
+    其他     → error_handler
+    """
+    if state.get("error"):
+        return "error_handler"
+    stage = state.get("kg_task_stage")
+    if not stage or stage not in {"bom", "cad", "manual", "merge"}:
+        return "error_handler"
+    return {
+        "bom":    "bom_entry",
+        "cad":    "cad_entry",
+        "manual": "manual_entry",
+        "merge":  "merge_entry",
+    }[stage]
