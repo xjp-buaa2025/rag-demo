@@ -4,8 +4,7 @@
 // 统一布局（无 Tab 切换）：
 //   - Accordion: 📂 知识库管理（KnowledgePanel）
 //   - Accordion: 📊 性能评估（EvalPanel）
-//   - Accordion: 📋 BOM 入库（BomIngest）
-//   - Accordion: 🔗 图谱构建（KgBuilder）
+//   - Accordion: 🔗 图谱构建（四阶段）（KgStagesPanel）
 //   - Accordion: 🕸️ 知识图谱（KgViewer）
 //   - 统一聊天（UnifiedChat，内含 RAG/装配 模式切换）
 //
@@ -16,8 +15,7 @@ import { useEffect, useState } from 'react'
 import { getHealth } from './api/client'
 import KnowledgePanel from './components/rag/KnowledgePanel'
 import EvalPanel from './components/rag/EvalPanel'
-import BomIngest from './components/bom/BomIngest'
-import KgBuilder from './components/kg/KgBuilder'
+import KgStagesPanel from './components/kg/KgStagesPanel'
 import KgViewer from './components/kg/KgViewer'
 import UnifiedChat from './components/shared/UnifiedChat'
 
@@ -75,12 +73,8 @@ function App() {
           <EvalPanel />
         </Accordion>
 
-        <Accordion title="📋 BOM 入库">
-          <BomIngest />
-        </Accordion>
-
-        <Accordion title="🔗 图谱构建">
-          <KgBuilder />
+        <Accordion title="🔗 图谱构建（四阶段）" defaultOpen={false}>
+          <KgStagesPanel />
         </Accordion>
 
         <Accordion title="🕸️ 知识图谱">

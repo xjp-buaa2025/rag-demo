@@ -74,13 +74,18 @@ def route_after_upsert(state: dict) -> str:
     if state.get("error"):
         return END
     chunks = state.get("manual_chunks") or state.get("text_chunks") or []
-    _PROCEDURE_KEYWORDS = [
+    _KEYWORDS_ZH = [
         "装配", "安装", "拆卸", "步骤", "工序", "拧紧",
         "扭矩", "间隙", "公差", "工具", "锁紧", "对准",
     ]
+    _KEYWORDS_EN = [
+        "install", "remove", "torque", "clearance", "inspect",
+        "assemble", "tighten", "procedure", "tool", "apply",
+    ]
     for chunk in chunks:
         text = chunk.get("text", "")
-        if any(kw in text for kw in _PROCEDURE_KEYWORDS):
+        if (any(kw in text for kw in _KEYWORDS_ZH)
+                or any(kw in text.lower() for kw in _KEYWORDS_EN)):
             return "extract_kg_triples"
     return END
 

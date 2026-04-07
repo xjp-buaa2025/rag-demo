@@ -352,6 +352,8 @@ app.include_router(bom.router,           tags=["BOM"])
 app.include_router(assembly.router,      tags=["装配"])
 app.include_router(vision.router,        tags=["视觉"])
 app.include_router(_kg_router.router,    prefix="/kg", tags=["KG联合构建"])
+from backend.routers import kg_stages as _kg_stages_router  # noqa
+app.include_router(_kg_stages_router.router, prefix="/kg", tags=["KG分阶段构建"])
 
 
 # ==========================================

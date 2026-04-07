@@ -21,6 +21,7 @@ const TYPE_COLORS: Record<string, string> = {
   Tool:          '#a855f7', // purple
   Specification: '#ef4444', // red
   Interface:     '#6b7280', // gray
+  GeoConstraint: '#0f766e',
 }
 const DEFAULT_COLOR = '#94a3b8'
 
@@ -34,6 +35,8 @@ const REL_COLORS: Record<string, string> = {
   matesWith:      '#22c55e',
   isPartOf:       '#6b7280',
   adjacentTo:     '#06b6d4',
+  hasInterface:   '#8b5cf6',
+  constrainedBy:  '#0f766e',
 }
 const DEFAULT_REL_COLOR = '#cbd5e1'
 

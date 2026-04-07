@@ -8,7 +8,7 @@
 // 非 SSE 接口返回普通 Promise<T>。
 // ============================================================
 
-import type { HealthResponse, IngestStatus, BomStatus, Chunk, Message, SseFrame, KgGraphData, KgTaskCreateResponse, KgTaskStatus } from '../types'
+import type { HealthResponse, IngestStatus, BomStatus, Chunk, Message, SseFrame, KgGraphData, KgTaskCreateResponse, KgTaskStatus, StagesStatus, TriplesPreview, ValidationReport, KgSseFrame } from '../types'
 
 const BASE = '/api'
 
@@ -153,7 +153,7 @@ export function postBomIngestPipeline(file: File | null, clearFirst: boolean) {
 // 装配方案问答（SSE）
 // ----------------------------------------------------------
 export function postAssemblyChat(message: string, history: Message[]) {
-  return postSSE('/assembly/chat', { message, history })
+  return postSSE('/assembly/agent', { message, history })
 }
 
 // ----------------------------------------------------------
@@ -200,6 +200,47 @@ export function kgTaskMerge(taskId: string) {
 export async function kgTaskStatus(taskId: string): Promise<KgTaskStatus> {
   const res = await fetch(`${BASE}/kg/task/${taskId}/status`)
   if (!res.ok) throw new Error(`查询 KG 任务状态失败: ${res.status}`)
+  return res.json()
+}
+
+// ----------------------------------------------------------
+// KG 分阶段构建接口
+// ----------------------------------------------------------
+
+export async function* postKgStage1(file: File, clearFirst = false): AsyncGenerator<KgSseFrame> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('clear_first', String(clearFirst))
+  yield* postSSE('/kg/stage1/bom', form) as AsyncGenerator<KgSseFrame>
+}
+
+export async function* postKgStage2(file: File): AsyncGenerator<KgSseFrame> {
+  const form = new FormData()
+  form.append('file', file)
+  yield* postSSE('/kg/stage2/manual', form) as AsyncGenerator<KgSseFrame>
+}
+
+export async function* postKgStage3(file: File): AsyncGenerator<KgSseFrame> {
+  const form = new FormData()
+  form.append('file', file)
+  yield* postSSE('/kg/stage3/cad', form) as AsyncGenerator<KgSseFrame>
+}
+
+export async function postKgStage4Validate(): Promise<ValidationReport> {
+  const res = await fetch(`${BASE}/kg/stage4/validate`, { method: 'POST' })
+  if (!res.ok) throw new Error(`验证失败: ${res.status}`)
+  return res.json()
+}
+
+export async function getKgStagesStatus(): Promise<StagesStatus> {
+  const res = await fetch(`${BASE}/kg/stages/status`)
+  return res.json()
+}
+
+export async function getKgStagePreview(
+  stage: string, offset = 0, limit = 50
+): Promise<TriplesPreview> {
+  const res = await fetch(`${BASE}/kg/stages/${stage}/preview?offset=${offset}&limit=${limit}`)
   return res.json()
 }
 

@@ -221,27 +221,31 @@ def make_unified_kg_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
         cad_entities: dict = {}          # normalize(name) → entity metadata
         name_to_eid:  dict = {}
 
-        def _get_or_create_entity(part_name: str) -> str:
-            """确保零件实体存在，返回 entity_id。"""
-            norm = _normalize(part_name)
+        def _get_or_create_entity(part_name: str, entity_type: str = "Part", stable_key: str | None = None, extra: dict | None = None) -> str:
+            norm = stable_key or _normalize(part_name)
             if norm in name_to_eid:
                 return name_to_eid[norm]
-            gid  = _compute_gid("CAD", part_name, "Part")
-            eid  = f"cad_{norm[:40]}"
-            entities.append({
+            gid  = _compute_gid("CAD", part_name, entity_type)
+            prefix = entity_type.lower()
+            eid  = f"cad_{prefix}_{norm[:36]}"
+            payload = {
                 "id":           eid,
-                "type":         "Part",
+                "type":         entity_type,
                 "text":         part_name,
                 "description":  "",
-                "cad_part_name": part_name,
                 "gid":          gid,
                 "source":       "CAD",
-            })
+            }
+            if entity_type == "Part":
+                payload["cad_part_name"] = part_name
+            if extra:
+                payload.update(extra)
+            entities.append(payload)
             name_to_eid[norm] = eid
             cad_entities[norm] = {
                 "gid":          gid,
                 "cad_part_name": part_name,
-                "type":         "Part",
+                "type":         entity_type,
                 "entity_id":    eid,
             }
             return eid
@@ -280,6 +284,35 @@ def make_unified_kg_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
                 "constraint_type": c.get("constraint_type", ""),
                 "interface":       c.get("interface", ""),
             })
+            iface_name = str(c.get("interface", "")).strip()
+            if iface_name:
+                iface_key = _normalize(f"{part_a}|{part_b}|{iface_name}")
+                iface_eid = _get_or_create_entity(
+                    iface_name,
+                    entity_type="Interface",
+                    stable_key=iface_key,
+                    extra={"iface_type": str(c.get("constraint_type", "")).strip()},
+                )
+                relations.append({
+                    "source_id": eid_a,
+                    "target_id": iface_eid,
+                    "type":      "hasInterface",
+                })
+                rel_constraint = str(c.get("constraint_type", "")).strip()
+                if rel_constraint:
+                    gc_name = f"{rel_constraint}:{iface_name}"
+                    gc_key = _normalize(f"{iface_key}|{rel_constraint}")
+                    gc_eid = _get_or_create_entity(
+                        gc_name,
+                        entity_type="GeoConstraint",
+                        stable_key=gc_key,
+                        extra={"constraint_type": rel_constraint},
+                    )
+                    relations.append({
+                        "source_id": iface_eid,
+                        "target_id": gc_eid,
+                        "type":      "constrainedBy",
+                    })
 
         # 邻接关系 → adjacentTo（联合KG任务默认包含，可设 state["skip_adjacency"]=True 跳过）
         if not state.get("skip_adjacency"):
@@ -310,7 +343,7 @@ def make_unified_kg_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
             "cad_entities":   cad_entities,
             "log_messages":   [
                 f"[CAD→Triples] 转换完成：{len(entities)} 实体，"
-                f"{len(relations)} 关系（isPartOf/matesWith/adjacentTo）"
+                f"{len(relations)} 关系（isPartOf/matesWith/adjacentTo/hasInterface/constrainedBy）"
             ],
             "current_node": "cad_to_triples",
         }

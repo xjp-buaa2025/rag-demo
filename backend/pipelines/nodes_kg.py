@@ -49,14 +49,15 @@ AVIATION_ABBREV: dict = {
 _KG_EXTRACTION_PROMPT = """\
 你是航空发动机装配领域的知识抽取专家。
 严格按照以下本体抽取实体和关系，不得添加本体之外的类型。
+输入文本可能为中文或英文。实体的 text 字段保留输入文本的原始语言（英文输入用英文，中文输入用中文）。
 
 实体类型（6类）：
-- Part：具体零部件（需有明确名称，如"高压压气机第3级叶片"）
-- Assembly：含子零件的子系统（如"高压压气机"）
-- Procedure：具体装配操作动作（如"插入叶片榫头"、"施加预紧扭矩"）
-- Tool：装配工具器具（如"扭力扳手"、"专用拆卸工装"）
+- Part：具体零部件（需有明确名称，如"高压压气机第3级叶片" 或 "Stage 3 compressor blade"）
+- Assembly：含子零件的子系统（如"高压压气机" 或 "High Pressure Compressor"）
+- Procedure：具体装配操作动作（如"插入叶片榫头" 或 "Insert blade dovetail"）
+- Tool：装配工具器具（如"扭力扳手" 或 "Torque wrench"）
 - Specification：数值技术要求（必须含具体数值和单位，如"50N·m"、"0.05~0.12mm"）
-- Interface：配合面或接口（如"榫头-榫槽配合"、"花键接口"）
+- Interface：配合面或接口（如"榫头-榫槽配合" 或 "Dovetail interface"）
 
 关系类型（5类）：
 - precedes：工序A必须在工序B之前完成（head和tail都必须是Procedure）
@@ -66,18 +67,22 @@ _KG_EXTRACTION_PROMPT = """\
 - matesWith：零件间存在配合关系（head和tail都是Part/Assembly）
 
 字段要求：
-- 实体字段：id（局部唯一字符串）、type、text（原文名称）、description（1-2句说明该实体功能/作用/特征，不可为空）
+- 实体字段：id（局部唯一字符串）、type、text（原文名称，保留原始语言）、description（1-2句说明该实体功能/作用/特征，不可为空）
 - 关系字段：head（实体id）、tail（实体id）、type、weight（整数1-10，该关系的置信度和重要性，10为最高）
 
-Few-shot示例1（工序链）：
+Few-shot示例1（中文工序链）：
 文本：首先检查叶片榫头表面，确认无毛刺，然后将叶片榫头对准叶盘榫槽缓慢插入，最后用扭力扳手施加50N·m预紧扭矩。
 {{"entities":[{{"id":"e1","type":"Procedure","text":"检查叶片榫头表面","description":"装配前检查叶片榫头表面质量，确认无毛刺、划伤等缺陷"}},{{"id":"e2","type":"Procedure","text":"插入叶片榫头至叶盘榫槽","description":"将叶片榫头对准叶盘榫槽缓慢插入的装配工序"}},{{"id":"e3","type":"Procedure","text":"施加预紧扭矩","description":"使用扭力扳手对叶片施加规定预紧扭矩，确保装配可靠性"}},{{"id":"e4","type":"Part","text":"叶片榫头","description":"叶片根部的榫形结构，用于嵌入叶盘榫槽实现固定"}},{{"id":"e5","type":"Tool","text":"扭力扳手","description":"可控制输出扭矩大小的专用装配工具"}},{{"id":"e6","type":"Specification","text":"50N·m","description":"预紧扭矩的规定数值，确保叶片装配后的夹紧力满足设计要求"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e2","tail":"e3","type":"precedes","weight":9}},{{"head":"e4","tail":"e2","type":"participatesIn","weight":8}},{{"head":"e3","tail":"e5","type":"requires","weight":9}},{{"head":"e3","tail":"e6","type":"specifiedBy","weight":10}}]}}
 
-Few-shot示例2（配合关系）：
+Few-shot示例2（英文工序链，实体保留英文）：
+文本：First inspect the blade dovetail surface for burrs. Then carefully insert the blade dovetail into the disk slot. Finally, apply 50 N·m torque using a torque wrench.
+{{"entities":[{{"id":"e1","type":"Procedure","text":"Inspect blade dovetail surface","description":"Pre-assembly check of blade dovetail surface for burrs or defects"}},{{"id":"e2","type":"Procedure","text":"Insert blade dovetail into disk slot","description":"Carefully insert blade dovetail into disk slot during assembly"}},{{"id":"e3","type":"Procedure","text":"Apply torque","description":"Apply specified torque using torque wrench to secure blade"}},{{"id":"e4","type":"Part","text":"Blade dovetail","description":"Root of blade with dovetail shape for fitting into disk slot"}},{{"id":"e5","type":"Tool","text":"Torque wrench","description":"Specialized tool for applying precise torque values"}},{{"id":"e6","type":"Specification","text":"50 N·m","description":"Required torque value for blade assembly"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e2","tail":"e3","type":"precedes","weight":9}},{{"head":"e4","tail":"e2","type":"participatesIn","weight":8}},{{"head":"e3","tail":"e5","type":"requires","weight":9}},{{"head":"e3","tail":"e6","type":"specifiedBy","weight":10}}]}}
+
+Few-shot示例3（中文配合关系）：
 文本：高压压气机转子叶片通过榫头-榫槽配合安装在叶盘上，配合间隙为0.05~0.12mm。
 {{"entities":[{{"id":"e1","type":"Part","text":"高压压气机转子叶片","description":"高压压气机级的旋转叶片，通过榫头安装在叶盘上，承受高温高压气流"}},{{"id":"e2","type":"Part","text":"叶盘","description":"压气机转子盘，盘缘设有榫槽用于安装叶片"}},{{"id":"e3","type":"Interface","text":"榫头-榫槽配合","description":"叶片榫头与叶盘榫槽之间的配合界面，是叶片固定的关键接口"}},{{"id":"e4","type":"Specification","text":"0.05~0.12mm","description":"榫头-榫槽配合间隙的允许范围，超出则影响装配质量"}}],"relations":[{{"head":"e1","tail":"e2","type":"matesWith","weight":9}},{{"head":"e3","tail":"e4","type":"specifiedBy","weight":10}}]}}
 
-Few-shot示例3（工具和规范）：
+Few-shot示例4（中文工具和规范）：
 文本：使用T-205专用工具锁紧锁片，再用扭力扳手施加规定扭矩，分三次施加不得一次到位。
 {{"entities":[{{"id":"e1","type":"Procedure","text":"锁紧锁片","description":"使用专用工具将锁片锁紧固定的装配工序"}},{{"id":"e2","type":"Procedure","text":"施加规定扭矩","description":"分三次用扭力扳手施加规定扭矩，不得一次到位"}},{{"id":"e3","type":"Tool","text":"T-205专用锁紧工具","description":"型号T-205的专用工具，用于锁紧锁片操作"}},{{"id":"e4","type":"Tool","text":"扭力扳手","description":"可控制输出扭矩大小的专用装配工具"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e1","tail":"e3","type":"requires","weight":10}},{{"head":"e2","tail":"e4","type":"requires","weight":10}}]}}
 
@@ -91,6 +96,7 @@ Few-shot示例3（工具和规范）：
 _KG_GLEANING_PROMPT = """\
 上一轮从以下文本中提取了实体和关系，但可能有遗漏。
 请仔细重新阅读文本，找出上一轮**未提取**的实体和关系，以补充形式返回。
+实体的 text 字段保留输入文本的原始语言，不要翻译。
 
 原始文本（ATA章节：{ata_section}）：
 {chunk_text}
@@ -120,6 +126,15 @@ _PROCEDURE_KEYWORDS = [
     "拆下", "卸下", "清洗", "涂抹", "润滑",
 ]
 
+_PROCEDURE_KEYWORDS_EN = [
+    "install", "remove", "assemble", "disassemble", "procedure", "step",
+    "torque", "clearance", "tolerance", "tighten", "loosen", "inspect",
+    "apply", "lubricate", "align", "insert", "attach", "detach",
+    "fasten", "secure", "check", "verify", "replace", "clean",
+    "tool", "fixture", "nut", "bolt", "screw", "washer", "seal",
+    "n·m", "ft·lb", "in·lb", "warning", "caution",
+]
+
 VALID_ENTITY_TYPES = {
     "Part", "Assembly", "Procedure", "Tool", "Specification", "Interface"
 }
@@ -143,8 +158,12 @@ _LABEL_MAP = {
 # ── 工具函数 ─────────────────────────────────────────────────────────────────
 
 def _is_procedure_text(text: str) -> bool:
-    """判断文本块是否包含装配/工序相关内容。"""
-    return any(kw in text for kw in _PROCEDURE_KEYWORDS)
+    """判断文本块是否包含装配/工序相关内容（支持中英文）。"""
+    text_lower = text.lower()
+    return (
+        any(kw in text for kw in _PROCEDURE_KEYWORDS)
+        or any(kw in text_lower for kw in _PROCEDURE_KEYWORDS_EN)
+    )
 
 
 def _apply_abbreviations(text: str) -> str:

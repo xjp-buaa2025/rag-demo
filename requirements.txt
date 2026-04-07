@@ -34,6 +34,7 @@ langchain
 langchain-community
 langchain-core
 langchain-openai
+langgraph
 # Note: For connecting to vLLM via open-ai compatible API
 openai
 tiktoken

@@ -106,6 +106,8 @@ def make_cad_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
           isPartOf   — 装配树层级
           matesWith  — 配合约束（含属性：constraint_type, interface）
           adjacentTo — 空间邻接（含属性：gap_mm）
+          hasInterface — 零件拥有配合接口
+          constrainedBy — 接口受几何约束
         """
         assembly_tree = state.get("cad_assembly_tree") or {}
         constraints   = state.get("cad_constraints")   or []

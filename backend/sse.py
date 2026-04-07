@@ -79,6 +79,10 @@ def chat_gen_to_sse(gen: Iterator) -> StreamingResponse:
                     yield _sse_data({"stage": snapshot[len(_STAGE_PREFIX):]})
                     continue
 
+                if snapshot.startswith("❌"):
+                    yield _sse_data({"error": snapshot})
+                    return
+
                 # 计算 delta（去掉 _SOURCES_JSON_SEP 及其后内容，只发送回答正文增量）
                 visible = snapshot.split(_SOURCES_JSON_SEP, 1)[0]
                 delta = visible[prev_len:]
@@ -111,5 +115,30 @@ def chat_gen_to_sse(gen: Iterator) -> StreamingResponse:
         ]
 
         yield _sse_data({"done": True, "sources": sources, "image_urls": image_urls})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+def stage_gen_to_sse(gen) -> StreamingResponse:
+    """
+    将阶段处理生成器转为 SSE StreamingResponse。
+    生成器 yield dict，每条含 "type" 字段：
+      {"type": "log",    "message": "..."}
+      {"type": "result", "triples_count": n, "stats": {...}, "output_file": "..."}
+      {"type": "done",   "success": True}
+      {"type": "error",  "message": "..."}
+    """
+    def event_stream():
+        try:
+            for frame in gen:
+                if not isinstance(frame, dict):
+                    frame = {"type": "log", "message": str(frame)}
+                yield _sse_data(frame)
+        except GeneratorExit:
+            gen.close()
+            return
+        except Exception as e:
+            yield _sse_data({"type": "error", "message": str(e)})
+        yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

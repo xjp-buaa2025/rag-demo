@@ -1,0 +1,2239 @@
+{
+  "generated_at": "2026-04-07T06:56:32.745244+00:00",
+  "source_file": "tmpvdwl5x37.pdf",
+  "entities": [
+    {
+      "id": "3034344",
+      "type": "Assembly",
+      "name": "COMPRESSOR ROTOR INSTALLATION",
+      "part_number": "3034344",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "MS9556-06",
+      "type": "Part",
+      "name": "BOLT, MACHINE, DBL HEX",
+      "part_number": "MS9556-06",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "MS9556-07",
+      "type": "Part",
+      "name": "BOLT, MACHINE, DBL HEX",
+      "part_number": "MS9556-07",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "AS3209-267",
+      "type": "Part",
+      "name": "PACKING, PREFORMED",
+      "part_number": "AS3209-267",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3030349",
+      "type": "Part",
+      "name": "SEAL ASSEMBLY, AIR, COMPRESSOR REAR STATOR (PRE-SB13032)",
+      "part_number": "3030349",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3103074-01",
+      "type": "Part",
+      "name": "SEAL ASSEMBLY, AIR, COMPRESSOR REAR STATOR (POST-SB13032)",
+      "part_number": "3103074-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3107262-01",
+      "type": "Part",
+      "name": "SEAL ASSEMBLY, AIR, COMPRESSOR REAR STATOR (PRE-SB13109)",
+      "part_number": "3107262-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3112852-01",
+      "type": "Part",
+      "name": "SEAL ASSEMBLY, AIR, COMPRESSOR REAR STATOR (POST-SB13109)",
+      "part_number": "3112852-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "MS9676-11",
+      "type": "Part",
+      "name": "BOLT",
+      "part_number": "MS9676-11",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "MS9767-09",
+      "type": "Part",
+      "name": "NUT, DBL HEX",
+      "part_number": "MS9767-09",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "MS9880-09",
+      "type": "Assembly",
+      "name": "ROTOR BALANCING ASSEMBLY, COMPRESSOR",
+      "part_number": "MS9880-09",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3103069-01",
+      "type": "Assembly",
+      "name": "ROTOR BALANCING ASSEMBLY, COMPRESSOR VARIANT",
+      "part_number": "3103069-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3101851-02",
+      "type": "Part",
+      "name": "WASHER, CUP, LOCK 0.190 NOM.ID.",
+      "part_number": "3101851-02",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "MS124735",
+      "type": "Part",
+      "name": "WASHER, FLAT",
+      "part_number": "MS124735",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "AN150568",
+      "type": "Part",
+      "name": "KEY WASHER 0.190 NOM.ID.",
+      "part_number": "AN150568",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "AN150569",
+      "type": "Part",
+      "name": "STUD, STEPPE 0.003 IN.OVS",
+      "part_number": "AN150569",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "AN150570",
+      "type": "Part",
+      "name": "STUD, STEPPE 0.006 IN.OVS",
+      "part_number": "AN150570",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3103071-02",
+      "type": "Part",
+      "name": "STUD",
+      "part_number": "3103071-02",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3112851-01",
+      "type": "Part",
+      "name": "SEAL, AIR, COMPRESSOR REAR STATOR",
+      "part_number": "3112851-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3107261-01",
+      "type": "Part",
+      "name": "STATOR COMPONENT OF P/N 3103074-01",
+      "part_number": "3107261-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "AS3209-154",
+      "type": "Part",
+      "name": "SEAL, AIR, COMPRESSOR REAR STATOR",
+      "part_number": "AS3209-154",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3006194",
+      "type": "Part",
+      "name": "RIVET, TUBULAR, UNIVERSAL HEAD 3.737 ID X 0.103",
+      "part_number": "3006194",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3014309",
+      "type": "Part",
+      "name": "PACKING, PREFORMED",
+      "part_number": "3014309",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3006246",
+      "type": "Part",
+      "name": "HOUSING, NO.1 BEARING, INNER",
+      "part_number": "3006246",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3101615-01",
+      "type": "Part",
+      "name": "RING, SEAL",
+      "part_number": "3101615-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3015599",
+      "type": "Part",
+      "name": "HOUSING, NO.1 BEARING, OUTER (PRE-SB13032)",
+      "part_number": "3015599",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3103070-01",
+      "type": "Part",
+      "name": "HOUSING, NO.1 BEARING, OUTER (POST-SB13032)",
+      "part_number": "3103070-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3105693-01",
+      "type": "Part",
+      "name": "HOUSING, NO.1 BEARING, OUTER",
+      "part_number": "3105693-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3108836-01",
+      "type": "Part",
+      "name": "HOUSING, NO.1 BEARING, OUTER",
+      "part_number": "3108836-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "MS9432-05",
+      "type": "Part",
+      "name": "BOLT, TEE HEAD",
+      "part_number": "MS9432-05",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3016598",
+      "type": "Part",
+      "name": "WASHER, KEY 0.195 NOM.ID.",
+      "part_number": "3016598",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "MS9356-09",
+      "type": "Part",
+      "name": "NUT, PLAIN, HEX 0.190-32UNJF",
+      "part_number": "MS9356-09",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "MS9489-07",
+      "type": "Part",
+      "name": "BOLT, MACHINE, HEX 0.190-32UNJF X 0.562",
+      "part_number": "MS9489-07",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3112804-01",
+      "type": "Part",
+      "name": "SPACER, IMPELLER SHROUD",
+      "part_number": "3112804-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3015113",
+      "type": "Part",
+      "name": "SCREW, MACHINE 0.132-32UNJC-3A",
+      "part_number": "3015113",
+      "material": "",
+      "quantity": 3
+    },
+    {
+      "id": "3102464-01",
+      "type": "Assembly",
+      "name": "ROTOR BALANCING ASSEMBLY, COMPRESSOR (PRE-SB13052)",
+      "part_number": "3102464-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3102464-03",
+      "type": "Assembly",
+      "name": "ROTOR BALANCING ASSEMBLY, COMPRESSOR (POST-SB13052)",
+      "part_number": "3102464-03",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3102464-04",
+      "type": "Assembly",
+      "name": "ROTOR BALANCING ASSEMBLY, COMPRESSOR (POST-SB13053)",
+      "part_number": "3102464-04",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3102464-05",
+      "type": "Assembly",
+      "name": "ROTOR BALANCING ASSEMBLY, COMPRESSOR",
+      "part_number": "3102464-05",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3106859-01",
+      "type": "Assembly",
+      "name": "ROTOR BALANCING ASSEMBLY, COMPRESSOR",
+      "part_number": "3106859-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3106859-02",
+      "type": "Assembly",
+      "name": "ROTOR BALANCING ASSEMBLY, COMPRESSOR (PRE-SB13093)",
+      "part_number": "3106859-02",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3106896-01",
+      "type": "Assembly",
+      "name": "ROTOR BALANCING ASSEMBLY, COMPRESSOR (POST-SB13093)",
+      "part_number": "3106896-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3031697CL",
+      "type": "Part",
+      "name": "SEAL, AIR (SELECT AT ASSEMBLY)",
+      "part_number": "3031697CL",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3031697CL1",
+      "type": "Part",
+      "name": "SEAL, 0.129-0.131 IN.",
+      "part_number": "3031697CL1",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3031697CL2",
+      "type": "Part",
+      "name": "SEAL, 0.120-0.122 IN.",
+      "part_number": "3031697CL2",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3031697CL3",
+      "type": "Part",
+      "name": "SEAL, 0.111-0.113 IN.",
+      "part_number": "3031697CL3",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3031697CL4",
+      "type": "Part",
+      "name": "SEAL, 0.102-0.104 IN.",
+      "part_number": "3031697CL4",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3031697CL5",
+      "type": "Part",
+      "name": "SEAL, 0.093-0.095 IN.",
+      "part_number": "3031697CL5",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3031697CL6",
+      "type": "Part",
+      "name": "SEAL, 0.084-0.086 IN.",
+      "part_number": "3031697CL6",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3031697CL7",
+      "type": "Part",
+      "name": "SEAL, 0.075-0.077 IN.",
+      "part_number": "3031697CL7",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3031697CL8",
+      "type": "Part",
+      "name": "SEAL, 0.066-0.068 IN.",
+      "part_number": "3031697CL8",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3012414",
+      "type": "Part",
+      "name": "NUT OPTION (IC) SEE TABLE FOR OPTIONAL PART NUMBERS",
+      "part_number": "3012414",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3102463-01",
+      "type": "Part",
+      "name": "SHROUD, COMPRESSOR STATOR",
+      "part_number": "3102463-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3018389",
+      "type": "Part",
+      "name": "SPACER, COMPRESSOR DISK, FIRST-STAGE",
+      "part_number": "3018389",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3102201-01",
+      "type": "Part",
+      "name": "BLADE, COMPRESSOR, FIRST-STAGE",
+      "part_number": "3102201-01",
+      "material": "",
+      "quantity": 16
+    },
+    {
+      "id": "3104501-01",
+      "type": "Part",
+      "name": "BLADE, COMPRESSOR, FIRST-STAGE (PRE-SB13053)",
+      "part_number": "3104501-01",
+      "material": "",
+      "quantity": 16
+    },
+    {
+      "id": "3106901-01",
+      "type": "Part",
+      "name": "BLADE, COMPRESSOR, FIRST-STAGE (POST-SB13058)",
+      "part_number": "3106901-01",
+      "material": "",
+      "quantity": 16
+    },
+    {
+      "id": "3102921-03",
+      "type": "Assembly",
+      "name": "HUB ASSEMBLY, COMPRESSOR, FIRST-STAGE",
+      "part_number": "3102921-03",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3102921-02",
+      "type": "Assembly",
+      "name": "HUB ASSEMBLY, COMPRESSOR, FIRST-STAGE (PRE-SB13052)",
+      "part_number": "3102921-02",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3102921-04",
+      "type": "Assembly",
+      "name": "HUB ASSEMBLY, COMPRESSOR, FIRST-STAGE (POST-SB13052)",
+      "part_number": "3102921-04",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3107321-01",
+      "type": "Assembly",
+      "name": "HUB ASSEMBLY, COMPRESSOR, FIRST-STAGE",
+      "part_number": "3107321-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3104821-01",
+      "type": "Assembly",
+      "name": "ROTOR ASSEMBLY, COMPRESSOR (POST-SB13093)",
+      "part_number": "3104821-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3109221-01",
+      "type": "Assembly",
+      "name": "ROTOR ASSEMBLY, COMPRESSOR (PRE-SB13201)",
+      "part_number": "3109221-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3107421-01",
+      "type": "Assembly",
+      "name": "ROTOR ASSEMBLY, COMPRESSOR (POST-SB13109)",
+      "part_number": "3107421-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3111634-01",
+      "type": "Assembly",
+      "name": "ROTOR ASSEMBLY, COMPRESSOR",
+      "part_number": "3111634-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3113421-01",
+      "type": "Assembly",
+      "name": "ROTOR ASSEMBLY, COMPRESSOR",
+      "part_number": "3113421-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3111921-01",
+      "type": "Assembly",
+      "name": "ROTOR ASSEMBLY, COMPRESSOR",
+      "part_number": "3111921-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3115821-01",
+      "type": "Assembly",
+      "name": "ROTOR ASSEMBLY, COMPRESSOR",
+      "part_number": "3115821-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3040741",
+      "type": "Assembly",
+      "name": "ROTOR ASSEMBLY, COMPRESSOR (REWORKED FROM P/N 3109221-01)",
+      "part_number": "3040741",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3119074-01",
+      "type": "Assembly",
+      "name": "ROTOR ASSEMBLY, COMPRESSOR",
+      "part_number": "3119074-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3014018",
+      "type": "Part",
+      "name": "SEAL, AIR (PRE-SB13109)",
+      "part_number": "3014018",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3107265-02",
+      "type": "Part",
+      "name": "SEAL, AIR (POST-SB13109)",
+      "part_number": "3107265-02",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3112844-02",
+      "type": "Part",
+      "name": "SEAL, AIR, COMPRESSOR REAR STATOR",
+      "part_number": "3112844-02",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3021460",
+      "type": "Part",
+      "name": "COUPLING, COMPRESSOR REAR HUB (PRE-SB13188)",
+      "part_number": "3021460",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3114832-01",
+      "type": "Part",
+      "name": "COUPLING, COMPRESSOR REAR HUB (POST-SB13188)",
+      "part_number": "3114832-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "MS171625",
+      "type": "Part",
+      "name": "PIN, SPRING",
+      "part_number": "MS171625",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3030354",
+      "type": "Part",
+      "name": "RING, BLADE RETAINING (COMPONENT OF P/N 3102921-02)",
+      "part_number": "3030354",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "AN123154",
+      "type": "Part",
+      "name": "RIVET, UNIV. HEAD (0.062 DIA X 0.312)",
+      "part_number": "AN123154",
+      "material": "",
+      "quantity": 6
+    },
+    {
+      "id": "3036211",
+      "type": "Part",
+      "name": "HUB, COMPRESSOR",
+      "part_number": "3036211",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3036011",
+      "type": "Part",
+      "name": "HUB, COMPRESSOR (COMPONENT OF P/N 3102921-02)",
+      "part_number": "3036011",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3037311",
+      "type": "Part",
+      "name": "HUB, COMPRESSOR, REAR",
+      "part_number": "3037311",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3033801",
+      "type": "Part",
+      "name": "ROTOR, COMPRESSOR",
+      "part_number": "3033801",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3036001",
+      "type": "Part",
+      "name": "ROTOR, COMPRESSOR (COMPONENT OF P/N 3109221-01)",
+      "part_number": "3036001",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3035701",
+      "type": "Part",
+      "name": "ROTOR, COMPRESSOR",
+      "part_number": "3035701",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3036988",
+      "type": "Part",
+      "name": "ROTOR OPTION (IC) (CONSISTS OF 3035701, 3037701)",
+      "part_number": "3036988",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3037701",
+      "type": "Part",
+      "name": "ROTOR, COMPRESSOR",
+      "part_number": "3037701",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3038435",
+      "type": "Part",
+      "name": "ROTOR OPTION (IC) (CONSISTS OF 3038401)",
+      "part_number": "3038435",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3038401",
+      "type": "Part",
+      "name": "ROTOR, COMPRESSOR",
+      "part_number": "3038401",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3038801",
+      "type": "Assembly",
+      "name": "ROTOR,COMPRESSOR",
+      "part_number": "3038801",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3038759",
+      "type": "Assembly",
+      "name": "ROTOR OPTION (IC)",
+      "part_number": "3038759",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3041301",
+      "type": "Part",
+      "name": "ROTOR,COMPRESSOR,REAR",
+      "part_number": "3041301",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3041401",
+      "type": "Part",
+      "name": "ROTOR,COMPRESSOR,REAR",
+      "part_number": "3041401",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3040781",
+      "type": "Assembly",
+      "name": "ROTOR,COMPRESSOR",
+      "part_number": "3040781",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3041271",
+      "type": "Part",
+      "name": "ROTOR,COMPRESSOR,REAR",
+      "part_number": "3041271",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3018176",
+      "type": "Part",
+      "name": "WASHER,KEY",
+      "part_number": "3018176",
+      "material": "",
+      "quantity": 6
+    },
+    {
+      "id": "MS9880-11",
+      "type": "Part",
+      "name": "WASHER,CUP",
+      "part_number": "MS9880-11",
+      "material": "",
+      "quantity": 6
+    },
+    {
+      "id": "3012255",
+      "type": "Part",
+      "name": "NUT,PLAIN,HEX",
+      "part_number": "3012255",
+      "material": "",
+      "quantity": 6
+    },
+    {
+      "id": "MS9767-11",
+      "type": "Part",
+      "name": "NUT,DBLHEX",
+      "part_number": "MS9767-11",
+      "material": "",
+      "quantity": 6
+    },
+    {
+      "id": "3005290CL",
+      "type": "Assembly",
+      "name": "WEIGHT,BALANCE,COMPRESSOR",
+      "part_number": "3005290CL",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3005290CLA",
+      "type": "Part",
+      "name": "WEIGHT,0.0436-0.0523OZ.",
+      "part_number": "3005290CLA",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3005290CLB",
+      "type": "Part",
+      "name": "WEIGHT,0.0574-0.0684OZ.",
+      "part_number": "3005290CLB",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3005290CLC",
+      "type": "Part",
+      "name": "WEIGHT,0.0738-0.0838OZ.",
+      "part_number": "3005290CLC",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3005290CLD",
+      "type": "Part",
+      "name": "WEIGHT,0.0842-0.1000OZ.",
+      "part_number": "3005290CLD",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3022475",
+      "type": "Assembly",
+      "name": "WEIGHT,BALANCE,COMPRESSOR",
+      "part_number": "3022475",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "AN123161",
+      "type": "Part",
+      "name": "RIVET,UNIVERSAL HEAD",
+      "part_number": "AN123161",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "AN123153",
+      "type": "Part",
+      "name": "RIVET,SOLID,UNIVERSAL HEAD",
+      "part_number": "AN123153",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "AN123155",
+      "type": "Part",
+      "name": "RIVET,UNIVERSAL HEAD",
+      "part_number": "AN123155",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "AN123154",
+      "type": "Part",
+      "name": "RIVET,SOLID,UNIVERSAL HEAD",
+      "part_number": "AN123154",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "AN123154",
+      "type": "Part",
+      "name": "RIVET,UNIVERSAL HEAD",
+      "part_number": "AN123154",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "AN123152",
+      "type": "Part",
+      "name": "RIVET,SOLID,UNIVERSAL HEAD",
+      "part_number": "AN123152",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3003862",
+      "type": "Part",
+      "name": "NUT,SPANNER,COMPRESSOR BEARING",
+      "part_number": "3003862",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3003417",
+      "type": "Part",
+      "name": "WASHER,CUP",
+      "part_number": "3003417",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3032657",
+      "type": "Assembly",
+      "name": "BEARING OPTION(IC)",
+      "part_number": "3032657",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3030925",
+      "type": "Part",
+      "name": "BEARING,BALL",
+      "part_number": "3030925",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3101649-01",
+      "type": "Part",
+      "name": "BEARING,BALL",
+      "part_number": "3101649-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3030925",
+      "type": "Part",
+      "name": "BEARING,BALL",
+      "part_number": "3030925",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3109209-01",
+      "type": "Part",
+      "name": "BEARING,BALL",
+      "part_number": "3109209-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3119806-01",
+      "type": "Assembly",
+      "name": "BEARING OPTION (IC)",
+      "part_number": "3119806-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3112117-03",
+      "type": "Part",
+      "name": "BEARING,BALL",
+      "part_number": "3112117-03",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3021848",
+      "type": "Part",
+      "name": "SPACER,OIL SLINGER,NO.1 BEARING",
+      "part_number": "3021848",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3109585-01",
+      "type": "Part",
+      "name": "SPACER,OIL SLINGER",
+      "part_number": "3109585-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3024028",
+      "type": "Part",
+      "name": "SEAL RING,NON-METALLIC",
+      "part_number": "3024028",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3118217-01",
+      "type": "Part",
+      "name": "SEAL RING,NON-METALLIC",
+      "part_number": "3118217-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3004904",
+      "type": "Part",
+      "name": "RING,RETAINING",
+      "part_number": "3004904",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3011562",
+      "type": "Part",
+      "name": "WASHER,FLAT",
+      "part_number": "3011562",
+      "material": "",
+      "quantity": 2
+    },
+    {
+      "id": "3011233",
+      "type": "Part",
+      "name": "SPRING,EXPANDER,BALLLOCK",
+      "part_number": "3011233",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3011730",
+      "type": "Part",
+      "name": "KEY,MACHINE,BALL THRUST",
+      "part_number": "3011730",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "P001",
+      "type": "Part",
+      "name": "SPRING",
+      "part_number": "P001",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3113607-01",
+      "type": "Part",
+      "name": "SPRING,EXPANDER",
+      "part_number": "3113607-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3113608-01",
+      "type": "Part",
+      "name": "PIN,BALL LOCK",
+      "part_number": "3113608-01",
+      "material": "",
+      "quantity": 1
+    },
+    {
+      "id": "3113605-01",
+      "type": "Part",
+      "name": "SLEEVE,COUPLING,REAR HUB",
+      "part_number": "3113605-01",
+      "material": "",
+      "quantity": 1
+    }
+  ],
+  "triples": [
+    {
+      "head": "COMPRESSOR ROTOR INSTALLATION",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "BOLT, MACHINE, DBL HEX",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "BOLT, MACHINE, DBL HEX",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "PACKING, PREFORMED",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL ASSEMBLY, AIR, COMPRESSOR REAR STATOR (PRE-SB13032)",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL ASSEMBLY, AIR, COMPRESSOR REAR STATOR (POST-SB13032)",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL ASSEMBLY, AIR, COMPRESSOR REAR STATOR (PRE-SB13109)",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL ASSEMBLY, AIR, COMPRESSOR REAR STATOR (POST-SB13109)",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "BOLT",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "NUT, DBL HEX",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "ROTOR BALANCING ASSEMBLY, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "ROTOR BALANCING ASSEMBLY, COMPRESSOR VARIANT",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "WASHER, CUP, LOCK 0.190 NOM.ID.",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "WASHER, FLAT",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "KEY WASHER 0.190 NOM.ID.",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "STUD, STEPPE 0.003 IN.OVS",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "STUD, STEPPE 0.006 IN.OVS",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "STUD",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL, AIR, COMPRESSOR REAR STATOR",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "STATOR COMPONENT OF P/N 3103074-01",
+      "relation": "isPartOf",
+      "tail": "SEAL ASSEMBLY, AIR, COMPRESSOR REAR STATOR (POST-SB13032)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL, AIR, COMPRESSOR REAR STATOR",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "RIVET, TUBULAR, UNIVERSAL HEAD 3.737 ID X 0.103",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "PACKING, PREFORMED",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "HOUSING, NO.1 BEARING, INNER",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "RING, SEAL",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "HOUSING, NO.1 BEARING, OUTER (PRE-SB13032)",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "HOUSING, NO.1 BEARING, OUTER (POST-SB13032)",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "HOUSING, NO.1 BEARING, OUTER",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "HOUSING, NO.1 BEARING, OUTER",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "BOLT, TEE HEAD",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "WASHER, KEY 0.195 NOM.ID.",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "NUT, PLAIN, HEX 0.190-32UNJF",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "BOLT, MACHINE, HEX 0.190-32UNJF X 0.562",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SPACER, IMPELLER SHROUD",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SCREW, MACHINE 0.132-32UNJC-3A",
+      "relation": "isPartOf",
+      "tail": "COMPRESSOR ROTOR INSTALLATION",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "ROTOR BALANCING ASSEMBLY, COMPRESSOR (PRE-SB13052)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR BALANCING ASSEMBLY, COMPRESSOR (POST-SB13052)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR BALANCING ASSEMBLY, COMPRESSOR (POST-SB13053)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR BALANCING ASSEMBLY, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR BALANCING ASSEMBLY, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR BALANCING ASSEMBLY, COMPRESSOR (PRE-SB13093)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR BALANCING ASSEMBLY, COMPRESSOR (POST-SB13093)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SEAL, AIR (SELECT AT ASSEMBLY)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SEAL, 0.129-0.131 IN.",
+      "relation": "isPartOf",
+      "tail": "SEAL, AIR (SELECT AT ASSEMBLY)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL, 0.120-0.122 IN.",
+      "relation": "isPartOf",
+      "tail": "SEAL, AIR (SELECT AT ASSEMBLY)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL, 0.111-0.113 IN.",
+      "relation": "isPartOf",
+      "tail": "SEAL, AIR (SELECT AT ASSEMBLY)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL, 0.102-0.104 IN.",
+      "relation": "isPartOf",
+      "tail": "SEAL, AIR (SELECT AT ASSEMBLY)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL, 0.093-0.095 IN.",
+      "relation": "isPartOf",
+      "tail": "SEAL, AIR (SELECT AT ASSEMBLY)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL, 0.084-0.086 IN.",
+      "relation": "isPartOf",
+      "tail": "SEAL, AIR (SELECT AT ASSEMBLY)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL, 0.075-0.077 IN.",
+      "relation": "isPartOf",
+      "tail": "SEAL, AIR (SELECT AT ASSEMBLY)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL, 0.066-0.068 IN.",
+      "relation": "isPartOf",
+      "tail": "SEAL, AIR (SELECT AT ASSEMBLY)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "NUT OPTION (IC) SEE TABLE FOR OPTIONAL PART NUMBERS",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SHROUD, COMPRESSOR STATOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SPACER, COMPRESSOR DISK, FIRST-STAGE",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "BLADE, COMPRESSOR, FIRST-STAGE",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "BLADE, COMPRESSOR, FIRST-STAGE (PRE-SB13053)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "BLADE, COMPRESSOR, FIRST-STAGE (POST-SB13058)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "HUB ASSEMBLY, COMPRESSOR, FIRST-STAGE",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "HUB ASSEMBLY, COMPRESSOR, FIRST-STAGE (PRE-SB13052)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "HUB ASSEMBLY, COMPRESSOR, FIRST-STAGE (POST-SB13052)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "HUB ASSEMBLY, COMPRESSOR, FIRST-STAGE",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR ASSEMBLY, COMPRESSOR (POST-SB13093)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR ASSEMBLY, COMPRESSOR (PRE-SB13201)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR ASSEMBLY, COMPRESSOR (POST-SB13109)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR ASSEMBLY, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR ASSEMBLY, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR ASSEMBLY, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR ASSEMBLY, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR ASSEMBLY, COMPRESSOR (REWORKED FROM P/N 3109221-01)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR ASSEMBLY, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SEAL, AIR (PRE-SB13109)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SEAL, AIR (POST-SB13109)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SEAL, AIR, COMPRESSOR REAR STATOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "COUPLING, COMPRESSOR REAR HUB (PRE-SB13188)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "COUPLING, COMPRESSOR REAR HUB (POST-SB13188)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "PIN, SPRING",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "RING, BLADE RETAINING (COMPONENT OF P/N 3102921-02)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "RIVET, UNIV. HEAD (0.062 DIA X 0.312)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "HUB, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "HUB, COMPRESSOR (COMPONENT OF P/N 3102921-02)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "HUB, COMPRESSOR, REAR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR, COMPRESSOR (COMPONENT OF P/N 3109221-01)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR OPTION (IC) (CONSISTS OF 3035701, 3037701)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR OPTION (IC) (CONSISTS OF 3038401)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR, COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR,COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR OPTION (IC)",
+      "relation": "isPartOf",
+      "tail": "ROTOR,COMPRESSOR",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "ROTOR,COMPRESSOR,REAR",
+      "relation": "isPartOf",
+      "tail": "ROTOR OPTION (IC)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "ROTOR,COMPRESSOR,REAR",
+      "relation": "isPartOf",
+      "tail": "ROTOR OPTION (IC)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "ROTOR,COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "ROTOR,COMPRESSOR,REAR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "WASHER,KEY",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "WASHER,CUP",
+      "relation": "isPartOf",
+      "tail": "WASHER,KEY",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "NUT,PLAIN,HEX",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "NUT,DBLHEX",
+      "relation": "isPartOf",
+      "tail": "NUT,PLAIN,HEX",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "WEIGHT,BALANCE,COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "WEIGHT,0.0436-0.0523OZ.",
+      "relation": "isPartOf",
+      "tail": "WEIGHT,BALANCE,COMPRESSOR",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "WEIGHT,0.0574-0.0684OZ.",
+      "relation": "isPartOf",
+      "tail": "WEIGHT,BALANCE,COMPRESSOR",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "WEIGHT,0.0738-0.0838OZ.",
+      "relation": "isPartOf",
+      "tail": "WEIGHT,BALANCE,COMPRESSOR",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "WEIGHT,0.0842-0.1000OZ.",
+      "relation": "isPartOf",
+      "tail": "WEIGHT,BALANCE,COMPRESSOR",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "WEIGHT,BALANCE,COMPRESSOR",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "RIVET,UNIVERSAL HEAD",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "RIVET,SOLID,UNIVERSAL HEAD",
+      "relation": "isPartOf",
+      "tail": "RIVET,UNIVERSAL HEAD",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "RIVET,UNIVERSAL HEAD",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "RIVET,SOLID,UNIVERSAL HEAD",
+      "relation": "isPartOf",
+      "tail": "RIVET,UNIVERSAL HEAD",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "RIVET,UNIVERSAL HEAD",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "RIVET,SOLID,UNIVERSAL HEAD",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "NUT,SPANNER,COMPRESSOR BEARING",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "WASHER,CUP",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "BEARING OPTION(IC)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "BEARING,BALL",
+      "relation": "isPartOf",
+      "tail": "BEARING OPTION(IC)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "BEARING,BALL",
+      "relation": "isPartOf",
+      "tail": "BEARING OPTION(IC)",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "BEARING,BALL",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "BEARING,BALL",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "BEARING OPTION (IC)",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Assembly",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "BEARING,BALL",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SPACER,OIL SLINGER,NO.1 BEARING",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SPACER,OIL SLINGER",
+      "relation": "isPartOf",
+      "tail": "SPACER,OIL SLINGER,NO.1 BEARING",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "SEAL RING,NON-METALLIC",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SEAL RING,NON-METALLIC",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "RING,RETAINING",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "WASHER,FLAT",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SPRING,EXPANDER,BALLLOCK",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "KEY,MACHINE,BALL THRUST",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SPRING",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SPRING,EXPANDER",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "PIN,BALL LOCK",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    },
+    {
+      "head": "SLEEVE,COUPLING,REAR HUB",
+      "relation": "isPartOf",
+      "tail": "ROOT",
+      "confidence": 1.0,
+      "source": "BOM",
+      "head_type": "Part",
+      "tail_type": "ROOT"
+    }
+  ],
+  "stats": {
+    "entities_count": 131,
+    "triples_count": 131
+  }
+}

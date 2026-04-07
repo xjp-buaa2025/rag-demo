@@ -155,3 +155,72 @@ export interface KgTaskStatus {
   created_at: string
   expires_at: string
 }
+
+// ── KG 分阶段构建 ─────────────────────────────────────────
+export interface FlatTriple {
+  head: string
+  relation: string
+  tail: string
+  confidence: number
+  source: string
+  head_type?: string
+  tail_type?: string
+  bom_part_id?: string
+}
+
+export interface KgSseFrame {
+  type: 'log' | 'result' | 'done' | 'error'
+  message?: string           // type=log/error
+  triples_count?: number     // type=result
+  stats?: Record<string, unknown>
+  output_file?: string
+  success?: boolean          // type=done
+}
+
+export interface StageStatus {
+  exists: boolean
+  file: string
+  generated_at?: string
+}
+
+export interface StagesStatus {
+  bom: StageStatus
+  manual: StageStatus
+  cad: StageStatus
+}
+
+export interface TriplesPreview {
+  stage: string
+  total: number
+  offset: number
+  limit: number
+  triples: FlatTriple[]
+  stats: Record<string, unknown>
+}
+
+export interface RelationStats {
+  precision: number
+  recall: number
+  f1: number
+  golden_count: number
+  predicted_count: number
+}
+
+export interface GoldenTriple extends FlatTriple {
+  matched: boolean
+  source_page?: string
+}
+
+export interface ValidationReport {
+  precision: number
+  recall: number
+  f1: number
+  tp: number
+  fp: number
+  fn: number
+  golden_count: number
+  predicted_count: number
+  stages_included: string[]
+  per_relation: Record<string, RelationStats>
+  comparison: GoldenTriple[]
+}

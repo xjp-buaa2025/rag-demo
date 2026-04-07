@@ -5,7 +5,7 @@ POST /vision/describe
   接收用户上传的图片（multipart/form-data），调用 MiniMax M2.5 Vision 生成中文描述。
   前端用返回的描述文字进行后续向量检索（以图搜文流程）。
 
-POST /vision/search_by_image
+POST /vision/search
   接收用户上传的图片，用 Chinese-CLIP 编码后直接搜索 image_vec，返回最相关的图片块。
   这是真正的以图搜图路径，不依赖 Vision LLM。
 """
@@ -58,7 +58,7 @@ async def describe_image_upload(
     if state.minimax_client is None:
         raise HTTPException(
             status_code=503,
-            detail="Vision 功能未启用，请配置 MINIMAX_API_KEY 环境变量。"
+            detail="Vision 功能未启用，请配置 VISION_API_KEY 或 MINIMAX_VISION_API_KEY 环境变量。"
         )
 
     # 读取图片内容

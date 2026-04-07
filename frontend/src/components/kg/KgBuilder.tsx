@@ -85,7 +85,7 @@ export default function KgBuilder({ onBuildComplete }: KgBuilderProps) {
   const ragRef = useRef<HTMLInputElement>(null)
   const bomRef = useRef<HTMLInputElement>(null)
   const cadRef = useRef<HTMLInputElement>(null)
-  const fileInputRefs: Record<FileCategory, React.RefObject<HTMLInputElement>> = {
+  const fileInputRefs: Record<FileCategory, typeof ragRef> = {
     rag: ragRef,
     bom: bomRef,
     cad: cadRef,
