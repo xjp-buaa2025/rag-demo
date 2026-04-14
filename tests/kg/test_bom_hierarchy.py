@@ -27,3 +27,9 @@ class TestCleanOcrNoise:
     def test_no_change_on_clean_text(self):
         text = "SEAL ASSEMBLY, AIR, COMPRESSOR"
         assert _clean_ocr_noise(text) == text
+
+    def test_fixes_0N(self):
+        assert _clean_ocr_noise("RATIO 0N ASSEMBLY") == "RATIO ON ASSEMBLY"
+
+    def test_combined_noise(self):
+        assert _clean_ocr_noise("C0MPONENT 0F 0N SEAL") == "COMPONENT OF ON SEAL"

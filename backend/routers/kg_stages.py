@@ -33,7 +33,7 @@ router = APIRouter()
 _OCR_NOISE_RULES = [
     (_re.compile(r'COMP0NENT'),          'COMPONENT'),
     (_re.compile(r'C0MPONENT'),          'COMPONENT'),
-    (_re.compile(r'(?<!\d)\b0F\b'),      'OF'),
+    (_re.compile(r'\b0F\b'),             'OF'),
     (_re.compile(r'\b0N\b'),             'ON'),
     (_re.compile(r'\b0VS\b'),            'OVS'),
     (_re.compile(r'\bN0\b(?=\.)'),       'NO'),   # NO.1 类型
