@@ -33,3 +33,41 @@ class TestCleanOcrNoise:
 
     def test_combined_noise(self):
         assert _clean_ocr_noise("C0MPONENT 0F 0N SEAL") == "COMPONENT OF ON SEAL"
+
+
+class TestCleanOcrNoiseIntegration:
+    """验证 _bom_df_to_entities_and_triples 内部对字段做了净化。"""
+
+    def test_nomenclature_cleaned_in_triples(self):
+        import json
+        from backend.routers.kg_stages import _bom_df_to_entities_and_triples
+
+        records = [
+            {
+                "part_id": "3034344",
+                "part_name": "COMP0NENT SEAL",
+                "nomenclature": "COMP0NENT SEAL",
+                "fig_item": "1",
+                "parent_id": "",
+                "qty": 1,
+                "category": "Assembly",
+            },
+            {
+                "part_id": "3030349",
+                "part_name": "SEAL AIR",
+                "nomenclature": ".SEAL AIR",
+                "fig_item": "2",
+                "parent_id": "",
+                "qty": 1,
+                "category": "Part",
+            },
+        ]
+        df_json = json.dumps(records)
+        entities, triples = _bom_df_to_entities_and_triples(df_json)
+        # 实体名称中不应包含 COMP0NENT
+        names = [e["name"] for e in entities]
+        assert all("COMP0NENT" not in n for n in names), f"OCR噪声未被清理: {names}"
+        # 第二条应挂到第一条下（点号层级）
+        child_triple = next((t for t in triples if "SEAL AIR" in t["head"]), None)
+        assert child_triple is not None
+        assert child_triple["tail"] != "ROOT", f"子件未正确连接父节点，tail={child_triple['tail']}"

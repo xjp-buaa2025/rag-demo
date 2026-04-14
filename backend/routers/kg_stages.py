@@ -79,7 +79,7 @@ def _bom_df_to_entities_and_triples(df_json: str):
 
     for _, row in df.iterrows():
         pid  = str(row.get("part_id", "")).strip()
-        name = str(row.get("part_name", "")).strip()
+        name = _clean_ocr_noise(str(row.get("part_name", "")).strip())
         if not name:
             continue
 
@@ -99,7 +99,7 @@ def _bom_df_to_entities_and_triples(df_json: str):
         })
 
         # ── 路径1：nomenclature 含点号前缀 → 用栈结构推断父节点 ──────────
-        nomenclature = str(row.get("nomenclature", "")).strip()
+        nomenclature = _clean_ocr_noise(str(row.get("nomenclature", "")).strip())
         fig_item     = str(row.get("fig_item", "")).strip()
         if nomenclature:
             # 互换件优先检测：fig_item 带 dash（-1A/-1B）且含 INTRCHG
@@ -248,7 +248,7 @@ def _llm_extract_bom_from_ocr(ocr_text: str, state: AppState) -> list:
     chunks = _split_for_llm(ocr_text, max_chars=12000)
     all_records = []
     for i, chunk in enumerate(chunks):
-        prompt = _OCR_BOM_PROMPT.format(content=chunk)
+        prompt = _OCR_BOM_PROMPT.format(content=_clean_ocr_noise(chunk))
         try:
             resp = state.llm_client.chat.completions.create(
                 model=None,
