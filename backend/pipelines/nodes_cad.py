@@ -32,18 +32,14 @@ def make_cad_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
           cad_constraints    — 配合约束列表 [{part_a, part_b, constraint_type, interface}]
           cad_adjacency      — 空间邻接列表 [{part_a, part_b, gap_mm}]
         """
+        # ── 软检测 OCC 可用性，决定走哪条路径 ──────────────────────────────
+        _occ_available = False
         try:
             from OCC.Core.STEPControl import STEPControl_Reader
             from OCC.Core.IFSelect import IFSelect_RetDone
+            _occ_available = True
         except ImportError:
-            return {
-                "error": (
-                    "pythonocc-core 未安装，请运行：\n"
-                    "conda install -c conda-forge pythonocc-core"
-                ),
-                "log_messages": ["[CAD] pythonocc-core 未安装，无法解析 STEP 文件"],
-                "current_node": "parse_cad_step",
-            }
+            pass
 
         file_path = state.get("file_path", "")
         if not file_path:
@@ -53,13 +49,39 @@ def make_cad_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
                 "current_node": "parse_cad_step",
             }
 
+        # ── Path B：无 OCC，纯文本 fallback ────────────────────────────────
+        if not _occ_available:
+            try:
+                assembly_tree = _parse_step_tree_from_text(file_path)
+                constraints   = _parse_step_constraints(file_path)
+                adjacency     = []   # 需要 OCC Reader，无法 fallback
+                log_msg = (
+                    f"[CAD][FALLBACK] pythonocc-core 不可用，已降级为纯文本解析模式。"
+                    f"装配节点 {_count_tree_nodes(assembly_tree)} 个，"
+                    f"配合约束 {len(constraints)} 条，邻接关系 0 条（需 OCC）"
+                )
+                return {
+                    "cad_assembly_tree": assembly_tree,
+                    "cad_constraints":   constraints,
+                    "cad_adjacency":     adjacency,
+                    "log_messages":      [log_msg],
+                    "current_node":      "parse_cad_step",
+                }
+            except Exception as e:
+                return {
+                    "error": str(e),
+                    "log_messages": [f"[CAD][FALLBACK] 纯文本解析异常：{e}"],
+                    "current_node": "parse_cad_step",
+                }
+
+        # ── Path A：有 OCC，完整流程 ────────────────────────────────────────
         try:
             reader = STEPControl_Reader()
             status = reader.ReadFile(file_path)
             if status != IFSelect_RetDone:
                 return {
                     "error": f"STEP 文件读取失败，状态码：{status}",
-                    "log_messages": [f"[CAD] STEP 文件读取失败：{file_path}"],
+                    "log_messages": [f"[CAD][OCC] STEP 文件读取失败：{file_path}"],
                     "current_node": "parse_cad_step",
                 }
             reader.TransferRoots()
@@ -70,17 +92,37 @@ def make_cad_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
             # Step2: 配合约束（从 STEP 文本解析 NAUO + GEOMETRIC_TOLERANCE）
             constraints = _parse_step_constraints(file_path)
 
-            # Step3: 空间邻接（基于包围盒重叠检测）
-            adjacency = _parse_step_adjacency(reader)
+            # Step3: 空间邻接（基于包围盒重叠检测，需要 OCC Reader）
+            adjacency = _parse_step_adjacency(reader, file_path)
+
+            # Step4: 几何特征提取（体积/面积/包围盒/形心）+ 启发式分类
+            cad_geometry: dict = {}
+            nb = reader.NbRootsForTransfer()
+            if nb > 0:
+                try:
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as _f:
+                        _content = _f.read()
+                    _pd_names = list(_build_step_name_chain(_content).values())
+                except Exception:
+                    _pd_names = []
+                for i in range(1, nb + 1):
+                    shape   = reader.Shape(i)
+                    name    = _pd_names[i - 1] if i - 1 < len(_pd_names) else f"Component_{i}"
+                    feats   = _extract_geometry_features(shape)
+                    if feats:
+                        feats["part_type"] = _classify_part_by_geometry(feats)
+                        cad_geometry[name] = feats
 
             log_msg = (
-                f"[CAD] STEP 解析完成：装配节点 {_count_tree_nodes(assembly_tree)} 个，"
-                f"配合约束 {len(constraints)} 条，邻接关系 {len(adjacency)} 条"
+                f"[CAD][OCC] STEP 解析完成：装配节点 {_count_tree_nodes(assembly_tree)} 个，"
+                f"配合约束 {len(constraints)} 条，邻接关系 {len(adjacency)} 条，"
+                f"几何特征 {len(cad_geometry)} 个零件"
             )
             return {
                 "cad_assembly_tree": assembly_tree,
                 "cad_constraints":   constraints,
                 "cad_adjacency":     adjacency,
+                "cad_geometry":      cad_geometry,
                 "log_messages":      [log_msg],
                 "current_node":      "parse_cad_step",
             }
@@ -88,7 +130,7 @@ def make_cad_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
         except Exception as e:
             return {
                 "error": str(e),
-                "log_messages": [f"[CAD] STEP 解析异常：{e}"],
+                "log_messages": [f"[CAD][OCC] STEP 解析异常：{e}"],
                 "current_node": "parse_cad_step",
             }
 
@@ -170,52 +212,109 @@ def make_cad_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
 
 # ── CAD 解析辅助函数 ─────────────────────────────────────────────────────────
 
+def _build_step_name_chain(content: str) -> dict:
+    """
+    建立 PRODUCT_DEFINITION 引用 → 零件名称 的映射链。
+
+    STEP AP203 装配引用链：
+      PRODUCT_DEFINITION → PRODUCT_DEFINITION_FORMATION(_WITH_SPECIFIED_SOURCE) → PRODUCT
+
+    NAUO 的第4/5个参数是 PRODUCT_DEFINITION 的引用，所以需要走完整链。
+    零件名优先使用 PRODUCT 的 description（第2参数），fallback 到 name（第1参数）。
+    """
+    # Step1: PRODUCT ref → (name, description)
+    prod_re = re.compile(
+        r"#(\d+)\s*=\s*PRODUCT\s*\(\s*'([^']*)'\s*,\s*'([^']*)'",
+        re.IGNORECASE,
+    )
+    products: dict = {}  # prod_ref → (name, desc)
+    for m in prod_re.finditer(content):
+        products[m.group(1)] = (m.group(2).strip(), m.group(3).strip())
+
+    # Step2: PRODUCT_DEFINITION_FORMATION / _WITH_SPECIFIED_SOURCE → PRODUCT
+    form_re = re.compile(
+        r"#(\d+)\s*=\s*PRODUCT_DEFINITION_FORMATION(?:_WITH_SPECIFIED_SOURCE)?"
+        r"\s*\(\s*'[^']*'\s*,\s*'[^']*'\s*,\s*#(\d+)",
+        re.IGNORECASE,
+    )
+    formations: dict = {}  # form_ref → prod_ref
+    for m in form_re.finditer(content):
+        formations[m.group(1)] = m.group(2)
+
+    # Step3: PRODUCT_DEFINITION → PRODUCT_DEFINITION_FORMATION
+    pd_re = re.compile(
+        r"#(\d+)\s*=\s*PRODUCT_DEFINITION\s*\(\s*'[^']*'\s*,\s*'[^']*'\s*,\s*#(\d+)",
+        re.IGNORECASE,
+    )
+    pd_name_map: dict = {}  # pd_ref → part_name
+    for m in pd_re.finditer(content):
+        pd_ref   = m.group(1)
+        form_ref = m.group(2)
+        prod_ref = formations.get(form_ref)
+        if prod_ref and prod_ref in products:
+            name, desc = products[prod_ref]
+            # description 优先（如 'Compressor Blade'），fallback 到 name
+            final = desc if desc and desc not in ("", " ") else name
+            pd_name_map[pd_ref] = final or f"Part_{pd_ref}"
+        else:
+            pd_name_map[pd_ref] = f"Part_{pd_ref}"
+
+    return pd_name_map
+
+
 def _parse_step_tree_from_text(file_path: str) -> dict:
     """
     从 STEP 文件文本中解析 NEXT_ASSEMBLY_USAGE_OCCURRENCE（NAUO）建立父子树。
     返回格式：{parent_name: {child_name: {}, ...}, ...}
+
+    修复：NAUO 的父子参数是 PRODUCT_DEFINITION 引用，需经三级映射链解析为零件名。
     """
-    parent_map: dict = {}   # child → parent
-    name_map: dict   = {}   # entity_ref → name
+    parent_map: dict = {}   # child_name → parent_name
 
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
-        # 提取 PRODUCT 名称：#12 = PRODUCT('name','desc',...);
-        prod_re = re.compile(
-            r"#(\d+)\s*=\s*PRODUCT\s*\(\s*'([^']*)'", re.IGNORECASE
-        )
-        for m in prod_re.finditer(content):
-            name_map[m.group(1)] = m.group(2).strip() or f"Part_{m.group(1)}"
+        pd_name_map = _build_step_name_chain(content)
 
-        # 提取 NAUO（父子关系）：NEXT_ASSEMBLY_USAGE_OCCURRENCE(..., #parent_def, #child_def, ...)
+        # NAUO 格式：NEXT_ASSEMBLY_USAGE_OCCURRENCE ( 'id', ' ', ' ', #parent_pd, #child_pd, $ )
         nauo_re = re.compile(
-            r"NEXT_ASSEMBLY_USAGE_OCCURRENCE\s*\([^)]*,\s*#(\d+)\s*,\s*#(\d+)",
+            r"NEXT_ASSEMBLY_USAGE_OCCURRENCE\s*\(\s*'[^']*'\s*,\s*'[^']*'\s*,\s*'[^']*'\s*,\s*#(\d+)\s*,\s*#(\d+)",
             re.IGNORECASE,
         )
         for m in nauo_re.finditer(content):
-            parent_ref = m.group(1)
-            child_ref  = m.group(2)
-            parent_name = name_map.get(parent_ref, f"Part_{parent_ref}")
-            child_name  = name_map.get(child_ref,  f"Part_{child_ref}")
+            parent_name = pd_name_map.get(m.group(1), f"Part_{m.group(1)}")
+            child_name  = pd_name_map.get(m.group(2), f"Part_{m.group(2)}")
             parent_map[child_name] = parent_name
 
     except Exception:
         pass
 
+    # ── 数字名前缀补全 ─────────────────────────────────────────────────────
+    # C52696C 的子零件 PRODUCT name/description 均为纯数字（'10'、'180-blade'）。
+    # 找到根节点（无父节点的节点）作为前缀，将数字名改为 {root}-{name} 格式。
+    if parent_map:
+        _all = set(parent_map.keys()) | set(parent_map.values())
+        _roots = _all - set(parent_map.keys())
+        _top = next(iter(_roots), "")
+        _NUMERIC_RE = re.compile(r'^\d[\d\-a-zA-Z]*$')
+        # 只有当根节点名本身不是数字时才补全（避免误处理）
+        if _top and not _NUMERIC_RE.match(_top):
+            def _fix(name: str) -> str:
+                return f"{_top}-{name}" if _NUMERIC_RE.match(name) else name
+            parent_map = {_fix(c): _fix(p) for c, p in parent_map.items()}
+
+    if not parent_map:
+        return {"root": {}}
+
     # 构建嵌套树
-    tree: dict = {}
-    all_names = set(name_map.values())
-    roots = all_names - set(parent_map.keys())
+    all_names  = set(parent_map.keys()) | set(parent_map.values())
+    roots      = all_names - set(parent_map.keys())
 
     def _build(name: str) -> dict:
-        children = {n: {} for n, p in parent_map.items() if p == name}
-        return {n: _build(n) for n in children}
+        return {child: _build(child) for child, p in parent_map.items() if p == name}
 
-    for root in roots:
-        tree[root] = _build(root)
-
+    tree = {root: _build(root) for root in roots}
     return tree if tree else {"root": {}}
 
 
@@ -223,29 +322,25 @@ def _parse_step_constraints(file_path: str) -> list:
     """
     从 STEP 文本中解析配合约束（NAUO 关系 + GEOMETRIC_TOLERANCE）。
     返回：[{part_a, part_b, constraint_type, interface}, ...]
+
+    修复：使用 _build_step_name_chain 正确解析 PRODUCT_DEFINITION 引用链。
     """
     constraints = []
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
-        # 提取名称映射
-        name_map: dict = {}
-        prod_re = re.compile(
-            r"#(\d+)\s*=\s*PRODUCT\s*\(\s*'([^']*)'", re.IGNORECASE
-        )
-        for m in prod_re.finditer(content):
-            name_map[m.group(1)] = m.group(2).strip() or f"Part_{m.group(1)}"
+        pd_name_map = _build_step_name_chain(content)
 
         # NAUO → assembly 配合
         nauo_re = re.compile(
-            r"NEXT_ASSEMBLY_USAGE_OCCURRENCE\s*\([^)]*,\s*#(\d+)\s*,\s*#(\d+)",
+            r"NEXT_ASSEMBLY_USAGE_OCCURRENCE\s*\(\s*'[^']*'\s*,\s*'[^']*'\s*,\s*'[^']*'\s*,\s*#(\d+)\s*,\s*#(\d+)",
             re.IGNORECASE,
         )
         seen = set()
         for m in nauo_re.finditer(content):
-            pa = name_map.get(m.group(1), f"Part_{m.group(1)}")
-            pb = name_map.get(m.group(2), f"Part_{m.group(2)}")
+            pa = pd_name_map.get(m.group(1), f"Part_{m.group(1)}")
+            pb = pd_name_map.get(m.group(2), f"Part_{m.group(2)}")
             key = (pa, pb)
             if key not in seen:
                 seen.add(key)
@@ -276,24 +371,41 @@ def _parse_step_constraints(file_path: str) -> list:
     return constraints
 
 
-def _parse_step_adjacency(reader) -> list:
+def _parse_step_adjacency(reader, file_path: str = "") -> list:
     """
     基于包围盒（Bounding Box）重叠检测物理相邻零件。
     间距 < 2mm 视为邻接。
+
+    修复：STEP AP203 的 OCC Reader 只返回 1 个根 Compound Shape，
+    需要遍历顶级子形状（TopoDS_Iterator）才能得到各零件的包围盒。
+    子形状命名采用 Comp_{i} 格式，并尝试映射到装配树中的零件名（近似对应）。
     """
     adjacency = []
     try:
         from OCC.Core.BRepBndLib import brepbndlib
         from OCC.Core.Bnd import Bnd_Box
+        from OCC.Core.TopoDS import TopoDS_Iterator
 
-        nb = reader.NbRootsForTransfer()
-        shapes = [(f"Component_{i}", reader.Shape(i)) for i in range(1, nb + 1)]
+        # 遍历根 Shape 的顶级子形状
+        root_shape = reader.Shape(1)
+        sub_shapes = []
+        it = TopoDS_Iterator(root_shape)
+        while it.More():
+            sub_shapes.append(it.Value())
+            it.Next()
+
+        # 若 root 本身无子形状（整体装配体），直接用 NbRoots 逐个读取
+        if not sub_shapes:
+            nb = reader.NbRootsForTransfer()
+            sub_shapes = [reader.Shape(i) for i in range(1, nb + 1)]
 
         bbox_list = []
-        for name, shape in shapes:
+        for i, shape in enumerate(sub_shapes, start=1):
             bbox = Bnd_Box()
             brepbndlib.Add(shape, bbox)
-            bbox_list.append((name,) + bbox.Get())   # (name, xmin,ymin,zmin,xmax,ymax,zmax)
+            coords = bbox.Get()  # returns list [xmin,ymin,zmin,xmax,ymax,zmax]
+            name = f"Comp_{i}"
+            bbox_list.append((name, coords[0], coords[1], coords[2], coords[3], coords[4], coords[5]))
 
         GAP_THRESHOLD = 2.0
         for i, (n1, x1n, y1n, z1n, x1x, y1x, z1x) in enumerate(bbox_list):
@@ -311,6 +423,67 @@ def _parse_step_adjacency(reader) -> list:
     except Exception:
         pass
     return adjacency
+
+
+def _extract_geometry_features(shape) -> dict:
+    """
+    从 OCC Shape 提取几何特征，用于零件分类与 BOM 对齐。
+    使用兼容 pythonocc-core 7.7.x 的 brepgprop 静态方法。
+    """
+    try:
+        from OCC.Core.BRepGProp import brepgprop
+        from OCC.Core.GProp import GProp_GProps
+        from OCC.Core.BRepBndLib import brepbndlib
+        from OCC.Core.Bnd import Bnd_Box
+
+        props = GProp_GProps()
+        brepgprop.VolumeProperties(shape, props)
+        volume = props.Mass()
+
+        surf_props = GProp_GProps()
+        brepgprop.SurfaceProperties(shape, surf_props)
+        surface_area = surf_props.Mass()
+
+        cog = props.CentreOfMass()
+
+        bbox = Bnd_Box()
+        brepbndlib.Add(shape, bbox)
+        coords = bbox.Get()  # returns list [xmin,ymin,zmin,xmax,ymax,zmax]
+        xmin, ymin, zmin, xmax, ymax, zmax = coords[0], coords[1], coords[2], coords[3], coords[4], coords[5]
+        dims = sorted([abs(xmax - xmin), abs(ymax - ymin), abs(zmax - zmin)])
+
+        return {
+            "volume":       round(volume,       3),
+            "surface_area": round(surface_area, 3),
+            "bbox_dims":    [round(d, 3) for d in dims],
+            "centroid":     (round(cog.X(), 3), round(cog.Y(), 3), round(cog.Z(), 3)),
+        }
+    except Exception:
+        return {}
+
+
+def _classify_part_by_geometry(features: dict) -> str:
+    """
+    启发式形状分类：通过包围盒长宽比和体积判断零件类型。
+    dims 已排序为 [最小, 中间, 最大]。
+    """
+    dims   = features.get("bbox_dims", [])
+    volume = features.get("volume", 0)
+    if not dims or len(dims) < 3:
+        return "Unknown"
+
+    aspect_ratio = dims[2] / max(dims[0], 0.001)  # 长轴/短轴
+    flatness     = dims[0] / max(dims[1], 0.001)  # 最薄维度比
+
+    if aspect_ratio > 10:
+        return "Bolt/Shaft"       # 细长件
+    if flatness < 0.1 and aspect_ratio < 3:
+        return "Disk/Ring"        # 扁平圆形件
+    if volume < 500:
+        return "Fastener"         # 小件（螺栓螺母垫圈）
+    if volume > 500000:
+        return "Housing/Casing"   # 大件
+    return "General_Part"
 
 
 def _count_tree_nodes(tree: dict, count: int = 0) -> int:
