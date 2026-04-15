@@ -47,6 +47,49 @@ def _clean_ocr_noise(text: str) -> str:
     return text
 
 
+_NHA_PATTERN = _re.compile(r'SEE\s+FIG\.?\s*(\d+)\s+FOR\s+NHA', _re.IGNORECASE)
+
+
+def _resolve_nha_triples(triples: list, entities: list) -> list:
+    """
+    将 tail==ROOT 且 head 含 'SEE FIG.X FOR NHA' 的三元组，
+    重新连接到对应图的顶层 Assembly。
+
+    fig_to_assembly 建立策略：entities 列表中第一个 type==Assembly 的实体
+    视为 FIG.1 的顶层装配体（IPC 单图 BOM 场景，100% 准确）。
+    """
+    if not entities:
+        return triples
+
+    # 建立 fig_num → head_label 映射
+    fig_to_assembly: dict = {}
+    fig_counter = 0
+    for e in entities:
+        if e.get("type") == "Assembly":
+            pn = e.get("part_number", "")
+            nm = e.get("name", "")
+            label = f"{pn} {nm}".strip() if pn else nm
+            fig_counter += 1
+            fig_to_assembly[str(fig_counter)] = label
+            break  # 单图BOM：只取第一个顶层Assembly
+
+    # 修正 NHA 三元组
+    for t in triples:
+        if t.get("tail") != "ROOT":
+            continue
+        head = t.get("head", "")
+        m = _NHA_PATTERN.search(head)
+        if not m:
+            continue
+        fig_num = m.group(1)
+        assembly_label = fig_to_assembly.get(fig_num)
+        if assembly_label and assembly_label != head:
+            t["tail"] = assembly_label
+            t["tail_type"] = "Assembly"
+
+    return triples
+
+
 def _parse_indent_level(nomenclature: str) -> tuple:
     """从 IPC 零件名中解析点号缩进层级。
     返回 (层级深度 int, 清理后的名称 str)
@@ -164,6 +207,7 @@ def _bom_df_to_entities_and_triples(df_json: str):
             "source": "BOM", "head_type": etype, "tail_type": "ROOT",
         })
 
+    triples = _resolve_nha_triples(triples, entities)
     return entities, triples
 
 # ─────────────────────────────────────────────
