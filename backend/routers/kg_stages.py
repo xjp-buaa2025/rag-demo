@@ -12,6 +12,8 @@ import re as _re
 import tempfile
 from datetime import datetime, timezone
 
+from typing import List
+
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 
@@ -1366,42 +1368,145 @@ def _stage3_cad_gen(tmp_path: str, ext: str, state: AppState, neo4j_cfg: dict):
     yield {"type": "done", "success": True}
 
 
+# 内部生成器：阶段3 CAD 批量处理（多文件）
+# ─────────────────────────────────────────────
+
+def _stage3_cad_batch_gen(tmp_items: list, state: AppState, neo4j_cfg: dict):
+    """
+    tmp_items: [(tmp_path, orig_filename), ...]
+    逐文件解析，合并三元组后统一 BOM 对齐并写 JSON。
+    """
+    yield {"type": "log", "message": f"[Stage3] 开始批量处理 {len(tmp_items)} 个 CAD 文件"}
+
+    from backend.pipelines.nodes_cad import make_cad_nodes
+    nodes = make_cad_nodes(state, neo4j_cfg)
+
+    all_triples: list = []
+    source_files: list = []
+
+    for tmp_path, orig_name in tmp_items:
+        yield {"type": "log", "message": f"[Stage3] 解析：{orig_name}"}
+        result = nodes["parse_cad_step"]({"file_path": tmp_path, "file_ext": orig_name.rsplit(".", 1)[-1].lower()})
+        if "error" in result:
+            yield {"type": "log", "message": f"[Stage3] ⚠ {orig_name} 解析失败：{result['error']}，跳过"}
+            continue
+        for msg in result.get("log_messages", []):
+            yield {"type": "log", "message": msg}
+
+        assembly_tree = result.get("cad_assembly_tree", {})
+        constraints   = result.get("cad_constraints", [])
+        adjacency     = result.get("cad_adjacency", [])
+        flat = _cad_data_to_flat_triples(assembly_tree, constraints, adjacency)
+        all_triples.extend(flat)
+        source_files.append(orig_name)
+        yield {"type": "log", "message": f"[Stage3] {orig_name} → {len(flat)} 条三元组，累计 {len(all_triples)} 条"}
+
+    if not all_triples:
+        yield {"type": "error", "message": "[Stage3] 所有文件解析后无三元组"}
+        return
+
+    yield {"type": "log", "message": f"[Stage3] 生成 {len(all_triples)} 条扁平三元组（{len(source_files)} 个文件）"}
+
+    # BOM 对齐（一次性，针对所有三元组）
+    bom_entities_for_cad = []
+    if stage_exists("bom"):
+        bom_data = read_stage("bom")
+        bom_entities_for_cad = (bom_data or {}).get("entities", [])
+
+    if bom_entities_for_cad:
+        cad_mapping = _align_cad_to_bom(all_triples, bom_entities_for_cad, state)
+        method_dist: dict = {}
+        for v in cad_mapping.values():
+            m = v["method"]
+            method_dist[m] = method_dist.get(m, 0) + 1
+        hit = sum(1 for t in all_triples if t.get("head_bom_id") or t.get("tail_bom_id"))
+        yield {"type": "log", "message": f"[Stage3] BOM 对齐命中 {hit} 个实体字段，方法分布：{method_dist}"}
+        if not cad_mapping:
+            yield {"type": "log", "message": "[Stage3] ⚠ CAD 零件命名对齐率有限"}
+    else:
+        yield {"type": "log", "message": "[Stage3] ⚠ 无BOM数据，跳过CAD对齐"}
+
+    # 写中间产物 JSON
+    output = {
+        "generated_at":  datetime.now(timezone.utc).isoformat(),
+        "source_files":  source_files,
+        "triples":       all_triples,
+        "stats": {
+            "triples_count":  len(all_triples),
+            "assembly_nodes": sum(1 for t in all_triples if t["relation"] == "isPartOf"),
+            "constraints":    sum(1 for t in all_triples if t["relation"] in ("matesWith", "hasInterface", "constrainedBy")),
+            "adjacency":      sum(1 for t in all_triples if t["relation"] == "adjacentTo"),
+        },
+    }
+    write_stage("cad", output)
+    yield {
+        "type":          "result",
+        "triples_count": len(all_triples),
+        "stats":         output["stats"],
+        "output_file":   STAGE_FILES["cad"],
+    }
+    yield {"type": "log", "message": f"[Stage3] 已写入：{STAGE_FILES['cad']}"}
+
+    # 尝试写 Neo4j（失败不中断）
+    try:
+        yield {"type": "log", "message": "[Stage3] 尝试写入 Neo4j…"}
+        neo4j_result = nodes["cad_to_kg_triples"]({
+            "cad_assembly_tree": {},
+            "cad_constraints":   [],
+            "cad_adjacency":     [],
+        })
+        for msg in neo4j_result.get("log_messages", []):
+            yield {"type": "log", "message": msg}
+    except Exception as e:
+        yield {"type": "log", "message": f"[Stage3] Neo4j 写入跳过：{e}"}
+
+    yield {"type": "done", "success": True}
+
+
 # ─────────────────────────────────────────────
 # POST /kg/stage3/cad
 # ─────────────────────────────────────────────
 
-@router.post("/stage3/cad", summary="阶段3：CAD 模型入库（SSE）")
+@router.post("/stage3/cad", summary="阶段3：CAD 模型入库（SSE，支持多文件）")
 async def stage3_cad(
     request: Request,
-    file: UploadFile = File(...),
+    files: List[UploadFile] = File(...),
     state: AppState = Depends(get_state),
 ):
     """
-    上传 STEP/STP 文件，提取装配树/配合约束/空间邻接并生成三元组。
+    上传一个或多个 STEP/STP 文件，提取装配树/配合约束/空间邻接并生成三元组。
+    多文件时三元组合并写入 stage3_cad_triples.json。
     响应为 SSE 流。
     """
     neo4j_cfg = request.app.state.neo4j_cfg
 
-    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
-    if ext not in ("step", "stp"):
-        return JSONResponse(
-            status_code=400,
-            content={"error": f"不支持的文件格式：{ext}，仅支持 STEP/STP"},
-        )
+    # 校验所有文件扩展名
+    for f in files:
+        ext = (f.filename or "").rsplit(".", 1)[-1].lower()
+        if ext not in ("step", "stp"):
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"不支持的文件格式：{ext}（{f.filename}），仅支持 STEP/STP"},
+            )
 
-    content = await file.read()
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
+    # 写所有临时文件
+    tmp_items = []
+    for f in files:
+        ext = (f.filename or "file").rsplit(".", 1)[-1].lower()
+        content = await f.read()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+            tmp.write(content)
+            tmp_items.append((tmp.name, f.filename or f"file.{ext}"))
 
     def cleanup_and_gen():
         try:
-            yield from _stage3_cad_gen(tmp_path, ext, state, neo4j_cfg)
+            yield from _stage3_cad_batch_gen(tmp_items, state, neo4j_cfg)
         finally:
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
+            for tmp_path, _ in tmp_items:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
 
     return stage_gen_to_sse(cleanup_and_gen())
 
