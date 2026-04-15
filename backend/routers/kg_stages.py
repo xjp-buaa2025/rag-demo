@@ -1447,18 +1447,8 @@ def _stage3_cad_batch_gen(tmp_items: list, state: AppState, neo4j_cfg: dict):
     }
     yield {"type": "log", "message": f"[Stage3] 已写入：{STAGE_FILES['cad']}"}
 
-    # 尝试写 Neo4j（失败不中断）
-    try:
-        yield {"type": "log", "message": "[Stage3] 尝试写入 Neo4j…"}
-        neo4j_result = nodes["cad_to_kg_triples"]({
-            "cad_assembly_tree": {},
-            "cad_constraints":   [],
-            "cad_adjacency":     [],
-        })
-        for msg in neo4j_result.get("log_messages", []):
-            yield {"type": "log", "message": msg}
-    except Exception as e:
-        yield {"type": "log", "message": f"[Stage3] Neo4j 写入跳过：{e}"}
+    # 批量模式下跳过直写 Neo4j，统一由 Stage4 sync 接口同步
+    yield {"type": "log", "message": "[Stage3] 批量模式：跳过直写 Neo4j，请通过「同步到 Neo4j」完成入库"}
 
     yield {"type": "done", "success": True}
 
@@ -1480,6 +1470,9 @@ async def stage3_cad(
     """
     neo4j_cfg = request.app.state.neo4j_cfg
 
+    if not files:
+        return JSONResponse(status_code=400, content={"error": "请至少上传一个 STEP/STP 文件"})
+
     # 校验所有文件扩展名
     for f in files:
         ext = (f.filename or "").rsplit(".", 1)[-1].lower()
@@ -1491,12 +1484,12 @@ async def stage3_cad(
 
     # 写所有临时文件
     tmp_items = []
-    for f in files:
-        ext = (f.filename or "file").rsplit(".", 1)[-1].lower()
-        content = await f.read()
+    for upload_file in files:
+        ext = (upload_file.filename or "file").rsplit(".", 1)[-1].lower()
+        content = await upload_file.read()
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
             tmp.write(content)
-            tmp_items.append((tmp.name, f.filename or f"file.{ext}"))
+            tmp_items.append((tmp.name, upload_file.filename or f"file.{ext}"))
 
     def cleanup_and_gen():
         try:
