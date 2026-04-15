@@ -71,3 +71,22 @@ class TestCleanOcrNoiseIntegration:
         child_triple = next((t for t in triples if "SEAL AIR" in t["head"]), None)
         assert child_triple is not None
         assert child_triple["tail"] != "ROOT", f"子件未正确连接父节点，tail={child_triple['tail']}"
+
+
+class TestOcrBomPrompt:
+    """验证 Prompt 包含关键规则和示例。"""
+
+    def test_prompt_has_nha_rule(self):
+        from backend.routers.kg_stages import _OCR_BOM_PROMPT
+        assert "SEE FIG" in _OCR_BOM_PROMPT, "Prompt 缺少 NHA 跨图规则"
+        assert "level=1" in _OCR_BOM_PROMPT or "单点" in _OCR_BOM_PROMPT, \
+            "Prompt 未说明 NHA 零件的 nomenclature 应填单点前缀"
+
+    def test_prompt_has_intrchg_rule(self):
+        from backend.routers.kg_stages import _OCR_BOM_PROMPT
+        assert "INTRCHG" in _OCR_BOM_PROMPT, "Prompt 缺少互换件规则"
+
+    def test_prompt_has_fewshot(self):
+        from backend.routers.kg_stages import _OCR_BOM_PROMPT
+        assert "示例" in _OCR_BOM_PROMPT, "Prompt 缺少 few-shot 示例"
+        assert "3034344" in _OCR_BOM_PROMPT, "Prompt 缺少具体 few-shot 数据"
