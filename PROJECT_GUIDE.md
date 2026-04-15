@@ -54,7 +54,7 @@
 | 图谱数据库 | **Neo4j** | BOM 零件树 + 知识图谱，Cypher 递归查询 |
 | 后端框架 | **FastAPI** + uvicorn | SSE 流式响应 |
 | 前端框架 | **React 18 + TypeScript + Vite** | Tailwind CSS v4，POST SSE |
-| PDF 解析 | PyMuPDF（文本提取）+ deepdoc（AI OCR/Layout） | 双路：可复制 PDF 直接提取，扫描版走 deepdoc |
+| PDF 解析 | **MinerU CLI**（方案A）+ **RAGFlow deepdoc**（方案B） | 双轨：方案A独立批量转Markdown（DocLayout-YOLO+PaddleOCR+UniMERNet公式）；方案B在入库管道中实时处理（YOLOv10布局+ONNX表格→HTML+PaddleOCR），大PDF自动分批50页防OOM。技术手册/图表优选方案B；含LaTeX公式的学术PDF优选方案A |
 | CAD 解析 | **pythonocc-core**（Open CASCADE） | STEP 文件装配树 / 约束 / 空间邻接 |
 
 ---
@@ -425,6 +425,56 @@ docker start neo4j   # 后续重启
 - `[2..N]` BOM 实体（Assembly/Part）
 - `[N+1..]` RAG 文本块
 
+### 9.5 KG 四阶段构建管道（kg_stages.py）
+
+**What**：以独立 REST+SSE 端点取代 LangGraph 一体化管道，每阶段产物写 JSON 文件（可人工审查），最终统一同步至 Neo4j。
+
+**Why**：避免 LangGraph 大图 OOM；阶段解耦便于局部重跑；中间 JSON 可供论文截图取证。
+
+**阶段划分**
+
+| 阶段 | 端点 | 来源 | 输出文件 |
+|------|------|------|----------|
+| Stage1 BOM | `POST /kg/stage1/bom` | BOM xlsx/csv/pdf | `stage1_bom_triples.json` |
+| Stage2 Manual | `POST /kg/stage2/manual` | 维修手册 PDF/docx | `stage2_manual_triples.json` |
+| Stage3 CAD | `POST /kg/stage3/cad` | STEP 文件 | `stage3_cad_triples.json` |
+| Stage4 Validate | `POST /kg/stage4/validate` | 读已有 JSON | 报告（P/R/F1）|
+| Sync Neo4j | `POST /kg/stages/sync-neo4j` | 读所有 JSON | Neo4j 写入 |
+
+**How（调用链）**
+
+```
+上传文件 → _stage1/2/3_gen() → LLM/deepdoc/OCC 抽取
+  → write_stage("bom/manual/cad", {entities, triples})
+  → (sync-neo4j 时) postprocess_triples()
+  → _write_all_stages_to_neo4j()
+  → Neo4j MERGE
+```
+
+### 9.6 三元组后处理管道（kg_postprocess.py）
+
+**What**：`backend/pipelines/kg_postprocess.py`，对外暴露 `postprocess_triples(triples, skip_ontology)` 单一函数。
+
+**Why**：原始三元组约 690 条，含 ~15% 低置信、大量大小写重复、本体约束违反，直接写入 Neo4j 会污染图谱影响查询质量。
+
+**How（四步流水线）**
+
+1. **置信度过滤** `confidence >= 0.3`，BOM 不受影响（全为 1.0），手册过滤 44 条
+2. **实体名称归一化** strip + 合并空格 + 统一中文标点，不改大小写（保留显示形式）
+3. **本体约束校验** 按 `ONTOLOGY_RULES` 字典校验 head_type/tail_type，手册过滤 108 条；BOM/CAD 因类型信息不完整传 `skip_ontology=True` 跳过
+4. **去重** 以 `(head.lower(), relation, tail.lower())` 为 key，同 key 保留最高置信度，BOM 去重 38 条
+
+**验证结果（2026-04-13）**
+
+| 阶段 | 原始 | 最终 | 清除率 |
+|------|------|------|--------|
+| BOM | 175 | 137 | 21.7% |
+| Manual | 459 | 305 | 33.5% |
+| CAD | 56 | 56 | 0% |
+| **合计** | **690** | **498** | **27.8%** |
+
+接入点：`_write_all_stages_to_neo4j`（写入前清洗）+ `/kg/stage4/validate`（验证时同步清洗），清洗统计随响应返回 `postprocess` 字段。
+
 ---
 
 ## 10. LangGraph 多步骤管道
@@ -740,3 +790,5 @@ export HF_ENDPOINT=https://hf-mirror.com
 | 2026-04-01 | 前端大重构：① 合并 RagChat+AssemblyChat → UnifiedChat（模式切换+主题色动态）；② 新建 KgBuilder（BOM/RAG/CAD 统一入库面板）；③ 新建 KgViewer（D3 力导向图，7实体颜色/9关系颜色/拖拽缩放/点击高亮）；④ 移除双 Tab，改为扁平 Accordion 布局；⑤ 后端新增 GET /bom/kg/graph 可视化数据端点；⑥ types/index.ts 新增 KgNode/KgLink/KgGraphData；⑦ 安装 D3 v7 依赖 |
 | 2026-04-02 | 三源互补知识图谱：① nodes_kg.py 引入 GraphRAG Gleaning（两轮抽取）+ description/weight 字段 + verify_kg_entities 节点（三级置信度验证）+ REPRESENTED_BY 图边（BOM→KG）；② nodes_manual.py 新增 extract_visual_kg 节点（爆炸图关键词过滤→视觉LLM→isPartOf/matesWith 三元组）；③ nodes_cad.py MERGE 去标签约束（CAD关系叠加到BOM节点）；④ factory.py 接入两个新节点；⑤ state.py 新增 visual_kg_triples/kg_verification_report 字段 |
 | 2026-04-02 | KgBuilder 前端重构：平铺列表→三栏卡片（各栏独立 file input + forcedCategory 修复 .docx 误归类问题）；bom_ingest_pipeline 路由修复（CAD 文件正确走 lg_cad_pipeline；BOM/CAD 均改为后台线程+队列，修复 LLM 等待期间 SSE 静默/前端永久"构建中"的 bug）|
+| 2026-04-13 | 三元组后处理管道（TASK_05）：新建 `backend/pipelines/kg_postprocess.py`（置信度过滤MIN=0.3 + 归一化 + 本体校验 + 去重四步流水线）；接入 `_write_all_stages_to_neo4j` 与 `/kg/stage4/validate` 端点；690→498 条，清除率 27.8%，response 新增 `postprocess` 统计字段 |
+| 2026-04-15 | BOM 层级修复（TASK_01）：① 新增 `_clean_ocr_noise`（正则净化 COMP0NENT/0F/0N/0VS/N0. 等 OCR 噪声，接入 OCR chunk 预处理和每行字段后处理）；② 强化 `_OCR_BOM_PROMPT`（新增规则7 NHA跨图单点前缀/规则8 INTRCHG互换件层级 + 4条 few-shot）；③ 新增 `_resolve_nha_triples`（后处理修正 tail==ROOT 且含 SEE FIG.X FOR NHA 的三元组，连接到顶层 Assembly）；新增测试 `tests/kg/test_bom_hierarchy.py`（15条单元测试）+ `tests/kg/test_bom_stage1_acceptance.py`（4条验收测试）|
