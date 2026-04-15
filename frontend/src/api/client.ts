@@ -8,7 +8,7 @@
 // 非 SSE 接口返回普通 Promise<T>。
 // ============================================================
 
-import type { HealthResponse, IngestStatus, BomStatus, Chunk, Message, SseFrame, KgGraphData, KgTaskCreateResponse, KgTaskStatus, StagesStatus, TriplesPreview, ValidationReport, KgSseFrame } from '../types'
+import type { HealthResponse, IngestStatus, BomStatus, Chunk, Message, SseFrame, KgGraphData, KgTaskCreateResponse, KgTaskStatus, StagesStatus, TriplesPreview, ValidationReport, KgSseFrame, SyncNeo4jResult } from '../types'
 
 const BASE = '/api'
 
@@ -220,9 +220,9 @@ export async function* postKgStage2(file: File): AsyncGenerator<KgSseFrame> {
   yield* postSSE('/kg/stage2/manual', form) as AsyncGenerator<KgSseFrame>
 }
 
-export async function* postKgStage3(file: File): AsyncGenerator<KgSseFrame> {
+export async function* postKgStage3(files: File[]): AsyncGenerator<KgSseFrame> {
   const form = new FormData()
-  form.append('file', file)
+  files.forEach(f => form.append('files', f))
   yield* postSSE('/kg/stage3/cad', form) as AsyncGenerator<KgSseFrame>
 }
 
@@ -241,6 +241,11 @@ export async function getKgStagePreview(
   stage: string, offset = 0, limit = 50
 ): Promise<TriplesPreview> {
   const res = await fetch(`${BASE}/kg/stages/${stage}/preview?offset=${offset}&limit=${limit}`)
+  return res.json()
+}
+
+export async function postKgSyncNeo4j(): Promise<SyncNeo4jResult> {
+  const res = await fetch(`${BASE}/kg/stages/sync-neo4j`, { method: 'POST' })
   return res.json()
 }
 

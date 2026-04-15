@@ -8,7 +8,7 @@ interface Props {
 }
 
 export default function Stage3Cad({ onComplete }: Props) {
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [logs, setLogs] = useState<string[]>([])
   const [resultFrame, setResultFrame] = useState<KgSseFrame | null>(null)
   const [preview, setPreview] = useState<TriplesPreview | null>(null)
@@ -16,12 +16,12 @@ export default function Stage3Cad({ onComplete }: Props) {
   const { run, loading } = useStageSSE()
 
   const handleRun = async () => {
-    if (!file) return
+    if (files.length === 0) return
     setLogs([])
     setResultFrame(null)
     setPreview(null)
     setPreviewOffset(0)
-    await run(postKgStage3(file), {
+    await run(postKgStage3(files), {
       onLog: (msg) => setLogs(prev => [...prev, msg]),
       onResult: (data) => setResultFrame(data),
       onDone: async (success) => {
@@ -49,12 +49,16 @@ export default function Stage3Cad({ onComplete }: Props) {
         <input
           type="file"
           accept=".step,.stp"
-          onChange={e => setFile(e.target.files?.[0] ?? null)}
+          multiple
+          onChange={e => setFiles(Array.from(e.target.files ?? []))}
           className="text-sm text-slate-600"
         />
+        {files.length > 0 && (
+          <span className="text-xs text-slate-500">已选 {files.length} 个文件</span>
+        )}
         <button
           onClick={handleRun}
-          disabled={loading || !file}
+          disabled={loading || files.length === 0}
           className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-40"
         >
           {loading ? '运行中…' : '运行 CAD 解析'}
