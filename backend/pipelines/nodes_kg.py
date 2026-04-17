@@ -86,10 +86,47 @@ Few-shot示例4（中文工具和规范）：
 文本：使用T-205专用工具锁紧锁片，再用扭力扳手施加规定扭矩，分三次施加不得一次到位。
 {{"entities":[{{"id":"e1","type":"Procedure","text":"锁紧锁片","description":"使用专用工具将锁片锁紧固定的装配工序"}},{{"id":"e2","type":"Procedure","text":"施加规定扭矩","description":"分三次用扭力扳手施加规定扭矩，不得一次到位"}},{{"id":"e3","type":"Tool","text":"T-205专用锁紧工具","description":"型号T-205的专用工具，用于锁紧锁片操作"}},{{"id":"e4","type":"Tool","text":"扭力扳手","description":"可控制输出扭矩大小的专用装配工具"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e1","tail":"e3","type":"requires","weight":10}},{{"head":"e2","tail":"e4","type":"requires","weight":10}}]}}
 
+Few-shot示例5（英文含零件编号，实体保留完整编号）：
+文本：Remove nuts (MS9767-09), washers and bolts (MS9556-07) securing ring halves to brackets. Apply torque 32 to 36 lb.in to mounting nuts.
+{{"entities":[{{"id":"e1","type":"Procedure","text":"Remove nuts, washers and bolts securing ring halves to brackets","description":"Removal procedure for fasteners securing ring halves to mounting brackets"}},{{"id":"e2","type":"Procedure","text":"Apply torque to mounting nuts","description":"Torque application procedure for mounting nuts to specified range"}},{{"id":"e3","type":"Part","text":"Nut MS9767-09","description":"Mounting nut with part number MS9767-09 used to secure ring halves"}},{{"id":"e4","type":"Part","text":"Bolt MS9556-07","description":"Bolt with part number MS9556-07 used to fasten ring halves to brackets"}},{{"id":"e5","type":"Tool","text":"Torque wrench","description":"Calibrated torque wrench for applying specified torque to fasteners"}},{{"id":"e6","type":"Specification","text":"32-36 lb.in","description":"Required torque range for mounting nuts during assembly"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e3","tail":"e1","type":"participatesIn","weight":8}},{{"head":"e4","tail":"e1","type":"participatesIn","weight":8}},{{"head":"e2","tail":"e5","type":"requires","weight":9}},{{"head":"e2","tail":"e6","type":"specifiedBy","weight":10}}]}}
+
+【实体命名规则】（中英文均适用）
+1. Part/Assembly 名称必须保留完整描述，禁止简化为 "Bolt"、"Nut"、"Washer"、"Ring" 等泛称
+2. 若文本中出现零件编号（如 MS9556-07、SB1445），必须附加到名称中（格式："名称 编号"）
+3. 命名示例：
+   ✓ "Mounting bolt MS9556-07"  ✗ "Bolt"
+   ✓ "Nut MS9767-09"            ✗ "Nut"
+   ✓ "Center Fireseal Mount Ring" ✗ "Ring"
+4. 图表编号（"Figure 201"、"Table 1"）、文件编号（"SB1445"单独出现）不得作为实体提取
+
 当前文本块（ATA章节：{ata_section}）：
 {chunk_text}
 
 输出格式（严格JSON，不包含任何其他内容）："""
+
+
+
+def _build_prompt_with_bom(base_prompt: str, bom_entities: list) -> str:
+    """
+    动态在 base_prompt 末尾追加 BOM 编号速查表（≤60条）。
+    不修改 _KG_EXTRACTION_PROMPT 常量，仅在调用时拼接。
+    """
+    if not bom_entities:
+        return base_prompt
+    lines = []
+    for e in bom_entities[:60]:
+        pn = e.get("part_number", "")
+        name = e.get("name", "")
+        if pn:
+            lines.append(f"  {pn:<16} {name}")
+    if not lines:
+        return base_prompt
+    section = (
+        "\n\n【当前 BOM 零件编号速查表】\n"
+        "以下编号若出现在文本中，请在实体 text 字段保留完整编号（格式：'名称 编号'）。\n"
+        + "\n".join(lines)
+    )
+    return base_prompt + section
 
 
 # ── KG Gleaning（第二轮补全）Prompt ──────────────────────────────────────────
@@ -514,10 +551,14 @@ def make_kg_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
 
             _push(f"[KG] 第 {i+1}/{total} 块 — {ata_section[:40]}")
 
-            prompt = _KG_EXTRACTION_PROMPT.format(
+            _bom_ents = list((state.get("bom_entities") or {}).values()) \
+                if isinstance(state.get("bom_entities"), dict) \
+                else (state.get("bom_entities") or [])
+            _base_prompt = _KG_EXTRACTION_PROMPT.format(
                 ata_section=ata_section,
                 chunk_text=chunk_text_truncated,
             )
+            prompt = _build_prompt_with_bom(_base_prompt, _bom_ents)
 
             try:
                 # ── 第一轮：初始提取 ──────────────────────────────────────────
