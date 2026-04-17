@@ -900,6 +900,14 @@ def _stage2_manual_gen(tmp_path: str, filename: str, state: AppState, neo4j_cfg:
     if bom_entities:
         aligned_count = _align_manual_to_bom(flat_triples, bom_entities)
         yield {"type": "log", "message": f"[Stage2] BOM 实体对齐：{aligned_count} 个实体字段命中（覆盖全部关系类型）"}
+        from backend.pipelines.kg_postprocess import enrich_bom_links as _enrich
+        enrich_result = _enrich(flat_triples, bom_entities)
+        es = enrich_result["stats"]
+        enriched = es["regex_hits"] + es["cad_hits"] + es["keyword_hits"]
+        yield {"type": "log", "message": (
+            f"[Stage2] BOM 关联增强：{enriched}/{es['total']} 条三元组命中"
+            f"（regex={es['regex_hits']}, cad={es['cad_hits']}, keyword={es['keyword_hits']}）"
+        )}
 
     # 5. 统计
     from collections import Counter
@@ -1692,6 +1700,19 @@ def _write_all_stages_to_neo4j(neo4j_cfg: dict) -> dict:
             triples, _pp = postprocess_triples(triples, skip_ontology=False)
             postprocess_stats["manual"] = _pp
             _log.info(f"[PostProcess] Manual: {_pp}")
+
+            # ── BOM 关联增强 ──────────────────────────────────────────────────
+            if bom_data:
+                from backend.pipelines.kg_postprocess import enrich_bom_links as _enrich
+                _er = _enrich(triples, bom_data.get("entities", []))
+                _es = _er["stats"]
+                _enriched = _es["regex_hits"] + _es["cad_hits"] + _es["keyword_hits"]
+                _log.info(
+                    f"[EnrichBOM] Manual: {_enriched}/{_es['total']} 命中 "
+                    f"(regex={_es['regex_hits']}, cad={_es['cad_hits']}, keyword={_es['keyword_hits']})"
+                )
+                postprocess_stats["manual_bom_enrich"] = _es
+            # ──────────────────────────────────────────────────────────────────
 
             # 收集实体（去重）
             entity_map: dict = {}
