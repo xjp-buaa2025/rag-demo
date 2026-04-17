@@ -288,7 +288,7 @@ def enrich_bom_links(
             score = _jaccard(text, e.get("name", ""))
             if score > best_score:
                 best_score, best_id = score, e["id"]
-        if best_score >= 0.35 and best_id:
+        if best_score >= 0.25 and best_id:
             return best_id, "keyword_jaccard"
 
         return None, "unmatched"
