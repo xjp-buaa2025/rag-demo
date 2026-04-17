@@ -365,6 +365,29 @@ def _parse_step_constraints(file_path: str) -> list:
                     "interface":       tol_name,
                 })
 
+        # ── 数字名前缀补全（与 _parse_step_tree_from_text 逻辑一致）────────────
+        # 从装配树 NAUO 中推断根节点，然后对 constraints 中的裸数字名补前缀。
+        _NUMERIC_RE = re.compile(r'^\d[\d\-a-zA-Z]*$')
+        # 仅对 assembly 类型的约束推断 parent_map，找到根节点
+        _asm = [(c["part_a"], c["part_b"]) for c in constraints
+                if c["constraint_type"] == "assembly" and c["part_a"] and c["part_b"]]
+        if _asm:
+            _all_names = set(pa for pa, pb in _asm) | set(pb for pa, pb in _asm)
+            _children  = set(pb for pa, pb in _asm)
+            _roots     = _all_names - _children
+            _top       = next(iter(_roots), "")
+            if _top and not _NUMERIC_RE.match(_top):
+                def _fix_name(name: str) -> str:
+                    return f"{_top}-{name}" if _NUMERIC_RE.match(name) else name
+                fixed = []
+                for c in constraints:
+                    if c["constraint_type"] == "assembly":
+                        c = dict(c)
+                        c["part_a"] = _fix_name(c["part_a"])
+                        c["part_b"] = _fix_name(c["part_b"])
+                    fixed.append(c)
+                constraints = fixed
+
     except Exception:
         pass
 
