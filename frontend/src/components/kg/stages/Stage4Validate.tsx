@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { postKgStage4Validate } from '../../../api/client'
-import type { ValidationReport } from '../../../types'
+import { postKgStage4Validate, postKgSyncNeo4j } from '../../../api/client'
+import type { ValidationReport, SyncNeo4jResult } from '../../../types'
 
 type FilterMode = 'all' | 'unmatched'
 
@@ -9,6 +9,10 @@ export default function Stage4Validate() {
   const [report, setReport] = useState<ValidationReport | null>(null)
   const [filter, setFilter] = useState<FilterMode>('all')
   const [error, setError] = useState<string | null>(null)
+
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<SyncNeo4jResult | null>(null)
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   const handleValidate = async () => {
     setLoading(true)
@@ -23,6 +27,21 @@ export default function Stage4Validate() {
     }
   }
 
+  const handleSyncNeo4j = async () => {
+    setSyncing(true)
+    setSyncError(null)
+    setSyncResult(null)
+    try {
+      const r = await postKgSyncNeo4j()
+      setSyncResult(r)
+      if (!r.ok) setSyncError(r.error ?? '同步失败')
+    } catch (e) {
+      setSyncError(String(e))
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const fmt = (n: number) => (n * 100).toFixed(1) + '%'
 
   const filteredComparison = report?.comparison.filter(t =>
@@ -31,7 +50,7 @@ export default function Stage4Validate() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={handleValidate}
           disabled={loading}
@@ -39,8 +58,33 @@ export default function Stage4Validate() {
         >
           {loading ? '验证中…' : '运行验证'}
         </button>
+        <button
+          onClick={handleSyncNeo4j}
+          disabled={syncing}
+          className="px-4 py-1.5 bg-emerald-600 text-white text-sm rounded hover:bg-emerald-700 disabled:opacity-40"
+        >
+          {syncing ? '同步中…' : '同步所有阶段到 Neo4j'}
+        </button>
         {error && <span className="text-red-500 text-sm">{error}</span>}
+        {syncError && <span className="text-red-500 text-sm">{syncError}</span>}
       </div>
+
+      {/* 同步结果 */}
+      {syncResult?.ok && syncResult.stats && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded p-3 space-y-1">
+          <div className="text-sm font-medium text-emerald-700">✓ Neo4j 同步完成</div>
+          <div className="flex flex-wrap gap-4 text-xs text-emerald-600">
+            <span>BOM: <strong>{syncResult.stats.bom_nodes}</strong> 节点, <strong>{syncResult.stats.bom_rels}</strong> isPartOf</span>
+            <span>手册: <strong>{syncResult.stats.manual_nodes}</strong> 节点, <strong>{syncResult.stats.manual_rels}</strong> 关系</span>
+            <span>CAD: <strong>{syncResult.stats.cad_nodes}</strong> 节点操作, <strong>{syncResult.stats.cad_rels}</strong> 关系</span>
+            <span>跨阶段对齐: <strong>{syncResult.stats.same_as_rels}</strong> SAME_AS</span>
+          </div>
+          {syncResult.logs && syncResult.logs.length > 0 && (
+            <div className="text-xs text-emerald-500 mt-1">{syncResult.logs.join(' | ')}</div>
+          )}
+        </div>
+      )}
+
 
       {report && (
         <div className="space-y-4">
@@ -70,6 +114,36 @@ export default function Stage4Validate() {
             <span>黄金集: <strong>{report.golden_count}</strong></span>
             <span>预测集: <strong>{report.predicted_count}</strong></span>
           </div>
+
+          {/* 后处理清洗统计 */}
+          {report.postprocess && Object.keys(report.postprocess).length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-slate-700">后处理清洗统计</div>
+              {Object.entries(report.postprocess).map(([stage, s]) => {
+                const removedPct = ((1 - s.retention_rate) * 100).toFixed(1)
+                const reached = s.retention_rate <= 0.85
+                return (
+                  <div key={stage} className="bg-slate-50 border border-slate-200 rounded p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-600 uppercase">{stage}</span>
+                      <span className={`text-xs font-bold ${reached ? 'text-green-600' : 'text-yellow-600'}`}>
+                        减少 {removedPct}% {reached ? '✓ 达标' : '⚠ 未达标'}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                      <span>原始: <strong className="text-slate-700">{s.original}</strong></span>
+                      <span>→</span>
+                      <span>最终: <strong className="text-slate-700">{s.final}</strong></span>
+                      <span className="ml-2 text-slate-400">|</span>
+                      <span>低置信度剔除: <strong>{s.removed_low_confidence}</strong></span>
+                      <span>本体违规剔除: <strong>{s.removed_ontology_violation}</strong></span>
+                      <span>去重剔除: <strong>{s.removed_duplicates}</strong></span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           {/* 按关系类型 F1 表格 */}
           {Object.keys(report.per_relation).length > 0 && (
