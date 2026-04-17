@@ -19,6 +19,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
+# 匹配以数字开头的零件名（如 '10'、'180-blade'），用于前缀补全
+_NUMERIC_NAME_RE = re.compile(r'^\d[\d\-a-zA-Z]*$')
+
 
 def make_cad_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
     """工厂函数：创建 CAD 解析管道节点，通过闭包绑定 neo4j_cfg。"""
@@ -296,13 +299,13 @@ def _parse_step_tree_from_text(file_path: str) -> dict:
     if parent_map:
         _all = set(parent_map.keys()) | set(parent_map.values())
         _roots = _all - set(parent_map.keys())
-        _top = next(iter(_roots), "")
-        _NUMERIC_RE = re.compile(r'^\d[\d\-a-zA-Z]*$')
-        # 只有当根节点名本身不是数字时才补全（避免误处理）
-        if _top and not _NUMERIC_RE.match(_top):
-            def _fix(name: str) -> str:
-                return f"{_top}-{name}" if _NUMERIC_RE.match(name) else name
-            parent_map = {_fix(c): _fix(p) for c, p in parent_map.items()}
+        # 只有单根节点时才补全（多根时行为不确定，跳过）
+        if len(_roots) == 1:
+            _top = next(iter(_roots))
+            if not _NUMERIC_NAME_RE.match(_top):
+                def _fix(name: str) -> str:
+                    return f"{_top}-{name}" if _NUMERIC_NAME_RE.match(name) else name
+                parent_map = {_fix(c): _fix(p) for c, p in parent_map.items()}
 
     if not parent_map:
         return {"root": {}}
@@ -367,7 +370,6 @@ def _parse_step_constraints(file_path: str) -> list:
 
         # ── 数字名前缀补全（与 _parse_step_tree_from_text 逻辑一致）────────────
         # 从装配树 NAUO 中推断根节点，然后对 constraints 中的裸数字名补前缀。
-        _NUMERIC_RE = re.compile(r'^\d[\d\-a-zA-Z]*$')
         # 仅对 assembly 类型的约束推断 parent_map，找到根节点
         _asm = [(c["part_a"], c["part_b"]) for c in constraints
                 if c["constraint_type"] == "assembly" and c["part_a"] and c["part_b"]]
@@ -375,18 +377,16 @@ def _parse_step_constraints(file_path: str) -> list:
             _all_names = set(pa for pa, pb in _asm) | set(pb for pa, pb in _asm)
             _children  = set(pb for pa, pb in _asm)
             _roots     = _all_names - _children
-            _top       = next(iter(_roots), "")
-            if _top and not _NUMERIC_RE.match(_top):
-                def _fix_name(name: str) -> str:
-                    return f"{_top}-{name}" if _NUMERIC_RE.match(name) else name
-                fixed = []
-                for c in constraints:
-                    if c["constraint_type"] == "assembly":
-                        c = dict(c)
-                        c["part_a"] = _fix_name(c["part_a"])
-                        c["part_b"] = _fix_name(c["part_b"])
-                    fixed.append(c)
-                constraints = fixed
+            if len(_roots) == 1:
+                _top = next(iter(_roots))
+                if not _NUMERIC_NAME_RE.match(_top):
+                    def _fix_c(name: str) -> str:
+                        return f"{_top}-{name}" if _NUMERIC_NAME_RE.match(name) else name
+                    constraints = [
+                        {**c, "part_a": _fix_c(c["part_a"]), "part_b": _fix_c(c["part_b"])}
+                        if c["constraint_type"] == "assembly" else c
+                        for c in constraints
+                    ]
 
     except Exception:
         pass

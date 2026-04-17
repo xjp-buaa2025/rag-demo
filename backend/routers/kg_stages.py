@@ -1487,6 +1487,11 @@ async def stage3_cad(
     for upload_file in files:
         ext = (upload_file.filename or "file").rsplit(".", 1)[-1].lower()
         content = await upload_file.read()
+        if not content:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"文件 {upload_file.filename or 'unknown'} 内容为空"},
+            )
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
             tmp.write(content)
             tmp_items.append((tmp.name, upload_file.filename or f"file.{ext}"))
