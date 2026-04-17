@@ -211,6 +211,16 @@ export interface GoldenTriple extends FlatTriple {
   source_page?: string
 }
 
+export interface PostprocessStageStats {
+  original: number
+  removed_low_confidence: number
+  removed_ontology_violation: number
+  removed_duplicates: number
+  final: number
+  total_removed: number
+  retention_rate: number
+}
+
 export interface ValidationReport {
   precision: number
   recall: number
@@ -223,4 +233,26 @@ export interface ValidationReport {
   stages_included: string[]
   per_relation: Record<string, RelationStats>
   comparison: GoldenTriple[]
+  golden_audit?: {
+    total: number
+    issues_count: number
+    reliability_score: number
+    issues: Array<{ idx: number; type: string; desc: string }>
+  }
+  postprocess?: Record<string, PostprocessStageStats>
+}
+
+export interface SyncNeo4jResult {
+  ok: boolean
+  error?: string
+  stats?: {
+    bom_nodes: number
+    bom_rels: number
+    manual_nodes: number
+    manual_rels: number
+    cad_nodes: number
+    cad_rels: number
+    same_as_rels: number
+  }
+  logs?: string[]
 }
