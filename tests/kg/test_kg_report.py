@@ -47,7 +47,7 @@ def test_bom_coverage_for_manual():
     }
     report = generate_stage_report("manual", manual_data, prev_data=None, bom_data=BOM_TRIPLES)
     assert report.stats.bom_coverage_ratio is not None
-    assert 0 < report.stats.bom_coverage_ratio <= 1.0
+    assert abs(report.stats.bom_coverage_ratio - 1/3) < 1e-4  # 3个BOM实体，覆盖1个(P1)
 
 def test_diff_when_prev_exists():
     prev = {**BOM_TRIPLES, "triples": BOM_TRIPLES["triples"][:2]}
