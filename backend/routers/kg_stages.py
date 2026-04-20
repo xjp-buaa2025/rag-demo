@@ -459,6 +459,21 @@ def _stage1_bom_gen(tmp_path: str, ext: str, clear_first: bool,
         "stats": {"entities_count": len(entities), "triples_count": len(triples)},
         "output_file": STAGE_FILES["bom"],
     }
+    # ── HITL: 生成 StageReport ───────────────────────────────────────
+    try:
+        from backend.pipelines.kg_report import generate_stage_report
+        from backend.kg_storage import (
+            write_stage_report, write_stage_state, StageState,
+            read_stage, STAGE_REPORT_FILES,
+        )
+        current_data = read_stage("bom") or {}
+        report = generate_stage_report("bom", current_data, prev_data=None)
+        write_stage_report("bom", report)
+        write_stage_state("bom", StageState(stage="bom", status="awaiting_review"))
+        yield {"type": "stage_report_ready", "stage": "bom", "issues_count": len(report.issues)}
+    except Exception as e:
+        yield {"type": "log", "message": f"[Report] 报告生成失败（不影响主流程）: {e}"}
+    # ────────────────────────────────────────────────────────────────
     yield {"type": "done", "success": True}
 
 
@@ -944,6 +959,22 @@ def _stage2_manual_gen(tmp_path: str, filename: str, state: AppState, neo4j_cfg:
         "stats": output["stats"],
         "output_file": STAGE_FILES["manual"],
     }
+    # ── HITL: 生成 StageReport ───────────────────────────────────────
+    try:
+        from backend.pipelines.kg_report import generate_stage_report
+        from backend.kg_storage import (
+            write_stage_report, write_stage_state, StageState,
+            read_stage, STAGE_REPORT_FILES,
+        )
+        current_data = read_stage("manual") or {}
+        bom_data = read_stage("bom")
+        report = generate_stage_report("manual", current_data, prev_data=None, bom_data=bom_data)
+        write_stage_report("manual", report)
+        write_stage_state("manual", StageState(stage="manual", status="awaiting_review"))
+        yield {"type": "stage_report_ready", "stage": "manual", "issues_count": len(report.issues)}
+    except Exception as e:
+        yield {"type": "log", "message": f"[Report] 报告生成失败（不影响主流程）: {e}"}
+    # ────────────────────────────────────────────────────────────────
     yield {"type": "done", "success": True}
 
 
@@ -1919,3 +1950,140 @@ def stages_preview(stage: str, offset: int = 0, limit: int = 50):
         "limit": limit,
         "triples": triples[offset: offset + limit],
     }
+
+
+# ══════════════════════════════════════════════════════
+# HITL 端点
+# ══════════════════════════════════════════════════════
+
+from fastapi import Body
+from backend.pipelines.kg_report import generate_stage_report as _gen_report
+from backend.kg_storage import (
+    read_stage_report, write_stage_report,
+    read_stage_state, write_stage_state, StageState,
+    read_stage, write_stage,
+)
+
+_STAGE_SLUG = {"1": "bom", "2": "manual"}
+
+
+def _resolve_stage(n: str) -> str:
+    s = _STAGE_SLUG.get(n)
+    if not s:
+        from fastapi import HTTPException
+        raise HTTPException(404, f"Stage {n} not supported for HITL")
+    return s
+
+
+@router.get("/stage{n}/report")
+async def get_stage_report(n: str):
+    stage = _resolve_stage(n)
+    report = read_stage_report(stage)
+    if report is None:
+        data = read_stage(stage)
+        if data is None:
+            from fastapi import HTTPException
+            raise HTTPException(404, "Stage data not found. Run the stage first.")
+        bom_data = read_stage("bom") if stage == "manual" else None
+        report = _gen_report(stage, data, prev_data=None, bom_data=bom_data)
+        write_stage_report(stage, report)
+    from dataclasses import asdict
+    return asdict(report)
+
+
+@router.post("/stage{n}/approve")
+async def approve_stage(n: str):
+    stage = _resolve_stage(n)
+    from datetime import datetime, timezone
+    state = StageState(
+        stage=stage,
+        status="approved",
+        approved_at=datetime.now(timezone.utc).isoformat(),
+    )
+    write_stage_state(stage, state)
+    return {"ok": True, "stage": stage, "status": "approved"}
+
+
+@router.get("/stage{n}/state")
+async def get_stage_state(n: str):
+    stage = _resolve_stage(n)
+    state = read_stage_state(stage)
+    if state is None:
+        return {"stage": stage, "status": "idle"}
+    from dataclasses import asdict
+    return asdict(state)
+
+
+@router.get("/stage{n}/triples")
+async def list_triples_hitl(n: str, offset: int = 0, limit: int = 50):
+    stage = _resolve_stage(n)
+    data = read_stage(stage)
+    if data is None:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Stage data not found")
+    triples = data.get("triples", [])
+    page = triples[offset: offset + limit]
+    try:
+        from backend.pipelines.kg_translate import translate_triples_batch
+        page = translate_triples_batch([dict(t) for t in page])
+    except Exception:
+        pass
+    return {"total": len(triples), "offset": offset, "limit": limit, "triples": page}
+
+
+@router.patch("/stage{n}/triples/{idx}")
+async def update_triple(n: str, idx: int, triple: dict = Body(...)):
+    stage = _resolve_stage(n)
+    data = read_stage(stage)
+    if data is None or idx >= len(data.get("triples", [])):
+        from fastapi import HTTPException
+        raise HTTPException(404, "Triple not found")
+    data["triples"][idx] = triple
+    write_stage(stage, data)
+    return {"ok": True, "updated": triple}
+
+
+@router.delete("/stage{n}/triples/{idx}")
+async def delete_triple_hitl(n: str, idx: int):
+    stage = _resolve_stage(n)
+    data = read_stage(stage)
+    if data is None or idx >= len(data.get("triples", [])):
+        from fastapi import HTTPException
+        raise HTTPException(404, "Triple not found")
+    removed = data["triples"].pop(idx)
+    write_stage(stage, data)
+    return {"ok": True, "removed": removed}
+
+
+@router.post("/stage{n}/triples")
+async def add_triple_hitl(n: str, triple: dict = Body(...)):
+    stage = _resolve_stage(n)
+    data = read_stage(stage)
+    if data is None:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Stage data not found")
+    triple.setdefault("source", "expert")
+    triple.setdefault("confidence", 1.0)
+    data.setdefault("triples", []).append(triple)
+    write_stage(stage, data)
+    return {"ok": True, "added": triple, "total": len(data["triples"])}
+
+
+@router.post("/stage{n}/diagnose")
+async def diagnose_stage(n: str):
+    stage = _resolve_stage(n)
+    report = read_stage_report(stage)
+    if report is None:
+        from fastapi import HTTPException
+        raise HTTPException(404, "No report found. Call /report first.")
+
+    from backend.pipelines.kg_diagnose import diagnose_issues_stream
+    import json as _json
+
+    async def _gen():
+        async for frame in diagnose_issues_stream(report):
+            yield f"data: {_json.dumps(frame, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(_gen(), media_type="text/event-stream")
