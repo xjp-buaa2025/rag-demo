@@ -53,7 +53,11 @@ interface SimLink {
   type: string
 }
 
-export default function KgViewer() {
+interface Props {
+  stageFilter?: string  // 'BOM' | 'Manual' | 'CAD', undefined = show all
+}
+
+export default function KgViewer({ stageFilter }: Props = {}) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [keyword, setKeyword] = useState('')
   const [searchInput, setSearchInput] = useState('')
@@ -77,6 +81,17 @@ export default function KgViewer() {
         return
       }
 
+      if (stageFilter) {
+        data.nodes = data.nodes.filter((n: KgNode) =>
+          !(n as KgNode & { source?: string }).source ||
+          (n as KgNode & { source?: string }).source === stageFilter
+        )
+        const nodeIds = new Set(data.nodes.map((n: KgNode) => n.id))
+        data.links = data.links.filter((l: { source: string; target: string }) =>
+          nodeIds.has(l.source as string) && nodeIds.has(l.target as string)
+        )
+      }
+
       setNodeCount(data.nodes.length)
       setLinkCount(data.links.length)
 
@@ -86,7 +101,7 @@ export default function KgViewer() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [stageFilter])
 
   const renderGraph = useCallback((nodes: SimNode[], links: SimLink[]) => {
     const svg = d3.select(svgRef.current!)
