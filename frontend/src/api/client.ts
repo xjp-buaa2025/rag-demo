@@ -8,7 +8,7 @@
 // 非 SSE 接口返回普通 Promise<T>。
 // ============================================================
 
-import type { HealthResponse, IngestStatus, BomStatus, Chunk, Message, SseFrame, KgGraphData, KgTaskCreateResponse, KgTaskStatus, StagesStatus, TriplesPreview, ValidationReport, KgSseFrame, SyncNeo4jResult } from '../types'
+import type { HealthResponse, IngestStatus, BomStatus, Chunk, Message, SseFrame, KgGraphData, KgTaskCreateResponse, KgTaskStatus, StagesStatus, TriplesPreview, ValidationReport, KgSseFrame, SyncNeo4jResult, FlatTriple, StageReport, StageStateInfo, BilingualTriple, ExpertDiff } from '../types'
 
 const BASE = '/api'
 
@@ -272,4 +272,79 @@ export async function postVisionSearch(file: File, topK = 4): Promise<{
   const res = await fetch(`${BASE}/vision/search?top_k=${topK}`, { method: 'POST', body: form })
   if (!res.ok) throw new Error(`Vision Search 失败: ${res.status}`)
   return res.json()
+}
+
+// ── HITL API ──────────────────────────────────────────
+
+export async function getStageReport(stageN: 1 | 2): Promise<StageReport> {
+  const res = await fetch(`${BASE}/kg/stage${stageN}/report`)
+  if (!res.ok) throw new Error(`getStageReport failed: ${res.status}`)
+  return res.json()
+}
+
+export async function getStageState(stageN: 1 | 2): Promise<StageStateInfo> {
+  const res = await fetch(`${BASE}/kg/stage${stageN}/state`)
+  if (!res.ok) throw new Error(`getStageState failed: ${res.status}`)
+  return res.json()
+}
+
+export async function approveStage(stageN: 1 | 2): Promise<void> {
+  const res = await fetch(`${BASE}/kg/stage${stageN}/approve`, { method: 'POST' })
+  if (!res.ok) throw new Error(`approveStage failed: ${res.status}`)
+}
+
+export async function listTriplesBilingual(
+  stageN: 1 | 2,
+  offset = 0,
+  limit = 50
+): Promise<{ total: number; offset: number; limit: number; triples: BilingualTriple[] }> {
+  const res = await fetch(`${BASE}/kg/stage${stageN}/triples?offset=${offset}&limit=${limit}`)
+  if (!res.ok) throw new Error(`listTriplesBilingual failed: ${res.status}`)
+  return res.json()
+}
+
+export async function updateTriple(stageN: 1 | 2, idx: number, triple: Partial<FlatTriple>): Promise<void> {
+  const res = await fetch(`${BASE}/kg/stage${stageN}/triples/${idx}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(triple),
+  })
+  if (!res.ok) throw new Error(`updateTriple failed: ${res.status}`)
+}
+
+export async function deleteTriple(stageN: 1 | 2, idx: number): Promise<void> {
+  const res = await fetch(`${BASE}/kg/stage${stageN}/triples/${idx}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`deleteTriple failed: ${res.status}`)
+}
+
+export async function addTriple(stageN: 1 | 2, triple: Partial<FlatTriple>): Promise<void> {
+  const res = await fetch(`${BASE}/kg/stage${stageN}/triples`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(triple),
+  })
+  if (!res.ok) throw new Error(`addTriple failed: ${res.status}`)
+}
+
+export async function submitExpertKnowledge(stageN: 1 | 2, text: string): Promise<{ diff: ExpertDiff }> {
+  const res = await fetch(`${BASE}/kg/stage${stageN}/expert-knowledge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+  if (!res.ok) throw new Error(`submitExpertKnowledge failed: ${res.status}`)
+  return res.json()
+}
+
+export async function confirmExpertKnowledge(stageN: 1 | 2, diff: ExpertDiff): Promise<void> {
+  const res = await fetch(`${BASE}/kg/stage${stageN}/expert-knowledge/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ diff }),
+  })
+  if (!res.ok) throw new Error(`confirmExpertKnowledge failed: ${res.status}`)
+}
+
+export function diagnoseStage(stageN: 1 | 2) {
+  return postSSE(`/kg/stage${stageN}/diagnose`, undefined)
 }
