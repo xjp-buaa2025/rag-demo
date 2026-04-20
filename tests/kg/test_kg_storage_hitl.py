@@ -8,9 +8,7 @@ from backend.kg_storage import (
 )
 
 def test_stage_state_roundtrip(tmp_path, monkeypatch):
-    monkeypatch.setattr("backend.kg_storage.STORAGE_DIR", str(tmp_path))
-    import backend.kg_storage as ks
-    ks.STAGE_STATE_FILES = {s: str(tmp_path / f"stage_{s}_state.json") for s in ["bom","manual"]}
+    monkeypatch.setattr("backend.kg_storage.STAGE_STATE_FILES", {s: str(tmp_path / f"stage_{s}_state.json") for s in ["bom","manual"]})
 
     state = StageState(stage="bom", status="awaiting_review")
     write_stage_state("bom", state)
@@ -19,8 +17,7 @@ def test_stage_state_roundtrip(tmp_path, monkeypatch):
     assert loaded.status == "awaiting_review"
 
 def test_stage_report_roundtrip(tmp_path, monkeypatch):
-    import backend.kg_storage as ks
-    ks.STAGE_REPORT_FILES = {s: str(tmp_path / f"stage_{s}_report.json") for s in ["bom","manual"]}
+    monkeypatch.setattr("backend.kg_storage.STAGE_REPORT_FILES", {s: str(tmp_path / f"stage_{s}_report.json") for s in ["bom","manual"]})
 
     report = StageReport(
         stage="bom",
@@ -42,8 +39,7 @@ def test_stage_report_roundtrip(tmp_path, monkeypatch):
     assert loaded.stats.entities_count == 150
 
 def test_translations_roundtrip(tmp_path, monkeypatch):
-    import backend.kg_storage as ks
-    ks.TRANSLATIONS_FILE = str(tmp_path / "translations.json")
+    monkeypatch.setattr("backend.kg_storage.TRANSLATIONS_FILE", str(tmp_path / "translations.json"))
 
     write_translations({"COMPRESSOR ROTOR": "压气机转子", "isPartOf": "属于"})
     loaded = read_translations()

@@ -1,6 +1,7 @@
 """backend/kg_storage.py — 知识图谱阶段中间产物存储辅助"""
 import os, json
-from datetime import datetime, timezone
+from dataclasses import dataclass, asdict, field
+from typing import Optional, List, Dict
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STORAGE_DIR = os.path.join(_ROOT, "storage", "kg_stages")
@@ -48,9 +49,6 @@ def check_prereq(stage: str) -> str | None:
 
 
 # ── HITL 扩展 ──────────────────────────────────────────────────────────────
-
-from dataclasses import dataclass, asdict, field
-from typing import Optional, List, Dict
 
 @dataclass
 class StageState:
