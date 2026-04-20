@@ -2,6 +2,8 @@ import { useState, useRef } from 'react'
 import { postKgStage1, getKgStagePreview } from '../../../api/client'
 import { useStageSSE } from '../../../hooks/useStageSSE'
 import type { KgSseFrame, TriplesPreview } from '../../../types'
+import StageReviewPanel from './StageReviewPanel'
+import { RerunParams } from './ParamTuner'
 
 interface Props {
   onComplete?: () => void
@@ -13,6 +15,9 @@ export default function Stage1Bom({ onComplete }: Props) {
   const [resultFrame, setResultFrame] = useState<KgSseFrame | null>(null)
   const [preview, setPreview] = useState<TriplesPreview | null>(null)
   const [previewOffset, setPreviewOffset] = useState(0)
+  const [showReview, setShowReview] = useState(false)
+  const [approved, setApproved] = useState(false)
+  const [rerunning, setRerunning] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
   const { run, loading } = useStageSSE()
 
@@ -22,6 +27,8 @@ export default function Stage1Bom({ onComplete }: Props) {
     setResultFrame(null)
     setPreview(null)
     setPreviewOffset(0)
+    setShowReview(false)
+    setApproved(false)
     await run(postKgStage1(file), {
       onLog: (msg) => setLogs(prev => [...prev, msg]),
       onResult: (data) => setResultFrame(data),
@@ -29,11 +36,35 @@ export default function Stage1Bom({ onComplete }: Props) {
         if (success) {
           const p = await getKgStagePreview('bom', 0)
           setPreview(p)
-          onComplete?.()
+          setShowReview(true)
+          // onComplete is called only after user approves
         }
       },
       onError: (msg) => setLogs(prev => [...prev, `❌ ${msg}`]),
     })
+  }
+
+  const handleRerun = async (params: RerunParams) => {
+    if (!file) return
+    setRerunning(true)
+    setShowReview(false)
+    setApproved(false)
+    setLogs([])
+    setResultFrame(null)
+    setPreview(null)
+    await run(postKgStage1(file, false), {
+      onLog: (msg) => setLogs(prev => [...prev, msg]),
+      onResult: (data) => setResultFrame(data),
+      onDone: async (success) => {
+        if (success) {
+          const p = await getKgStagePreview('bom', 0)
+          setPreview(p)
+          setShowReview(true)
+        }
+      },
+      onError: (msg) => setLogs(prev => [...prev, `❌ ${msg}`]),
+    })
+    setRerunning(false)
   }
 
   const loadPage = async (offset: number) => {
@@ -81,7 +112,7 @@ export default function Stage1Bom({ onComplete }: Props) {
         </div>
       )}
 
-      {preview && (
+      {preview && !showReview && (
         <div className="overflow-x-auto">
           <div className="flex items-center justify-between mb-2 text-sm text-slate-600">
             <span>第 {previewOffset + 1}–{Math.min(previewOffset + 50, preview.total)} 条 / 共 {preview.total} 条</span>
@@ -118,6 +149,21 @@ export default function Stage1Bom({ onComplete }: Props) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {showReview && !approved && (
+        <StageReviewPanel
+          stageN={1}
+          onApproved={() => { setApproved(true); onComplete?.() }}
+          onRerun={handleRerun}
+          rerunning={rerunning}
+        />
+      )}
+
+      {approved && (
+        <div className="mt-2 p-2 bg-green-950/30 border border-green-700 rounded text-green-400 text-sm">
+          ✅ Stage 1 已放行
         </div>
       )}
     </div>
