@@ -92,6 +92,126 @@ def _resolve_nha_triples(triples: list, entities: list) -> list:
     return triples
 
 
+def _apply_ipc_hierarchy(records: list) -> list:
+    """
+    对 LLM 提取的 IPC BOM 平铺记录应用确定性层级规则，填充 parent_id。
+
+    规则优先级（高→低）：
+      R1. nomenclature 含点号前缀（OCR原文保留）→ 优先使用点号栈逻辑
+      R2. fig_item == "ATTACHING PARTS" → 标记附件块上下文，本行不生成实体
+      R3. 附件块内的零件（ATTACHING PARTS 之后直到下一个非附件行）
+          → parent_id = 附件块开始前最近的 Assembly part_id
+      R4. fig_item 以 "-" 开头（-40、-40A）
+          → 去掉 "-" 和尾部字母得到基础序号（"40"）
+          → parent_id = 基础序号对应零件的 parent_id（同级，共享父节点）
+      R5. fig_item 为普通整数（10, 20, 30）且 nomenclature 无点号
+          → parent_id = 第一个顶层 Assembly 的 part_id
+      R6. 其他无法确定 → parent_id 保持 ""（挂 ROOT）
+    """
+    import re as _r
+
+    _FIG_INT = _r.compile(r'^\d+$')
+    _FIG_DASH = _r.compile(r'^-(\d+)')
+
+    # 找出第一个顶层 Assembly（fig_item 为 "-1" 或第一个 Assembly category）
+    root_assembly_id = ""
+    for rec in records:
+        cat = str(rec.get("category", "")).strip()
+        fig = str(rec.get("fig_item", "")).strip()
+        pid = str(rec.get("part_id", "")).strip()
+        if not pid:
+            continue
+        if cat == "Assembly" and (fig in ("-1", "1") or not root_assembly_id):
+            root_assembly_id = pid
+            break
+
+    # fig_item 整数 → part_id 映射（用于 dash 前缀关联）
+    fig_to_pid: dict = {}
+    # fig_item → parent_id 映射（dash 系列共享同一父节点）
+    fig_to_parent: dict = {}
+
+    in_attaching = False
+    attaching_parent_id = ""
+    result = []
+
+    for rec in records:
+        rec = dict(rec)
+        fig = str(rec.get("fig_item", "")).strip()
+        pid = str(rec.get("part_id", "")).strip()
+        nom = str(rec.get("nomenclature", "")).strip()
+        cat = str(rec.get("category", "")).strip()
+
+        # ATTACHING PARTS 标记行：不生成实体，记录上下文
+        if fig == "ATTACHING PARTS" or cat == "AttachingParts":
+            in_attaching = True
+            # 上文最近有 part_id 的非 AttachingParts 条目作为附件归属父节点
+            if result:
+                for prev in reversed(result):
+                    if prev.get("part_id") and prev.get("category") != "AttachingParts":
+                        attaching_parent_id = prev["part_id"]
+                        break
+            continue  # 不输出 ATTACHING PARTS 行本身
+
+        # 已有点号前缀 → 由 _bom_df_to_entities_and_triples 的栈逻辑处理，不覆盖
+        dot_level = 0
+        nom_stripped = nom
+        while nom_stripped.startswith("."):
+            dot_level += 1
+            nom_stripped = nom_stripped[1:]
+        if dot_level > 0:
+            # 有点号 → 不填 parent_id，让栈逻辑处理
+            in_attaching = False
+            if pid and _FIG_INT.match(fig):
+                fig_to_pid[fig] = pid
+                fig_to_parent[fig] = rec.get("parent_id", "")
+            result.append(rec)
+            continue
+
+        # ATTACHING PARTS 块内
+        if in_attaching and attaching_parent_id:
+            rec["parent_id"] = attaching_parent_id
+            result.append(rec)
+            continue
+
+        # 脱离附件块（遇到整数 fig_item）
+        if _FIG_INT.match(fig):
+            in_attaching = False
+
+        # 顶层Assembly自身（pid == root_assembly_id）→ 保持parent_id=""，不做任何赋值
+        if pid == root_assembly_id:
+            fig_to_pid[fig] = pid
+            fig_to_parent[fig] = ""
+            result.append(rec)
+            continue
+
+        # dash 前缀：-40、-40A → 基础序号 40 → 共享父节点
+        m_dash = _FIG_DASH.match(fig)
+        if m_dash:
+            base_fig = m_dash.group(1)
+            if base_fig in fig_to_parent:
+                rec["parent_id"] = fig_to_parent[base_fig]
+            elif root_assembly_id:
+                rec["parent_id"] = root_assembly_id
+            result.append(rec)
+            continue
+
+        # 普通整数 fig_item，nomenclature 无点号 → 顶层 Assembly 的直属子件
+        if _FIG_INT.match(fig) and root_assembly_id and pid != root_assembly_id:
+            rec["parent_id"] = root_assembly_id
+            fig_to_pid[fig] = pid
+            fig_to_parent[fig] = root_assembly_id
+            result.append(rec)
+            continue
+
+        # 顶层 Assembly 自身 或 无法确定
+        if pid:
+            fig_to_pid[fig] = pid
+            fig_to_parent[fig] = rec.get("parent_id", "")
+        result.append(rec)
+
+    return result
+
+
 def _parse_indent_level(nomenclature: str) -> tuple:
     """从 IPC 零件名中解析点号缩进层级。
     返回 (层级深度 int, 清理后的名称 str)
@@ -161,13 +281,20 @@ def _bom_df_to_entities_and_triples(df_json: str):
 
             level, _ = _parse_indent_level(nomenclature)
 
-            # 弹出层级 >= 当前层级的条目（找到真正的父节点）
+            # 弹出层级 >= 当前层级的条目，但保留栈底的顶层Assembly（level=0）
             while parent_stack and parent_stack[-1][0] >= level:
+                if len(parent_stack) == 1 and parent_stack[0][0] == 0:
+                    break  # 保留根Assembly，不弹出
                 parent_stack.pop()
 
-            if level == 0:
+            if level == 0 and not parent_stack:
+                # 第一个level=0条目 → 真正的顶层装配体，挂ROOT
                 parent_label = "ROOT"
                 tail_type    = "ROOT"
+            elif level == 0 and parent_stack:
+                # 后续level=0条目 → 挂到栈底的顶层Assembly（不再是ROOT）
+                parent_label = parent_stack[0][1]
+                tail_type    = "Assembly"
             elif parent_stack:
                 parent_label = parent_stack[-1][1]
                 tail_type    = "Assembly"
@@ -260,41 +387,60 @@ def _extract_pdf_via_deepdoc(file_path: str, state: AppState) -> str:
 # 内部辅助：OCR 文本 → BOM 记录（宽松 Prompt）
 # ─────────────────────────────────────────────
 
-_OCR_BOM_PROMPT = """你是一个BOM（物料清单）数据提取专家。以下是从扫描件PDF中OCR识别出的文本，包含航空发动机零件清单（IPC 格式）。
+_OCR_BOM_PROMPT = """你是航空IPC（图解零件目录）数据提取专家。以下是从扫描PDF中OCR识别的文本，来自 Pratt & Whitney Canada 发动机零件清单。
 
-请提取所有零件信息，输出JSON数组。每条记录字段：
-- part_id: 零件编号（字母数字组合，如 3034344、MS9556-06；若无则用 P001、P002 等序号）
-- part_name: 零件名称（去掉前缀点号后的纯名称，如 "SEAL, AIR"）
-- nomenclature: 原始 NOMENCLATURE 列内容，**完整保留前缀点号**（如 ".SEAL, AIR"、"..SEAL, 0.129-0.131 IN."）
-- fig_item: FIG. ITEM 列内容（如 "1"、"-1A"、"-1B"；若无则 ""）
-- parent_id: 父零件的 part_id（仅当你能从缩进/编号/文档结构中确认父子关系时才填写，否则必须填 ""）
-- qty: 数量（整数；从文本中找数字，找不到才默认1）
-- unit: 单位（件/套/个等，默认"件"）
-- material: 材料（如有，否则""）
-- category: "Assembly"（组件，包含子零件）、"Part"（零件）、"Standard"（标准件如螺栓螺母），默认"Part"
+你的任务：**忠实提取**每行的零件数据，输出JSON数组。层级关系由后续程序根据规则计算，你不需要推断父子关系。
 
-【严格规则】
-1. nomenclature 必须保留原文的前缀点号（IPC 规范：无点=顶层装配，.=直属子件，..=孙子件）
-2. part_name 是 nomenclature 去掉前缀点号后的纯名称
-3. parent_id 必须是本批文本中另一个零件的 part_id，不能填自己的 part_id
-4. 若不确定父子关系，parent_id 填 "" —— 宁可留空，不要猜错
-5. 顶层装配体（最高层级）的 parent_id 填 ""
-6. 只输出JSON数组，不加任何说明
-7. 含"SEE FIG.X FOR NHA"的零件：nomenclature 填".零件名"（单点前缀，level=1），表示它是上层图顶层装配的直属子件；part_name 去掉"SEE FIG.X FOR NHA"后缀
-8. fig_item 带 dash（-1A/-1B）且名称含 INTRCHG 的互换件：nomenclature 填与被替代件相同层级的点号前缀（通常是单点"."）
+每条记录包含以下字段：
+- part_id: 零件编号（如 3034344、MS9556-06、AS3209-267；若原文无编号则填 ""）
+- part_name: 零件名称（去掉前缀点号后的纯名称）
+- nomenclature: NOMENCLATURE列原文，**完整保留前缀点号**（如 ".SEAL, AIR"、"..SEAL 0.129 IN."）
+- fig_item: FIG. ITEM 列原文（如 "-1"、"10"、"-40A"、"ATTACHING PARTS"；若无则 ""）
+- qty: 数量整数（原文无数字则填 1）
+- unit: 单位（默认 "件"）
+- material: 材料（原文有则填，否则 ""）
+- category: "Assembly"（含子件的组件）/ "Part"（零件）/ "Standard"（螺栓螺母等标准件），默认 "Part"
+- parent_id: 一律填 ""（层级由程序计算，禁止猜测）
+
+【提取规则】
+1. nomenclature 忠实保留原文前缀点号：无点=顶层装配，"."=一级子件，".."=二级子件
+2. part_name 是 nomenclature 去掉所有前缀点号后的名称
+3. parent_id 固定填 ""，禁止填任何 part_id
+4. 遇到 "ATTACHING PARTS" 行：fig_item 填 "ATTACHING PARTS"，part_id 填 ""，part_name 填 "ATTACHING PARTS"，category 填 "AttachingParts"
+5. 含 "SEE FIG.X FOR NHA" 的零件：nomenclature 填 ".零件名"（单点前缀），part_name 去掉 "SEE FIG.X FOR NHA" 后缀
+6. fig_item 带 dash 且含 "INTRCHG" 的互换件（如 "-40A ... INTRCHG WITH P/N ..."）：nomenclature 与被替代件同层级点号
+7. 爆炸图页（行内容主要是图号如 "Figure 1  72-30-05  Page 2"）：整页跳过，不输出任何记录
+8. "NOT USED" / "NOT ILLUSTRATED" 行：输出记录，fig_item 填原值，part_id 填 ""
+9. PRE-SB / POST-SB 版本信息：完整保留在 part_name 中（如 "SEAL ASSEMBLY,AIR PRE-SB15108"）
+10. 只输出JSON数组，不加任何说明文字
+
+【fig_item 字段说明（帮助你识别，不要推断层级）】
+- "-1" 或第一个整数条目通常是顶层装配体
+- 普通整数（10, 20, 30...）是该图的子件序号
+- 带 "-" 前缀（-40, -40A, -40B）是某序号的变体/替换件
+- "ATTACHING PARTS" 标记一个附件块的开始
 
 【示例输入→输出】
-行: "1  3034344  COMPRESSOR ROTOR INSTALLATION  1"
-→ {{"part_id":"3034344","part_name":"COMPRESSOR ROTOR INSTALLATION","nomenclature":"COMPRESSOR ROTOR INSTALLATION","fig_item":"1","qty":1,"category":"Assembly","parent_id":"","material":"","unit":"件"}}
+输入行: "-1  3034344  COMPRESSOR ROTOR INSTALLATION  1"
+输出: {{"part_id":"3034344","part_name":"COMPRESSOR ROTOR INSTALLATION","nomenclature":"COMPRESSOR ROTOR INSTALLATION","fig_item":"-1","qty":1,"category":"Assembly","parent_id":"","material":"","unit":"件"}}
 
-行: "2  3030349  .SEAL ASSEMBLY,AIR  1"
-→ {{"part_id":"3030349","part_name":"SEAL ASSEMBLY,AIR","nomenclature":".SEAL ASSEMBLY,AIR","fig_item":"2","qty":1,"category":"Assembly","parent_id":"","material":"","unit":"件"}}
+输入行: "10  MS9556-06  BOLT,MACHINE,DBL HEX  1"
+输出: {{"part_id":"MS9556-06","part_name":"BOLT,MACHINE,DBL HEX","nomenclature":"BOLT,MACHINE,DBL HEX","fig_item":"10","qty":1,"category":"Standard","parent_id":"","material":"","unit":"件"}}
 
-行: "-1A  MS9556-07  BOLT,MACHINE,DBL HEX  INTRCHG WITH P/N MS9556-06"
-→ {{"part_id":"MS9556-07","part_name":"BOLT,MACHINE,DBL HEX","nomenclature":".BOLT,MACHINE,DBL HEX","fig_item":"-1A","qty":1,"category":"Part","parent_id":"","material":"","unit":"件"}}
+输入行: "40  3030349  .SEAL ASSEMBLY,AIR COMPRESSOR REAR  1"
+输出: {{"part_id":"3030349","part_name":"SEAL ASSEMBLY,AIR COMPRESSOR REAR","nomenclature":".SEAL ASSEMBLY,AIR COMPRESSOR REAR","fig_item":"40","qty":1,"category":"Assembly","parent_id":"","material":"","unit":"件"}}
 
-行: "5  3102464-03  ROTOR BALANCING ASSEMBLY SEE FIG.1 FOR NHA  1"
-→ {{"part_id":"3102464-03","part_name":"ROTOR BALANCING ASSEMBLY","nomenclature":".ROTOR BALANCING ASSEMBLY","fig_item":"5","qty":1,"category":"Assembly","parent_id":"","material":"","unit":"件"}}
+输入行: "-40A  3103074-01  .SEAL ASSEMBLY,AIR PRE-SB15108  1"
+输出: {{"part_id":"3103074-01","part_name":"SEAL ASSEMBLY,AIR PRE-SB15108","nomenclature":".SEAL ASSEMBLY,AIR PRE-SB15108","fig_item":"-40A","qty":1,"category":"Assembly","parent_id":"","material":"","unit":"件"}}
+
+输入行: "ATTACHING PARTS"
+输出: {{"part_id":"","part_name":"ATTACHING PARTS","nomenclature":"ATTACHING PARTS","fig_item":"ATTACHING PARTS","qty":1,"category":"AttachingParts","parent_id":"","material":"","unit":"件"}}
+
+输入行: "50  MS9676-11  NUT,DBL HEX  4"
+输出: {{"part_id":"MS9676-11","part_name":"NUT,DBL HEX","nomenclature":"NUT,DBL HEX","fig_item":"50","qty":4,"category":"Standard","parent_id":"","material":"","unit":"件"}}
+
+输入行: "5  3102464-03  .ROTOR BALANCING ASSEMBLY SEE FIG.2 FOR NHA  1"
+输出: {{"part_id":"3102464-03","part_name":"ROTOR BALANCING ASSEMBLY","nomenclature":".ROTOR BALANCING ASSEMBLY","fig_item":"5","qty":1,"category":"Assembly","parent_id":"","material":"","unit":"件"}}
 
 待处理的OCR文本：
 {content}"""
@@ -391,6 +537,8 @@ def _stage1_bom_gen(tmp_path: str, ext: str, clear_first: bool,
                 yield {"type": "error", "message": "LLM 未能从扫描件中识别出零件信息，请确认 PDF 包含 BOM 表格"}
                 return
             yield {"type": "log", "message": f"[Stage1] LLM 识别到 {len(records)} 条零件记录"}
+            # 应用 IPC 确定性层级规则（填充 parent_id）
+            records = _apply_ipc_hierarchy(records)
             # 将 records 转为 df_json 注入 pipeline_state，跳过 llm_to_csv
             import pandas as pd, json as _json
             df = pd.DataFrame(records)
@@ -464,7 +612,7 @@ def _stage1_bom_gen(tmp_path: str, ext: str, clear_first: bool,
         from backend.pipelines.kg_report import generate_stage_report
         from backend.kg_storage import (
             write_stage_report, write_stage_state, StageState,
-            read_stage, STAGE_REPORT_FILES,
+            STAGE_REPORT_FILES,
         )
         current_data = read_stage("bom") or {}
         report = generate_stage_report("bom", current_data, prev_data=None)
@@ -806,6 +954,7 @@ def _stage2_manual_gen(tmp_path: str, filename: str, state: AppState, neo4j_cfg:
     # 2. LLM KG 提取（直接循环，支持实时进度推送）
     from backend.pipelines.nodes_kg import (
         _is_procedure_text, _KG_EXTRACTION_PROMPT, _KG_GLEANING_PROMPT, _parse_kg_json,
+        _build_prompt_with_bom,
     )
     import json as _json
 
@@ -826,10 +975,15 @@ def _stage2_manual_gen(tmp_path: str, filename: str, state: AppState, neo4j_cfg:
             yield {"type": "log", "message": f"[Stage2] LLM提取第 {i+1}/{total} 段 — {ata_section}"}
 
             try:
-                prompt = _KG_EXTRACTION_PROMPT.format(
+                _bom_ents: list = []
+                if stage_exists("bom"):
+                    _bom_data = read_stage("bom") or {}
+                    _bom_ents = _bom_data.get("entities", [])
+                base_prompt = _KG_EXTRACTION_PROMPT.format(
                     ata_section=ata_section,
                     chunk_text=text,
                 )
+                prompt = _build_prompt_with_bom(base_prompt, _bom_ents)
                 resp1 = state.llm_client.chat.completions.create(
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.1,
@@ -964,7 +1118,7 @@ def _stage2_manual_gen(tmp_path: str, filename: str, state: AppState, neo4j_cfg:
         from backend.pipelines.kg_report import generate_stage_report
         from backend.kg_storage import (
             write_stage_report, write_stage_state, StageState,
-            read_stage, STAGE_REPORT_FILES,
+            STAGE_REPORT_FILES,
         )
         current_data = read_stage("manual") or {}
         bom_data = read_stage("bom")
