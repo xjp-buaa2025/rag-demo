@@ -108,22 +108,29 @@ Few-shot示例5（英文含零件编号，实体保留完整编号）：
 
 def _build_prompt_with_bom(base_prompt: str, bom_entities: list) -> str:
     """
-    动态在 base_prompt 末尾追加 BOM 编号速查表（≤60条）。
-    不修改 _KG_EXTRACTION_PROMPT 常量，仅在调用时拼接。
+    动态在 base_prompt 末尾追加 BOM 编号+名称速查表（≤80 条）。
+    同时注入 [BOM:{零件号}] 打标指令，让 LLM 提取实体时直接标注 bom_id。
     """
     if not bom_entities:
         return base_prompt
     lines = []
-    for e in bom_entities[:60]:
-        pn = e.get("part_number", "")
+    for e in bom_entities[:80]:
+        pn   = e.get("part_number", "")
         name = e.get("name", "")
-        if pn:
+        if pn and name:
             lines.append(f"  {pn:<16} {name}")
+        elif name:
+            lines.append(f"  {'':16} {name}")
+        elif pn:
+            lines.append(f"  {pn:<16}")
     if not lines:
         return base_prompt
     section = (
-        "\n\n【当前 BOM 零件编号速查表】\n"
-        "以下编号若出现在文本中，请在实体 text 字段保留完整编号（格式：'名称 编号'）。\n"
+        "\n\n【当前 BOM 零件编号速查表（按零件号或名称匹配）】\n"
+        "提取实体时，若实体名称或文本中的零件编号能对应以下任一条目，\n"
+        "请在该实体的 text 字段末尾加注 [BOM:{零件号}]，"
+        "例如：\"Center Fireseal Mount Ring [BOM:3034521]\"。\n"
+        "零件号列（左）      名称列（右）\n"
         + "\n".join(lines)
     )
     return base_prompt + section
