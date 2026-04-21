@@ -967,6 +967,12 @@ def _stage2_manual_gen(tmp_path: str, filename: str, state: AppState, neo4j_cfg:
     else:
         errors = 0
         total = len(proc_chunks)
+        # ── BOM 速查表（一次性加载，循环内复用）─────────────────────────
+        _bom_ents: list = []
+        if stage_exists("bom"):
+            _bom_data = read_stage("bom") or {}
+            _bom_ents = _bom_data.get("entities", [])
+        # ─────────────────────────────────────────────────────────────────
         for i, chunk in enumerate(proc_chunks):
             chunk_id = chunk.get("chunk_id", f"c{i}")
             ata_section = chunk.get("ata_section", "Unknown")
@@ -975,10 +981,6 @@ def _stage2_manual_gen(tmp_path: str, filename: str, state: AppState, neo4j_cfg:
             yield {"type": "log", "message": f"[Stage2] LLM提取第 {i+1}/{total} 段 — {ata_section}"}
 
             try:
-                _bom_ents: list = []
-                if stage_exists("bom"):
-                    _bom_data = read_stage("bom") or {}
-                    _bom_ents = _bom_data.get("entities", [])
                 base_prompt = _KG_EXTRACTION_PROMPT.format(
                     ata_section=ata_section,
                     chunk_text=text,
