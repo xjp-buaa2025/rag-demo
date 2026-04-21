@@ -747,9 +747,20 @@ def _kg_chunks_to_flat_triples(kg_triples: list) -> list:
 def _post_process_triples(triples: list) -> list:
     """后处理过滤：低置信度、噪音实体、本体约束校验。"""
     import re as _re
+    import unicodedata as _ud
     _noise_pattern = _re.compile(
         r"^(figure|fig|table|tab|sb|amm|cmm|ipc)\s*[\d\-]+$", _re.IGNORECASE
     )
+
+    def _is_garbled(text: str) -> bool:
+        if not text:
+            return False
+        bad = sum(
+            1 for c in text
+            if c == "\ufffd" or _ud.category(c) in ("Cs", "Co", "Cn")
+        )
+        return bad / len(text) > 0.3
+
     filtered = []
     for t in triples:
         if t.get("confidence", 0) < 0.3:
@@ -758,6 +769,8 @@ def _post_process_triples(triples: list) -> list:
         if len(head) < 4 or len(tail) < 4:
             continue
         if _noise_pattern.match(head.strip()) or _noise_pattern.match(tail.strip()):
+            continue
+        if _is_garbled(head) or _is_garbled(tail):
             continue
         rel = t.get("relation", "")
         head_type = t.get("head_type", "")

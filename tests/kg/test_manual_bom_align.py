@@ -85,3 +85,39 @@ def test_stage2_prompt_includes_bom_when_bom_exists():
     assert len(captured_prompts) > 0
     assert "CENTER FIRESEAL MOUNT RING" in captured_prompts[0], \
         "BOM 名称未注入 prompt，说明 _build_prompt_with_bom 未被调用"
+
+
+from backend.routers.kg_stages import _post_process_triples
+
+
+def test_garbled_head_entity_is_filtered():
+    """head 含乱码字符（Unicode 替换字符）的三元组应被过滤。"""
+    triples = [
+        {"head": "\ufffd\ufffd\ufffd\ufffd", "tail": "Gas generator case",
+         "relation": "matesWith", "confidence": 0.8,
+         "head_type": "Assembly", "tail_type": "Assembly"},
+    ]
+    result = _post_process_triples(triples)
+    assert result == [], f"Expected empty list, got {result}"
+
+
+def test_garbled_tail_entity_is_filtered():
+    """tail 含乱码字符的三元组也应被过滤。"""
+    triples = [
+        {"head": "Compressor Rotor", "tail": "\ufffd\ufffdȥ\ufffd\ufffd",
+         "relation": "matesWith", "confidence": 0.9,
+         "head_type": "Assembly", "tail_type": "Assembly"},
+    ]
+    result = _post_process_triples(triples)
+    assert result == []
+
+
+def test_normal_english_entity_passes_through():
+    """正常英文实体不应被误过滤。"""
+    triples = [
+        {"head": "Center Fireseal Mount Ring", "tail": "Gas Generator Case",
+         "relation": "matesWith", "confidence": 0.85,
+         "head_type": "Assembly", "tail_type": "Assembly"},
+    ]
+    result = _post_process_triples(triples)
+    assert len(result) == 1
