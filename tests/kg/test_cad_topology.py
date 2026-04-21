@@ -38,3 +38,54 @@ def test_single_numeric_not_split():
     """'100' 单个纯数字，不含 '&'，直接原样返回（单元素列表）。"""
     result = _clean_composite_name("100", "C52696C")
     assert result == ["100"]
+
+
+from backend.pipelines.nodes_cad import _topology_align_cad_bom
+
+
+def test_topology_align_matches_by_depth_and_sibling_index():
+    """
+    CAD 树和 BOM 树结构相同时，应按 (depth, sibling_index) 位置对齐。
+    """
+    cad_tree = {
+        "C52696C": {
+            "C52696C-10": {},
+            "C52696C-20": {},
+        }
+    }
+    bom_entities = [
+        {"id": "ROOT", "name": "COMPRESSOR ASSY",    "part_number": "3034344", "parent_id": "ROOT"},
+        {"id": "P001", "name": "COMPRESSOR ROTOR",   "part_number": "3034100", "parent_id": "ROOT"},
+        {"id": "P002", "name": "COMPRESSOR STATOR",  "part_number": "3034200", "parent_id": "ROOT"},
+    ]
+    result = _topology_align_cad_bom(cad_tree, bom_entities)
+    assert "C52696C-10" in result
+    assert result["C52696C-10"]["method"] == "topology"
+    assert result["C52696C-10"]["bom_id"] == "P001"
+    assert "C52696C-20" in result
+    assert result["C52696C-20"]["bom_id"] == "P002"
+
+
+def test_topology_align_returns_empty_when_no_bom():
+    """BOM 实体为空时返回空字典。"""
+    cad_tree = {"C89119": {"C89119-10": {}}}
+    result = _topology_align_cad_bom(cad_tree, [])
+    assert result == {}
+
+
+def test_topology_align_unmatched_cad_node_not_in_result():
+    """CAD 树节点多于 BOM 节点时，多余的 CAD 节点不出现在结果中。"""
+    cad_tree = {
+        "C52696C": {
+            "C52696C-10": {},
+            "C52696C-20": {},
+            "C52696C-30": {},
+        }
+    }
+    bom_entities = [
+        {"id": "ROOT", "name": "ASSY",   "part_number": "0001", "parent_id": "ROOT"},
+        {"id": "P001", "name": "PART A", "part_number": "0002", "parent_id": "ROOT"},
+        {"id": "P002", "name": "PART B", "part_number": "0003", "parent_id": "ROOT"},
+    ]
+    result = _topology_align_cad_bom(cad_tree, bom_entities)
+    assert "C52696C-30" not in result

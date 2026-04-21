@@ -621,3 +621,69 @@ def _tree_to_isPartOf(tree: dict, parent: str | None = None) -> list:
         if isinstance(subtree, dict) and subtree:
             triples.extend(_tree_to_isPartOf(subtree, parent=name))
     return triples
+
+
+def _topology_align_cad_bom(
+    cad_tree: dict,
+    bom_entities: list,
+) -> dict:
+    """
+    按装配树层级位置（depth, sibling_index）匹配 CAD 节点与 BOM 实体。
+    返回 {cad_name: {"bom_id", "bom_name", "bom_pn", "method": "topology"}}。
+    仅提供 hint（置信度语义为 0.5），不强制绑定。
+    """
+    if not bom_entities:
+        return {}
+
+    # 1. 展平 CAD 树：记录每个节点的 (depth, sibling_index)
+    # cad_tree 的顶层键为根装配节点（对应 BOM 隐式根），从其子节点开始对齐（depth=0）
+    cad_positions: dict = {}  # cad_name → (depth, sibling_index)
+
+    def _flatten_cad(node: dict, depth: int = 0) -> None:
+        for idx, (child, subtree) in enumerate(node.items()):
+            cad_positions[child] = (depth, idx)
+            if isinstance(subtree, dict):
+                _flatten_cad(subtree, depth + 1)
+
+    # 跳过根装配节点本身，从其子树开始展平
+    for root_subtree in cad_tree.values():
+        if isinstance(root_subtree, dict):
+            _flatten_cad(root_subtree)
+
+    # 2. 展平 BOM 树：按 parent_id 重建层级，记录 (depth, sibling_index)
+    bom_by_id = {e["id"]: e for e in bom_entities if e.get("id")}
+    bom_children: dict = {}
+    for e in bom_entities:
+        pid = e.get("parent_id", "ROOT")
+        # 跳过自引用根节点（parent_id == id），避免无限递归
+        if pid == e.get("id"):
+            continue
+        bom_children.setdefault(pid, []).append(e["id"])
+
+    bom_pos_map: dict = {}  # (depth, sibling_index) → (id, name, pn)
+
+    def _flatten_bom(parent_id: str = "ROOT", depth: int = 0) -> None:
+        for idx, eid in enumerate(bom_children.get(parent_id, [])):
+            e = bom_by_id.get(eid, {})
+            bom_pos_map[(depth, idx)] = (
+                eid,
+                e.get("name", ""),
+                e.get("part_number", ""),
+            )
+            _flatten_bom(eid, depth + 1)
+
+    _flatten_bom()
+
+    # 3. 按位置配对
+    mapping: dict = {}
+    for cad_name, pos in cad_positions.items():
+        if pos in bom_pos_map:
+            eid, bom_name, bom_pn = bom_pos_map[pos]
+            mapping[cad_name] = {
+                "bom_id":   eid,
+                "bom_name": bom_name,
+                "bom_pn":   bom_pn,
+                "method":   "topology",
+            }
+
+    return mapping

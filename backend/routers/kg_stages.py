@@ -1191,7 +1191,7 @@ async def stage2_manual(
 # 内部辅助：CAD 数据 → 扁平三元组
 # ─────────────────────────────────────────────
 
-def _cad_data_to_flat_triples(assembly_tree, constraints, adjacency):
+def _cad_data_to_flat_triples(assembly_tree, constraints, adjacency, source_file: str = ""):
     triples = []
 
     # 装配树 → isPartOf
@@ -1230,6 +1230,10 @@ def _cad_data_to_flat_triples(assembly_tree, constraints, adjacency):
                 "head": a["part_a"], "relation": "adjacentTo",
                 "tail": a["part_b"], "confidence": 0.7, "source": "CAD",
             })
+
+    if source_file:
+        for t in triples:
+            t["cad_source_file"] = source_file
 
     return triples
 
@@ -1517,7 +1521,10 @@ def _stage3_cad_gen(tmp_path: str, ext: str, state: AppState, neo4j_cfg: dict):
     constraints   = result.get("cad_constraints", [])
     adjacency     = result.get("cad_adjacency", [])
 
-    flat_triples = _cad_data_to_flat_triples(assembly_tree, constraints, adjacency)
+    flat_triples = _cad_data_to_flat_triples(
+        assembly_tree, constraints, adjacency,
+        source_file=os.path.basename(tmp_path),
+    )
     yield {"type": "log", "message": f"[Stage3] 生成 {len(flat_triples)} 条扁平三元组"}
 
     # 增强 CAD → BOM 对齐（三级：名称模糊 + 装配结构 + LLM拓扑兜底）
@@ -1536,6 +1543,23 @@ def _stage3_cad_gen(tmp_path: str, ext: str, state: AppState, neo4j_cfg: dict):
         yield {"type": "log", "message": f"[Stage3] BOM 对齐命中 {hit} 个实体字段，方法分布：{method_dist}"}
         if not cad_mapping:
             yield {"type": "log", "message": "[Stage3] ⚠ CAD 零件命名均为数字ID（STEP文件PRODUCT名称为空），对齐率有限。建议重新导出含零件编号的STEP文件。"}
+        # ── 拓扑结构对齐 hint ────────────────────────────────────────────
+        from backend.pipelines.nodes_cad import _topology_align_cad_bom
+        topo_map = _topology_align_cad_bom(assembly_tree, bom_entities_for_cad)
+        for t in flat_triples:
+            for field in ("head", "tail"):
+                name = t.get(field, "")
+                if name in topo_map and not t.get(f"{field}_bom_id"):
+                    info = topo_map[name]
+                    t[f"{field}_bom_id"]     = info["bom_id"]
+                    t[f"{field}_bom_name"]   = info["bom_name"]
+                    t[f"{field}_bom_method"] = "topology"
+        topo_hits = sum(
+            1 for t in flat_triples
+            if t.get("head_bom_method") == "topology"
+            or t.get("tail_bom_method") == "topology"
+        )
+        yield {"type": "log", "message": f"[Stage3] 拓扑对齐 hint：{topo_hits} 条三元组"}
     else:
         yield {"type": "log", "message": "[Stage3] ⚠ 无BOM数据，跳过CAD对齐（建议先完成Stage1再处理Stage3）"}
 
@@ -1604,7 +1628,10 @@ def _stage3_cad_batch_gen(tmp_items: list, state: AppState, neo4j_cfg: dict):
         assembly_tree = result.get("cad_assembly_tree", {})
         constraints   = result.get("cad_constraints", [])
         adjacency     = result.get("cad_adjacency", [])
-        flat = _cad_data_to_flat_triples(assembly_tree, constraints, adjacency)
+        flat = _cad_data_to_flat_triples(
+            assembly_tree, constraints, adjacency,
+            source_file=orig_name,
+        )
         all_triples.extend(flat)
         source_files.append(orig_name)
         yield {"type": "log", "message": f"[Stage3] {orig_name} → {len(flat)} 条三元组，累计 {len(all_triples)} 条"}
