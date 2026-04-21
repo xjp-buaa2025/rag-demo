@@ -23,6 +23,22 @@ from typing import Any
 _NUMERIC_NAME_RE = re.compile(r'^\d[\d\-a-zA-Z]*$')
 
 
+def _clean_composite_name(name: str, root: str) -> list:
+    """
+    处理形如 '100&110'、'190&200' 的多实例复合名称（纯数字用 & 连接）。
+    返回拆分并补全前缀后的名称列表。
+    非纯数字组合（如 '370-2 holes'）原样返回单元素列表。
+    """
+    _MULTI_RE = re.compile(r'^(\d+)(&\d+)+$')
+    if _MULTI_RE.match(name):
+        parts = name.split('&')
+        return [
+            f"{root}-{p}" if _NUMERIC_NAME_RE.match(p) else p
+            for p in parts
+        ]
+    return [name]
+
+
 def make_cad_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
     """工厂函数：创建 CAD 解析管道节点，通过闭包绑定 neo4j_cfg。"""
 
@@ -306,6 +322,20 @@ def _parse_step_tree_from_text(file_path: str) -> dict:
                 def _fix(name: str) -> str:
                     return f"{_top}-{name}" if _NUMERIC_NAME_RE.match(name) else name
                 parent_map = {_fix(c): _fix(p) for c, p in parent_map.items()}
+
+    # ── 复合名称展开（'100&110' → 'C52696C-100', 'C52696C-110'）────────────
+    if parent_map:
+        _all2 = set(parent_map.keys()) | set(parent_map.values())
+        _roots2 = _all2 - set(parent_map.keys())
+        _top2 = next(iter(_roots2)) if len(_roots2) == 1 else ""
+        new_map: dict = {}
+        for child, parent in parent_map.items():
+            # 展开子节点中的复合名称
+            for expanded_child in _clean_composite_name(child, _top2):
+                # 展开父节点中的复合名称（如果父节点本身是复合的）
+                for expanded_parent in _clean_composite_name(parent, _top2):
+                    new_map[expanded_child] = expanded_parent
+        parent_map = new_map
 
     if not parent_map:
         return {"root": {}}
