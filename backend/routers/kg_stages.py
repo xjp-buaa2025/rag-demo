@@ -261,6 +261,7 @@ def _bom_df_to_entities_and_triples(df_json: str):
             "part_number": pid,
             "material":    str(row.get("material", "")).strip(),
             "quantity":    row.get("qty") or row.get("quantity", 1),
+            "item_callout": str(row.get("fig_item", "")).strip(),
         })
 
         # ── 路径1：nomenclature 含点号前缀 → 用栈结构推断父节点 ──────────
