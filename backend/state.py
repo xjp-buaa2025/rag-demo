@@ -92,6 +92,11 @@ class AppState:
     # --- BM25 混合检索 ---
     bm25_manager: Optional[Any] = None     # backend.bm25_manager.BM25Manager
 
+    # --- Assembly-scheme skill (Plan 1, P1+P2) ---
+    skill_registry:    Optional[Any] = None   # backend.pipelines.assembly_scheme.skill_loader.SkillRegistry
+    web_search_client: Optional[Any] = None   # backend.tools.web_search.WebSearchClient
+    assembly_lock:     threading.Lock = field(default_factory=threading.Lock)
+
     # --- 并发控制 ---
     is_ingesting: bool = False
     collection_lock: threading.Lock = field(default_factory=threading.Lock)
