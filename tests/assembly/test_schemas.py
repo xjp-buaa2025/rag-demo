@@ -50,3 +50,12 @@ def test_stage4d_schema_accepts_skipped():
     schema = json.loads((SCHEMA_DIR / "stage4d.schema.json").read_text(encoding="utf-8"))
     skipped = {"skipped": True, "skip_reason": "v1 key parts data not available"}
     jsonschema.validate(instance=skipped, schema=schema)
+
+
+def test_pt6a_hpc_stage1_golden_validates():
+    """The PT6A HPC golden example must validate against stage1 schema."""
+    schema = json.loads((SCHEMA_DIR / "stage1.schema.json").read_text(encoding="utf-8"))
+    golden_path = SCHEMA_DIR.parent / "golden" / "pt6a_hpc_stage1.json"
+    assert golden_path.exists(), f"golden file missing: {golden_path}"
+    instance = json.loads(golden_path.read_text(encoding="utf-8"))
+    jsonschema.validate(instance=instance, schema=schema)
