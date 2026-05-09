@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stage1.schema.json",
+  "title": "Stage 1 — Intake & Research",
+  "type": "object",
+  "required": ["scheme_id", "subject", "kg_snapshot", "web_search_results", "compliance_scope", "task_card_md"],
+  "properties": {
+    "scheme_id": {"type": "string", "pattern": "^scheme-[0-9]{8}-[a-f0-9]{6}$"},
+    "subject": {
+      "type": "object",
+      "required": ["system", "scope", "design_intent", "constraints"],
+      "properties": {
+        "system": {"type": "string", "minLength": 1},
+        "system_en": {"type": "string"},
+        "scope": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "design_intent": {"type": "string", "enum": ["新设计", "工艺优化", "复刻", "故障改进"]},
+        "constraints": {
+          "type": "object",
+          "required": ["primary"],
+          "properties": {
+            "primary": {"type": "string"},
+            "secondary": {"type": "string"}
+          }
+        }
+      }
+    },
+    "kg_snapshot": {
+      "type": "object",
+      "required": ["part_count", "assembly_count"],
+      "properties": {
+        "part_count": {"type": "integer", "minimum": 0},
+        "assembly_count": {"type": "integer", "minimum": 0},
+        "key_interfaces": {"type": "array"},
+        "relations_sample": {"type": "array"},
+        "warning": {"type": "string"}
+      }
+    },
+    "web_search_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "url", "title", "excerpt", "confidence"],
+        "properties": {
+          "id": {"type": "string"},
+          "url": {"type": "string"},
+          "title": {"type": "string"},
+          "excerpt": {"type": "string"},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "selected": {"type": ["null", "object"]}
+        }
+      }
+    },
+    "vision_notes": {"type": "string"},
+    "compliance_scope": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "task_card_md": {"type": "string", "minLength": 1}
+  }
+}

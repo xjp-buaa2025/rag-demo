@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stage5.schema.json",
+  "title": "Stage 5 — Review & Export (placeholder v1)",
+  "type": "object",
+  "required": ["review_panel", "overall_score", "recommendation"],
+  "properties": {
+    "review_panel": {"type": "array"},
+    "metrics_coverage": {"type": "object"},
+    "kc_traceability_matrix": {"type": "array"},
+    "overall_score": {"type": "number", "minimum": 0, "maximum": 5},
+    "recommendation": {"type": "string", "enum": ["approved", "approved_with_revision", "rejected"]},
+    "iterations": {"type": "array"},
+    "export_path": {"type": "string"}
+  }
+}

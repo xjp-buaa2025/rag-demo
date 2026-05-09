@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stage4d.schema.json",
+  "title": "Stage 4d — Key Parts Special Control (skippable, placeholder v1)",
+  "type": "object",
+  "required": ["skipped"],
+  "properties": {
+    "skipped": {"type": "boolean"},
+    "skip_reason": {"type": ["string", "null"]},
+    "balancing": {"type": "object"},
+    "select_fitting": {"type": "array"},
+    "preload": {"type": "array"},
+    "traceability_kcs": {"type": "array"},
+    "fod_zones": {"type": "array"}
+  }
+}

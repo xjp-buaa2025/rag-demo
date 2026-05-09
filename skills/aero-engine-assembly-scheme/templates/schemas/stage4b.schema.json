@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stage4b.schema.json",
+  "title": "Stage 4b — Tooling (placeholder v1)",
+  "type": "object",
+  "required": ["tooling"],
+  "properties": {
+    "tooling": {"type": "array"},
+    "tooling_summary": {"type": "object"}
+  }
+}
