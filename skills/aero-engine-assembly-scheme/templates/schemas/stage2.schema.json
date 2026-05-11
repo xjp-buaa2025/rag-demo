@@ -1,15 +1,125 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "stage2.schema.json",
-  "title": "Stage 2 — Requirements & Constraints (placeholder v1)",
+  "title": "Stage 2 — Requirements & Constraints",
   "type": "object",
-  "required": ["user_needs", "engineering_metrics", "assembly_features", "key_characteristics", "risks"],
+  "required": ["stage1_ref", "user_needs", "engineering_metrics", "assembly_features", "key_characteristics", "dfa_score", "risks"],
   "properties": {
-    "user_needs": {"type": "array"},
-    "engineering_metrics": {"type": "array"},
-    "assembly_features": {"type": "array"},
-    "key_characteristics": {"type": "array"},
-    "dfa_score": {"type": "object"},
-    "risks": {"type": "array"}
+    "stage1_ref": {
+      "type": "string",
+      "pattern": "^scheme-[0-9]{8}-[a-f0-9]{6}$",
+      "description": "scheme_id of the stage1 this stage2 was derived from"
+    },
+    "user_needs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "weight"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^U[0-9]+$"},
+          "text": {"type": "string", "minLength": 1},
+          "weight": {"type": "integer", "minimum": 1, "maximum": 5}
+        }
+      }
+    },
+    "engineering_metrics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "target", "linked_needs"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^M[0-9]+$"},
+          "name": {"type": "string", "minLength": 1},
+          "target": {"type": "string", "minLength": 1},
+          "linked_needs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "pattern": "^U[0-9]+$"}
+          }
+        }
+      }
+    },
+    "assembly_features": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "spec", "linked_metrics"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^F[0-9]+$"},
+          "name": {"type": "string", "minLength": 1},
+          "spec": {"type": "string", "minLength": 1},
+          "linked_metrics": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "pattern": "^M[0-9]+$"}
+          }
+        }
+      }
+    },
+    "key_characteristics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "target", "criticality"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^KC[0-9]+$"},
+          "name": {"type": "string", "minLength": 1},
+          "target": {"type": "string", "minLength": 1},
+          "criticality": {"type": "string", "enum": ["high", "medium", "low"]},
+          "linked_features": {
+            "type": "array",
+            "items": {"type": "string", "pattern": "^F[0-9]+$"}
+          }
+        }
+      }
+    },
+    "dfa_score": {
+      "type": "object",
+      "required": ["overall", "theoretical_min_parts", "actual_parts", "bottlenecks"],
+      "properties": {
+        "overall": {"type": "number", "minimum": 0, "maximum": 1},
+        "theoretical_min_parts": {"type": "integer", "minimum": 1},
+        "actual_parts": {"type": "integer", "minimum": 1},
+        "method": {"type": "string"},
+        "bottlenecks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["part_id", "issue"],
+            "properties": {
+              "part_id": {"type": "string"},
+              "name": {"type": "string"},
+              "issue": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "severity"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^R[0-9]+$"},
+          "text": {"type": "string", "minLength": 1},
+          "severity": {"type": "integer", "minimum": 1, "maximum": 5},
+          "linked_kcs": {
+            "type": "array",
+            "items": {"type": "string", "pattern": "^KC[0-9]+$"}
+          }
+        }
+      }
+    },
+    "uncertainty": {
+      "type": "string",
+      "enum": ["高", "中", "低"],
+      "description": "Self-reported confidence by LLM; allowed to be omitted in placeholder mode"
+    }
   }
 }

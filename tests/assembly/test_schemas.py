@@ -59,3 +59,27 @@ def test_pt6a_hpc_stage1_golden_validates():
     assert golden_path.exists(), f"golden file missing: {golden_path}"
     instance = json.loads(golden_path.read_text(encoding="utf-8"))
     jsonschema.validate(instance=instance, schema=schema)
+
+
+def test_stage2_schema_requires_qfd_blocks():
+    """stage2 schema must declare the QFD blocks + KC + DFA + risks as required."""
+    schema_path = SCHEMA_DIR / "stage2.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    required = set(schema["required"])
+    for key in ["stage1_ref", "user_needs", "engineering_metrics",
+                "assembly_features", "key_characteristics", "dfa_score", "risks"]:
+        assert key in required, f"stage2 schema must require '{key}'"
+    # Every list field must enforce minItems >= 1
+    for arr in ["user_needs", "engineering_metrics", "assembly_features",
+                "key_characteristics", "risks"]:
+        assert schema["properties"][arr].get("minItems", 0) >= 1, \
+            f"'{arr}' must enforce minItems >= 1"
+
+
+def test_pt6a_hpc_stage2_golden_validates():
+    """The golden PT6A HPC stage2 example must satisfy stage2 schema."""
+    schema = json.loads((SCHEMA_DIR / "stage2.schema.json").read_text(encoding="utf-8"))
+    golden_path = SCHEMA_DIR.parent / "golden" / "pt6a_hpc_stage2.json"
+    assert golden_path.exists(), f"golden file missing: {golden_path}"
+    golden = json.loads(golden_path.read_text(encoding="utf-8"))
+    jsonschema.validate(instance=golden, schema=schema)

@@ -1,0 +1,43 @@
+{
+  "stage1_ref": "scheme-20260508-a1b2c3",
+  "user_needs": [
+    {"id": "U1", "text": "高可靠性，长时间运行不易失效", "weight": 5},
+    {"id": "U2", "text": "便于外场维修与关键件更换", "weight": 4},
+    {"id": "U3", "text": "单台装配工时可控", "weight": 3},
+    {"id": "U4", "text": "合规 AS9100D / GJB 5060A", "weight": 5}
+  ],
+  "engineering_metrics": [
+    {"id": "M1", "name": "MTBF", "target": ">= 4000 hrs", "linked_needs": ["U1"]},
+    {"id": "M2", "name": "MTTR (关键件)", "target": "<= 8 hrs", "linked_needs": ["U2"]},
+    {"id": "M3", "name": "单台装配工时", "target": "<= 40 工时", "linked_needs": ["U3"]},
+    {"id": "M4", "name": "首次装配合格率", "target": ">= 95%", "linked_needs": ["U1", "U4"]}
+  ],
+  "assembly_features": [
+    {"id": "F1", "name": "叶片装入扭矩一致性", "spec": "Cpk >= 1.33", "linked_metrics": ["M1", "M4"]},
+    {"id": "F2", "name": "转子动平衡精度", "spec": "<= 5 g·mm @ 一阶", "linked_metrics": ["M1"]},
+    {"id": "F3", "name": "前段法兰可拆性", "spec": "无需破坏性拆卸", "linked_metrics": ["M2"]},
+    {"id": "F4", "name": "装配工序流转节拍", "spec": "瓶颈工序 <= 90 min", "linked_metrics": ["M3"]}
+  ],
+  "key_characteristics": [
+    {"id": "KC1", "name": "叶尖间隙", "target": "0.5-1.0 mm", "criticality": "high", "linked_features": ["F1"]},
+    {"id": "KC2", "name": "转子端面跳动", "target": "<= 0.05 mm", "criticality": "high", "linked_features": ["F2"]},
+    {"id": "KC3", "name": "法兰螺栓预紧力一致性", "target": "± 5% N·m", "criticality": "medium", "linked_features": ["F3"]},
+    {"id": "KC4", "name": "转子整体不平衡量", "target": "<= 5 g·mm", "criticality": "high", "linked_features": ["F2"]}
+  ],
+  "dfa_score": {
+    "overall": 0.72,
+    "theoretical_min_parts": 25,
+    "actual_parts": 35,
+    "method": "Boothroyd-Dewhurst (lightweight)",
+    "bottlenecks": [
+      {"part_id": "P012", "name": "前段静子定位环", "issue": "定位面缺失，需借助专用工装定位"},
+      {"part_id": "P021", "name": "后段轴承支撑", "issue": "螺栓孔位偏置导致重复定位耗时高"}
+    ]
+  },
+  "risks": [
+    {"id": "R1", "text": "高温段间隙超差导致碰摩", "severity": 4, "linked_kcs": ["KC1"]},
+    {"id": "R2", "text": "转子不平衡引起一阶振动", "severity": 4, "linked_kcs": ["KC2", "KC4"]},
+    {"id": "R3", "text": "法兰螺栓预紧力离散导致密封失效", "severity": 3, "linked_kcs": ["KC3"]}
+  ],
+  "uncertainty": "中"
+}
