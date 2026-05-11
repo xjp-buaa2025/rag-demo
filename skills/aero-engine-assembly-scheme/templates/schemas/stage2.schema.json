@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stage2.schema.json",
+  "title": "Stage 2 — Requirements & Constraints (placeholder v1)",
+  "type": "object",
+  "required": ["user_needs", "engineering_metrics", "assembly_features", "key_characteristics", "risks"],
+  "properties": {
+    "user_needs": {"type": "array"},
+    "engineering_metrics": {"type": "array"},
+    "assembly_features": {"type": "array"},
+    "key_characteristics": {"type": "array"},
+    "dfa_score": {"type": "object"},
+    "risks": {"type": "array"}
+  }
+}

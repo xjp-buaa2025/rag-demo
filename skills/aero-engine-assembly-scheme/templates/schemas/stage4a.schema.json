@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stage4a.schema.json",
+  "title": "Stage 4a — Procedures (placeholder v1)",
+  "type": "object",
+  "required": ["architecture_ref", "procedures"],
+  "properties": {
+    "architecture_ref": {"type": "string"},
+    "procedures": {"type": "array"},
+    "topology": {"type": "object"}
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "scheme_id": "scheme-20260508-a1b2c3",
+  "subject": {
+    "system": "PT6A 高压压气机",
+    "system_en": "PT6A HPC (High Pressure Compressor)",
+    "scope": [
+      "3 级轴流 + 1 级离心",
+      "含转子组件、静子叶片组、机匣、支撑环",
+      "不包含燃烧室、涡轮、传动齿轮箱"
+    ],
+    "design_intent": "工艺优化",
+    "constraints": {"primary": "可靠性", "secondary": "维修性"}
+  },
+  "kg_snapshot": {
+    "part_count": 35,
+    "assembly_count": 13,
+    "key_interfaces": [
+      {"from": "前段静子组件", "to": "转子盘", "type": "径向间隙配合"},
+      {"from": "压气机机匣", "to": "前段静子", "type": "法兰螺栓 + 定位销"}
+    ],
+    "relations_sample": ["isPartOf", "matesWith", "adjacentTo", "hasInterface"]
+  },
+  "web_search_results": [
+    {
+      "id": "ws-gjb5060a",
+      "url": "https://example.gov/standards/gjb5060a",
+      "title": "GJB 5060A-2014 航空发动机装配通用要求 §5.3 紧固件装配",
+      "excerpt": "5.3.1 螺栓装配应按规定的扭矩值施加预紧力，扭矩值按照工艺规程执行。5.3.2 关键紧固件应记录扭矩实测值并建立追溯文档...",
+      "confidence": 0.95,
+      "selected": null
+    },
+    {
+      "id": "ws-pwc-cmm",
+      "url": "https://example.com/pwc/cmm-72-30",
+      "title": "P&W Canada PT6A Engine Manual 72-30 — Compressor Section",
+      "excerpt": "Compressor rotor assembly procedure: (1) install bearing race, (2) stack rotor disks, (3) torque tie-rod to 50 N·m, (4) verify runout < 0.05mm...",
+      "confidence": 0.9,
+      "selected": null
+    }
+  ],
+  "vision_notes": "",
+  "compliance_scope": [
+    "AS9100D §8.1 (运行的策划和控制)",
+    "GJB 9001C §7.5 (生产和服务过程的控制)",
+    "GJB 5060A-2014 (航空发动机装配通用要求)"
+  ],
+  "task_card_md": "## 任务说明书\n\n**目标**：为 PT6A 高压压气机（HPC）子系统设计装配工艺方案，重点优化关键工序的可靠性与维修性。\n\n**范围**：覆盖 3 级轴流压气机 + 1 级离心叶轮的装配；含转子组件、静子叶片组、机匣、支撑环。\n\n**边界**：不包含燃烧室、涡轮段、附件齿轮箱的装配方案。\n\n**约束**：\n- 主要：可靠性（MTBF ≥ 4000 hrs）\n- 次要：维修性（关键件可在外场更换）\n- 合规：AS9100D + GJB 9001C + GJB 5060A\n\n**已知风险**：\n- 转子组件动平衡难度高（需配磨配研）\n- 叶尖间隙 0.5-1.0mm 公差链复杂，需 stack-up 分析\n- 法兰连接应力集中（需特殊紧固件控制）\n\n_参考资料：[ref:ws-gjb5060a] [ref:ws-pwc-cmm]_"
+}

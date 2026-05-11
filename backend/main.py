@@ -149,7 +149,30 @@ async def lifespan(app: FastAPI):
     else:
         print("[backend] ⚠️ 未配置 Vision Key，图片描述功能不可用。")
 
-    # 5. 将所有单例存入 app.state，供路由通过 Depends(get_state) 获取
+    # 5. Assembly-scheme skill (Plan 1, P1+P2) ──────────────────────────
+    from pathlib import Path as _PathForSkill
+    from backend.pipelines.assembly_scheme.skill_loader import SkillRegistry as _SkillRegistry
+    from backend.tools.web_search import WebSearchClient as _WebSearchClient
+
+    _skill_root = _PathForSkill(_ROOT) / "skills" / "aero-engine-assembly-scheme"
+    skill_registry = None
+    if _skill_root.exists():
+        try:
+            skill_registry = _SkillRegistry(_skill_root)
+            skill_registry.load()
+            print(f"[backend] Skill loaded: {skill_registry.frontmatter.get('name')}")
+        except Exception as _e:
+            print(f"[backend] ⚠️  Failed to load skill: {_e}")
+            skill_registry = None
+    else:
+        print(f"[backend] ⚠️  Skill dir missing: {_skill_root}")
+
+    web_search_client = _WebSearchClient(
+        api_key=os.getenv("TAVILY_API_KEY"),
+        cache_dir=_PathForSkill(_ROOT) / "storage" / "web_cache",
+    )
+
+    # 6. 将所有单例存入 app.state，供路由通过 Depends(get_state) 获取
     app.state.app_state = AppState(
         qdrant_client=qdrant_client,
         embedding_mgr=embedding_mgr,
@@ -158,6 +181,8 @@ async def lifespan(app: FastAPI):
         minimax_client=minimax_client,
         minimax_model=minimax_model,
         reranker=reranker,
+        skill_registry=skill_registry,
+        web_search_client=web_search_client,
     )
     app.state.llm_model      = LLM_MODEL
     app.state.data_dir       = os.path.join(_ROOT, "data")
@@ -340,7 +365,8 @@ app.mount("/images", StaticFiles(directory=_image_dir), name="images")
 # 注册路由
 # ==========================================
 from backend.routers import (  # noqa: E402
-    ingest, retrieve, chat, eval as eval_router, bom, assembly, vision
+    ingest, retrieve, chat, eval as eval_router, bom, assembly, vision,
+    assembly_design,  # Assembly-scheme skill (Plan 1, P1+P2)
 )
 from backend.routers import kg as _kg_router  # noqa: E402
 
@@ -354,6 +380,7 @@ app.include_router(vision.router,        tags=["视觉"])
 app.include_router(_kg_router.router,    prefix="/kg", tags=["KG联合构建"])
 from backend.routers import kg_stages as _kg_stages_router  # noqa
 app.include_router(_kg_stages_router.router, prefix="/kg", tags=["KG分阶段构建"])
+app.include_router(assembly_design.router)  # Assembly-scheme skill (Plan 1, P1+P2)
 
 
 # ==========================================

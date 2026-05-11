@@ -59,3 +59,7 @@ jieba>=0.42.1       # 中文分词（与英文 regex 双轨分词）
 fastapi>=0.111
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9
+
+# Assembly Scheme Skill
+jsonschema>=4.0
+tavily-python>=0.3
