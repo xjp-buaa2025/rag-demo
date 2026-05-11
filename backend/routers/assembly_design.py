@@ -37,9 +37,9 @@ VALID_STAGE_KEYS = {"1", "2", "3", "4a", "4b", "4c", "4d", "5"}
 
 
 class NewSchemeRequest(BaseModel):
-    subject_system: str
+    subject_system: str = Field(..., min_length=1)
     subject_system_en: Optional[str] = None
-    subject_scope: List[str] = Field(default_factory=list)
+    subject_scope: List[str] = Field(..., min_length=1)  # was default_factory=list; empty list rejected at boundary
     design_intent: str = "工艺优化"
     constraints: Dict[str, str] = Field(default_factory=dict)
 

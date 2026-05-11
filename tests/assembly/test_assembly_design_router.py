@@ -20,6 +20,7 @@ def test_create_scheme_returns_id_and_meta(client):
 def test_list_schemes_includes_created(client):
     client.post("/assembly-design/scheme/new", json={
         "subject_system": "Test A",
+        "subject_scope": ["3 级轴流"],
         "design_intent": "工艺优化",
     })
     resp = client.get("/assembly-design/scheme/list")
@@ -55,7 +56,7 @@ def test_run_stage1_generate_writes_stage1_json(client):
 
 def test_run_stage_other_returns_501(client):
     create = client.post("/assembly-design/scheme/new", json={
-        "subject_system": "Test", "design_intent": "工艺优化",
+        "subject_system": "Test", "subject_scope": ["3 级轴流"], "design_intent": "工艺优化",
     }).json()
     sid = create["scheme_id"]
     for stage_key in ["2", "3", "4a", "4b", "4c", "4d", "5"]:
@@ -68,7 +69,7 @@ def test_run_stage_other_returns_501(client):
 
 def test_save_edits_overwrites_stage1(client):
     create = client.post("/assembly-design/scheme/new", json={
-        "subject_system": "PT6A HPC", "design_intent": "工艺优化",
+        "subject_system": "PT6A HPC", "subject_scope": ["3 级轴流"], "design_intent": "工艺优化",
     }).json()
     sid = create["scheme_id"]
     # First run generate
@@ -87,7 +88,7 @@ def test_save_edits_overwrites_stage1(client):
 
 def test_unknown_action_returns_400(client):
     create = client.post("/assembly-design/scheme/new", json={
-        "subject_system": "Test", "design_intent": "工艺优化",
+        "subject_system": "Test", "subject_scope": ["3 级轴流"], "design_intent": "工艺优化",
     }).json()
     sid = create["scheme_id"]
     resp = client.post(
@@ -99,7 +100,7 @@ def test_unknown_action_returns_400(client):
 
 def test_reflux_endpoint_returns_501_for_v1(client):
     create = client.post("/assembly-design/scheme/new", json={
-        "subject_system": "Test", "design_intent": "工艺优化",
+        "subject_system": "Test", "subject_scope": ["3 级轴流"], "design_intent": "工艺优化",
     }).json()
     sid = create["scheme_id"]
     resp = client.post(f"/assembly-design/scheme/{sid}/reflux", json={"approved": []})
@@ -108,7 +109,7 @@ def test_reflux_endpoint_returns_501_for_v1(client):
 
 def test_iterate_endpoint_returns_501_for_v1(client):
     create = client.post("/assembly-design/scheme/new", json={
-        "subject_system": "Test", "design_intent": "工艺优化",
+        "subject_system": "Test", "subject_scope": ["3 级轴流"], "design_intent": "工艺优化",
     }).json()
     sid = create["scheme_id"]
     resp = client.post(f"/assembly-design/scheme/{sid}/iterate", json={"target_stage_key": "4a"})
@@ -117,8 +118,37 @@ def test_iterate_endpoint_returns_501_for_v1(client):
 
 def test_export_endpoint_returns_501_for_v1(client):
     create = client.post("/assembly-design/scheme/new", json={
-        "subject_system": "Test", "design_intent": "工艺优化",
+        "subject_system": "Test", "subject_scope": ["3 级轴流"], "design_intent": "工艺优化",
     }).json()
     sid = create["scheme_id"]
     resp = client.get(f"/assembly-design/scheme/{sid}/export")
     assert resp.status_code == 501
+
+
+def test_create_scheme_rejects_empty_scope(client):
+    """subject_scope=[] must be rejected at the API boundary, not silently passed through."""
+    resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": [],
+            "design_intent": "工艺优化",
+            "constraints": {"primary": "可靠性"},
+        },
+    )
+    assert resp.status_code == 422, f"expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_create_scheme_accepts_single_element_scope(client):
+    """A 1-element scope must succeed."""
+    resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+            "constraints": {"primary": "可靠性"},
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["meta"]["subject"]["scope"] == ["3 级轴流"]
