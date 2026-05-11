@@ -135,39 +135,40 @@ def run_stage(scheme_id: str, stage_key: str, req: StageRequest, state=Depends(g
     if state.skill_registry is None:
         raise HTTPException(503, "skill registry not loaded")
 
-    meta = _read_meta(scheme_id)
-    stage_path = sd / f"stage{stage_key}.json"
+    with state.assembly_lock:
+        meta = _read_meta(scheme_id)
+        stage_path = sd / f"stage{stage_key}.json"
 
-    if req.action == "save_edits":
-        if not req.payload:
-            raise HTTPException(400, "save_edits requires non-empty payload")
-        stage_path.write_text(
-            json.dumps(req.payload, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        return {"saved": True, "scheme_id": scheme_id, "stage_key": stage_key}
+        if req.action == "save_edits":
+            if not req.payload:
+                raise HTTPException(400, "save_edits requires non-empty payload")
+            stage_path.write_text(
+                json.dumps(req.payload, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            return {"saved": True, "scheme_id": scheme_id, "stage_key": stage_key}
 
-    if req.action in ("generate", "regenerate"):
-        user_input = {
-            "scheme_id": scheme_id,
-            "subject": meta["subject"],
-            "vision_notes": req.payload.get("vision_notes", ""),
-        }
-        result = run_stage1_intake(
-            user_input=user_input,
-            skill=state.skill_registry,
-            web_search=state.web_search_client,
-            llm_client=state.llm_client,
-            neo4j_driver=state.neo4j_driver,
-        )
-        stage_path.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        if stage_key not in meta["stages_done"]:
-            meta["stages_done"].append(stage_key)
-            _write_meta(scheme_id, meta)
-        return result
+        if req.action in ("generate", "regenerate"):
+            user_input = {
+                "scheme_id": scheme_id,
+                "subject": meta["subject"],
+                "vision_notes": req.payload.get("vision_notes", ""),
+            }
+            result = run_stage1_intake(
+                user_input=user_input,
+                skill=state.skill_registry,
+                web_search=state.web_search_client,
+                llm_client=state.llm_client,
+                neo4j_driver=state.neo4j_driver,
+            )
+            stage_path.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            if stage_key not in meta["stages_done"]:
+                meta["stages_done"].append(stage_key)
+                _write_meta(scheme_id, meta)
+            return result
 
-    raise HTTPException(400, f"unknown action: {req.action}")
+        raise HTTPException(400, f"unknown action: {req.action}")
 
 
 @router.post("/scheme/{scheme_id}/reflux")

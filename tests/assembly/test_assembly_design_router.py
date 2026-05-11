@@ -152,3 +152,47 @@ def test_create_scheme_accepts_single_element_scope(client):
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["meta"]["subject"]["scope"] == ["3 级轴流"]
+
+
+def test_concurrent_stage_writes_are_serialized(client, monkeypatch):
+    """Two threads hitting the same stage must not corrupt stages_done.
+
+    We don't measure throughput — we measure that meta.json after both writes
+    has each stage_key listed exactly once (no duplicate, no missing).
+    """
+    import threading
+
+    # 1) Create a scheme
+    resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+            "constraints": {"primary": "可靠性"},
+        },
+    )
+    scheme_id = resp.json()["scheme_id"]
+
+    errors: list = []
+
+    def hit_stage_one():
+        try:
+            r = client.post(
+                f"/assembly-design/scheme/{scheme_id}/stage/1",
+                json={"action": "generate", "payload": {}},
+            )
+            assert r.status_code == 200, r.text
+        except Exception as e:
+            errors.append(e)
+
+    t1 = threading.Thread(target=hit_stage_one)
+    t2 = threading.Thread(target=hit_stage_one)
+    t1.start(); t2.start()
+    t1.join(); t2.join()
+
+    assert not errors, f"thread errors: {errors}"
+
+    # Re-fetch and check stages_done has no duplicates
+    final = client.get(f"/assembly-design/scheme/{scheme_id}").json()
+    assert final["meta"]["stages_done"].count("1") == 1, final["meta"]["stages_done"]
