@@ -21,6 +21,7 @@
 13. [运行方式](#13-运行方式)
 14. [常见问题与排查](#14-常见问题与排查)
 15. [变更日志](#15-变更日志)
+16. [Assembly Scheme Skill (Plan 1, v0)](#16-assembly-scheme-skill-plan-1-v0)
 
 ---
 
@@ -792,3 +793,51 @@ export HF_ENDPOINT=https://hf-mirror.com
 | 2026-04-02 | KgBuilder 前端重构：平铺列表→三栏卡片（各栏独立 file input + forcedCategory 修复 .docx 误归类问题）；bom_ingest_pipeline 路由修复（CAD 文件正确走 lg_cad_pipeline；BOM/CAD 均改为后台线程+队列，修复 LLM 等待期间 SSE 静默/前端永久"构建中"的 bug）|
 | 2026-04-13 | 三元组后处理管道（TASK_05）：新建 `backend/pipelines/kg_postprocess.py`（置信度过滤MIN=0.3 + 归一化 + 本体校验 + 去重四步流水线）；接入 `_write_all_stages_to_neo4j` 与 `/kg/stage4/validate` 端点；690→498 条，清除率 27.8%，response 新增 `postprocess` 统计字段 |
 | 2026-04-15 | BOM 层级修复（TASK_01）：① 新增 `_clean_ocr_noise`（正则净化 COMP0NENT/0F/0N/0VS/N0. 等 OCR 噪声，接入 OCR chunk 预处理和每行字段后处理）；② 强化 `_OCR_BOM_PROMPT`（新增规则7 NHA跨图单点前缀/规则8 INTRCHG互换件层级 + 4条 few-shot）；③ 新增 `_resolve_nha_triples`（后处理修正 tail==ROOT 且含 SEE FIG.X FOR NHA 的三元组，连接到顶层 Assembly）；新增测试 `tests/kg/test_bom_hierarchy.py`（15条单元测试）+ `tests/kg/test_bom_stage1_acceptance.py`（4条验收测试）|
+| 2026-05-09 | Assembly Scheme Skill Plan 1（T1-T13）：新增 skill 骨架（SKILL.md + 5阶段方法论 + 8个 JSON Schema + PT6A HPC golden 示范 + S1 提示词）+ 后端管道（skill_loader / stage1_intake / web_search）+ REST 路由（assembly_design.py）+ lifespan 集成 + 43 条测试全绿 |
+
+---
+
+## 16. Assembly Scheme Skill (Plan 1, v0)
+
+> 状态：Plan 1 (P1+P2) 完成 — Skill 骨架 + S1 端到端可跑通。Plan 2-N 待续。
+
+### What
+新增"航空发动机装配方案设计师" skill，从单纯工具堆叠跃迁到"专家心智 + 工作流 + HITL + 自我生长"的领域智能体。
+首版示范标的：PT6A HPC 子系统。Plan 1 仅实现 S1（任务调研 + 资料采集）端到端管道。
+
+### Why
+现有 RAG/KG/CAD/BOM 工具都是"底层能力"，缺少把它们组装成"像装配工艺师那样设计方案"的高层方法论与流程。
+本 skill 沉淀 5 阶段方法论（S1 调研 / S2 需求 / S3 概念 / S4 详细工艺 / S5 评审），用 SKILL.md 作为 source of truth。
+
+### How
+- **Layer 1 — Skill 文档**：`skills/aero-engine-assembly-scheme/`
+  - `SKILL.md` 主入口（frontmatter + checklist + 决策图 + 反模式）
+  - `methodology/` x 5（S1 完整、S2-S5 outline v1）
+  - `templates/schemas/` x 8 个 JSON Schema
+  - `templates/golden/` PT6A HPC S1 示范
+  - `prompts/s1_intake.prompt.md` LLM 提示词模板
+  - `references/` 反哺写入目标（v1 仅留 _index.md 和 _ingest_log.json 占位）
+- **Layer 2 — 后端管道**：`backend/pipelines/assembly_scheme/`
+  - `skill_loader.py`：`SkillRegistry` 类，启动时加载整套 skill
+  - `stage1_intake.py`：`run_stage1_intake(user_input, skill, web_search, llm_client, neo4j_driver) -> dict`
+  - 调用链：构建 web 查询 -> KG snapshot -> Tavily 检索 -> LLM 生成 task_card_md -> 返回符合 stage1 schema 的 dict
+- **Layer 2 — Web 工具**：`backend/tools/web_search.py`
+  - `WebSearchClient`：Tavily 封装，含 sha256 文件缓存（`storage/web_cache/`），未配置 key 时优雅降级
+- **Layer 2 — REST 端点**：`backend/routers/assembly_design.py`
+  - `POST /assembly-design/scheme/new` 创建方案
+  - `GET /assembly-design/scheme/list` 列出
+  - `GET /assembly-design/scheme/{id}` 取详情
+  - `POST /assembly-design/scheme/{id}/stage/{stage_key}` 跑某阶段（v0 仅 stage_key="1" 可用，其余返回 501）
+  - `POST /scheme/{id}/reflux` / `POST /scheme/{id}/iterate` / `GET /scheme/{id}/export` v0 全返回 501
+- **Lifespan 集成**：`backend/main.py` 启动时加载 skill_registry + 初始化 web_search_client，注入到 AppState；skill 加载失败时降级为 None（assembly 端点返回 503，不影响其他模块）
+
+### Where（证据）
+- 测试：`tests/assembly/test_*.py`（全部 PASS）
+- E2E：`tests/assembly/test_e2e_stage1.py` — 创建方案 -> stage1 生成 -> schema 校验 -> 取回
+- Spec：`docs/superpowers/specs/2026-05-08-assembly-scheme-skill-design.md`
+- Plan：`docs/superpowers/plans/2026-05-08-assembly-scheme-p1-p2.md`
+
+### 配置
+新增环境变量 `TAVILY_API_KEY`（可选）：
+- 已配置：S1 联网检索三组查询，结果含 confidence 待用户审核
+- 未配置：web_search 静默返回空列表，S1 仍能跑通（仅用本地 KG + LLM）
