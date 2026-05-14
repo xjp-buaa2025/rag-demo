@@ -50,6 +50,8 @@ def test_registry_load_collects_prompts():
     assert "你是航空发动机装配工艺资深专家" in reg.prompts["s1_intake"]
     assert "s2_requirements" in reg.prompts
     assert "QFD" in reg.prompts["s2_requirements"] or "需求与约束" in reg.prompts["s2_requirements"]
+    assert "s3_concept" in reg.prompts
+    assert "候选概念架构" in reg.prompts["s3_concept"] or "S3" in reg.prompts["s3_concept"]
 
 
 def test_registry_load_collects_schemas():
