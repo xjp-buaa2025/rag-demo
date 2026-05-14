@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from backend.deps import get_state
 from backend.pipelines.assembly_scheme.stage1_intake import run_stage1_intake
 from backend.pipelines.assembly_scheme.stage2_requirements import run_stage2_requirements
+from backend.pipelines.assembly_scheme.stage3_concept import run_stage3_concept
 
 router = APIRouter(prefix="/assembly-design", tags=["assembly-design"])
 
@@ -131,7 +132,7 @@ def run_stage(scheme_id: str, stage_key: str, req: StageRequest, state=Depends(g
         raise HTTPException(404, f"scheme not found: {scheme_id}")
 
     # Stages not implemented yet
-    if stage_key in {"3", "4a", "4b", "4c", "4d", "5"}:
+    if stage_key in {"4a", "4b", "4c", "4d", "5"}:
         raise HTTPException(501, f"stage {stage_key} not implemented in Plan 2")
 
     if state.skill_registry is None:
@@ -179,6 +180,24 @@ def run_stage(scheme_id: str, stage_key: str, req: StageRequest, state=Depends(g
                 skill=state.skill_registry,
                 llm_client=state.llm_client,
                 rag_searcher=None,
+                neo4j_driver=state.neo4j_driver,
+                user_guidance=req.user_guidance,
+            )
+
+        elif stage_key == "3":
+            stage1_path = sd / "stage1.json"
+            stage2_path = sd / "stage2.json"
+            if not stage2_path.exists():
+                raise HTTPException(409, "stage2 must be generated before stage3")
+            if not stage1_path.exists():
+                raise HTTPException(409, "stage1 must be generated before stage3")
+            stage1_payload = json.loads(stage1_path.read_text(encoding="utf-8"))
+            stage2_payload = json.loads(stage2_path.read_text(encoding="utf-8"))
+            result = run_stage3_concept(
+                stage1_payload=stage1_payload,
+                stage2_payload=stage2_payload,
+                skill=state.skill_registry,
+                llm_client=state.llm_client,
                 neo4j_driver=state.neo4j_driver,
                 user_guidance=req.user_guidance,
             )
