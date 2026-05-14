@@ -1,0 +1,112 @@
+{
+  "stage1_ref": "scheme-20260508-a1b2c3",
+  "stage2_ref": "scheme-20260508-a1b2c3",
+  "candidate_architectures": [
+    {
+      "id": "A1",
+      "name": "三段分体式（前段静子 / 转子段 / 后段静子）",
+      "modules": [
+        {"id": "M1", "name": "前段静子组件", "parts": ["P001", "P002", "P003", "P004"]},
+        {"id": "M2", "name": "转子组件 (含 3 级轴流盘 + 1 级离心叶轮)", "parts": ["P010", "P011", "P012", "P013"]},
+        {"id": "M3", "name": "后段静子与轴承支撑", "parts": ["P020", "P021", "P022"]},
+        {"id": "M4", "name": "外机匣组件", "parts": ["P030", "P031"]}
+      ],
+      "key_interfaces": [
+        {"from": "M1", "to": "M2", "type": "径向间隙配合 + 轴向定位面"},
+        {"from": "M2", "to": "M3", "type": "法兰螺栓 + 定位销"},
+        {"from": "M4", "to": "M1", "type": "外机匣前端法兰"},
+        {"from": "M4", "to": "M3", "type": "外机匣后端法兰"}
+      ],
+      "assembly_simulation": {
+        "reachability_pass": true,
+        "interference_count": 0,
+        "method": "KG-static",
+        "notes": "基于 KG isPartOf + matesWith 的静态可达性分析；CAD 干涉检查留待 v2"
+      },
+      "datum_consistency": {
+        "unified": true,
+        "issues": []
+      },
+      "pros": [
+        "拆装方便，外场可单段更换",
+        "三段独立可分别送修",
+        "工序流转明晰"
+      ],
+      "cons": [
+        "前段法兰应力集中风险",
+        "三段需 4 处法兰螺栓，紧固件件数偏多"
+      ],
+      "fit_score_to_metrics": 0.82
+    },
+    {
+      "id": "A2",
+      "name": "整体压力外壳 + 内部分级模块",
+      "modules": [
+        {"id": "M1", "name": "整体外机匣（含前后法兰一体）", "parts": ["P030", "P031", "P032"]},
+        {"id": "M2", "name": "转子组件", "parts": ["P010", "P011", "P012", "P013"]},
+        {"id": "M3", "name": "静子叶片组（轴向 + 离心）", "parts": ["P001", "P002", "P003", "P020", "P021"]}
+      ],
+      "key_interfaces": [
+        {"from": "M1", "to": "M3", "type": "内壁榫槽 + 锁紧环"},
+        {"from": "M3", "to": "M2", "type": "径向间隙配合"}
+      ],
+      "assembly_simulation": {
+        "reachability_pass": true,
+        "interference_count": 1,
+        "method": "KG-static",
+        "notes": "整体外机匣下，静子叶片组装入需要从前端逐排穿入，KG matesWith 显示存在 1 处轴向干涉风险（待 CAD 复核）"
+      },
+      "datum_consistency": {
+        "unified": false,
+        "issues": ["静子叶片组的工艺基准（M3 端面）与装配基准（M1 内壁）不一致"]
+      },
+      "pros": [
+        "零件总数下降",
+        "压力密封性优于分体式"
+      ],
+      "cons": [
+        "外场维修困难，需整体返厂",
+        "基准不统一带来公差链放大",
+        "存在装入干涉风险"
+      ],
+      "fit_score_to_metrics": 0.58
+    },
+    {
+      "id": "A3",
+      "name": "两段式（前后段，转子作为独立装配单元）",
+      "modules": [
+        {"id": "M1", "name": "前段（含前静子 + 外机匣前半）", "parts": ["P001", "P002", "P003", "P030"]},
+        {"id": "M2", "name": "转子组件（独立动平衡）", "parts": ["P010", "P011", "P012", "P013"]},
+        {"id": "M3", "name": "后段（含后静子 + 外机匣后半 + 支撑）", "parts": ["P020", "P021", "P022", "P031"]}
+      ],
+      "key_interfaces": [
+        {"from": "M1", "to": "M2", "type": "径向间隙 + 轴承内圈定位"},
+        {"from": "M2", "to": "M3", "type": "径向间隙 + 轴承外圈定位"},
+        {"from": "M1", "to": "M3", "type": "中分面法兰螺栓"}
+      ],
+      "assembly_simulation": {
+        "reachability_pass": true,
+        "interference_count": 0,
+        "method": "KG-static",
+        "notes": "前后段 + 独立转子三件装配，转子先动平衡再装入，KG 可达性满分"
+      },
+      "datum_consistency": {
+        "unified": true,
+        "issues": []
+      },
+      "pros": [
+        "转子动平衡独立，与机匣解耦",
+        "中分面少（仅 1 处法兰）",
+        "维修拆装路径短"
+      ],
+      "cons": [
+        "中分面法兰承载所有轴向力，紧固件设计要求高",
+        "前段集成度高，单件成本上升"
+      ],
+      "fit_score_to_metrics": 0.78
+    }
+  ],
+  "recommended": "A1",
+  "rationale_md": "推荐 **A1 三段分体式**：\n\n- **可靠性（M1=MTBF）**：三段独立动平衡 + 法兰带定位销，工艺成熟，与 PT6A 系列既有装配经验一致 [ref:ws-pwc-cmm]\n- **维修性（M2=MTTR）**：A1 与 A3 都满足 8 hrs 外场更换，但 A1 三段路径短，平均节省 1 hr\n- **基准统一性**：A1、A3 都 unified；A2 不 unified，直接 PASS\n- **装配可达性**：A1、A3 均 0 干涉；A2 存在 1 处需 CAD 复核\n- **fit_score 排序**：A1 (0.82) > A3 (0.78) > A2 (0.58)\n\nA3 作为强备选保留：若 chamberlain 在 HITL 强调\"中分面少 = 密封风险低\"，可切换。\n\n**不推荐 A2**：基准不统一 + 干涉风险 + 维修性差，三票否决。",
+  "uncertainty": "中"
+}

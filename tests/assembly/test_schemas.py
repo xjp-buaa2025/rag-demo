@@ -83,3 +83,28 @@ def test_pt6a_hpc_stage2_golden_validates():
     assert golden_path.exists(), f"golden file missing: {golden_path}"
     golden = json.loads(golden_path.read_text(encoding="utf-8"))
     jsonschema.validate(instance=golden, schema=schema)
+
+
+def test_stage3_schema_requires_arch_internals():
+    """stage3 schema must require deep architecture fields, not just the array."""
+    schema = json.loads((SCHEMA_DIR / "stage3.schema.json").read_text(encoding="utf-8"))
+    required = set(schema["required"])
+    for key in ["stage1_ref", "stage2_ref", "candidate_architectures", "recommended", "rationale_md"]:
+        assert key in required, f"stage3 must require '{key}'"
+
+    arch_schema = schema["properties"]["candidate_architectures"]["items"]
+    arch_required = set(arch_schema["required"])
+    for key in ["id", "name", "modules", "key_interfaces", "assembly_simulation",
+                "datum_consistency", "pros", "cons", "fit_score_to_metrics"]:
+        assert key in arch_required, f"each architecture must require '{key}'"
+
+    assert schema["properties"]["candidate_architectures"].get("minItems", 0) >= 2
+
+
+def test_pt6a_hpc_stage3_golden_validates():
+    """The golden PT6A HPC stage3 example must satisfy stage3 schema."""
+    schema = json.loads((SCHEMA_DIR / "stage3.schema.json").read_text(encoding="utf-8"))
+    golden_path = SCHEMA_DIR.parent / "golden" / "pt6a_hpc_stage3.json"
+    assert golden_path.exists(), f"golden file missing: {golden_path}"
+    golden = json.loads(golden_path.read_text(encoding="utf-8"))
+    jsonschema.validate(instance=golden, schema=schema)

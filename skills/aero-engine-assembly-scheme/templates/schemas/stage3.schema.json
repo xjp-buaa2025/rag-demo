@@ -1,12 +1,80 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "stage3.schema.json",
-  "title": "Stage 3 — Concept Architecture (placeholder v1)",
+  "title": "Stage 3 — Concept Architecture",
   "type": "object",
-  "required": ["candidate_architectures", "recommended"],
+  "required": ["stage1_ref", "stage2_ref", "candidate_architectures", "recommended", "rationale_md"],
   "properties": {
-    "candidate_architectures": {"type": "array", "minItems": 1},
-    "recommended": {"type": "string"},
-    "rationale_md": {"type": "string"}
+    "stage1_ref": {"type": "string", "pattern": "^scheme-[0-9]{8}-[a-f0-9]{6}$"},
+    "stage2_ref": {"type": "string", "pattern": "^scheme-[0-9]{8}-[a-f0-9]{6}$"},
+    "candidate_architectures": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "modules", "key_interfaces", "assembly_simulation",
+                     "datum_consistency", "pros", "cons", "fit_score_to_metrics"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^A[0-9]+$"},
+          "name": {"type": "string", "minLength": 1},
+          "modules": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "name", "parts"],
+              "properties": {
+                "id": {"type": "string", "pattern": "^M[0-9]+$"},
+                "name": {"type": "string", "minLength": 1},
+                "parts": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+              }
+            }
+          },
+          "key_interfaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["from", "to", "type"],
+              "properties": {
+                "from": {"type": "string"},
+                "to": {"type": "string"},
+                "type": {"type": "string", "minLength": 1}
+              }
+            }
+          },
+          "assembly_simulation": {
+            "type": "object",
+            "required": ["reachability_pass", "interference_count", "method"],
+            "properties": {
+              "reachability_pass": {"type": "boolean"},
+              "interference_count": {"type": "integer", "minimum": 0},
+              "method": {"type": "string", "enum": ["KG-static", "CAD-occ", "hybrid", "placeholder"]},
+              "notes": {"type": "string"}
+            }
+          },
+          "datum_consistency": {
+            "type": "object",
+            "required": ["unified", "issues"],
+            "properties": {
+              "unified": {"type": "boolean"},
+              "issues": {"type": "array", "items": {"type": "string"}}
+            }
+          },
+          "pros": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "cons": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "fit_score_to_metrics": {"type": "number", "minimum": 0, "maximum": 1}
+        }
+      }
+    },
+    "recommended": {"type": "string", "pattern": "^A[0-9]+$"},
+    "rationale_md": {"type": "string", "minLength": 1},
+    "uncertainty": {"type": "string", "enum": ["高", "中", "低"]}
   }
 }
