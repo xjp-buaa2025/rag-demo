@@ -1030,3 +1030,60 @@ POST /assembly-design/scheme/{id}/stage/4b
 - 路由测试：`tests/assembly/test_assembly_design_router.py`（含 stage4b 409 门控 + S1→S2→S3→S4a→S4b happy path）
 - 更新 E2E：`tests/assembly/test_e2e_s1_s2_s3.py`（4b 从 501 改为 409 断言）
 - 全套结果：**88 passed in 1.40s**（branch `feat/assembly-scheme-p2-s2-s3`）
+
+---
+
+### 16.P5 Plan 5 进展 — S5 三角色虚拟评审与方案导出 (2026-05-14)
+
+> 状态：Plan 5 完成 — S5 端到端可跑通，100 条 assembly 测试全绿。S1→S5 全链路贯通。
+
+#### What
+在 P4（S4b 工装规划）基础上，新增 S5（三角色虚拟评审 + KC 追溯矩阵 + final_scheme.md 导出）阶段，完成 Assembly Scheme Skill 主链路的最后一环。
+
+**新增管道**
+- `backend/pipelines/assembly_scheme/stage5_review.py`：`run_stage5_review()` — 三角色评审生成 + KC 追溯矩阵 + `_cross_validate()`（high severity 不可标 approved）+ 四层降级 PLACEHOLDER
+
+**升级 Skill 资产**
+- `skills/aero-engine-assembly-scheme/templates/schemas/stage5.schema.json`：从 placeholder v1 升级为完整约束 schema（review_panel minItems=3，角色 enum，severity enum，uncertainty 必填）
+- `skills/aero-engine-assembly-scheme/prompts/s5_review.prompt.md`：S5 LLM 提示词（三角色角色定义、KC 追溯规则、7 条评审规则）
+
+**路由激活**
+- `backend/routers/assembly_design.py`：移除 `"5"` 的 501，新增 `elif stage_key == "5"` 分支（依赖 stage4b.json，否则 409）；实现 GET `/export` 端点（读全部 stage JSON → 生成 `final_scheme.md` + KC 追溯矩阵 Markdown 表格）
+
+#### Why
+S4b 输出的工装清单缺少质量可信度背书：没有 KC 追溯、没有 QC 点验证、没有三角色审查。S5 填补这一缺口，提供：① 三角色视角全面审查；② KC→工序→QC 四列追溯矩阵；③ 最终装配方案 Markdown 导出。`_cross_validate` 强制保证"approved 不可并存 high severity"，避免 LLM 自相矛盾。
+
+#### How（核心调用链）
+
+```
+POST /assembly-design/scheme/{id}/stage/5
+  → router: check stage4b.json exists (→ 409 if missing)
+  → assembly_lock.acquire()
+  → run_stage5_review(stage4b_payload, stage4a_payload, stage2_payload, skill, llm_client, ...)
+      → _build_prompt(s5_review prompt + s5_review_and_export methodology + S2/S4a/S4b payloads)
+      → LLM call（None/exception → PLACEHOLDER）
+      → fence strip → json.loads（失败 → PLACEHOLDER）
+      → jsonschema.validate(result, stage5.schema.json)（失败 → PLACEHOLDER）
+      → _cross_validate(result)：high severity + "approved" → PLACEHOLDER
+      → 强制覆写 stage4b_ref（继承 scheme_id from stage4b["stage4a_ref"]）
+      → 返回 stage5 dict
+  → 写 stage5.json，更新 meta.json stages_done += "5"
+  → assembly_lock.release()
+
+GET /assembly-design/scheme/{id}/export
+  → check stage5.json exists (→ 409 if missing)
+  → 读取所有 stageN.json → 生成 Markdown（含 KC 追溯表格）
+  → 写 final_scheme.md → 返回 {export_path, content_md}
+```
+
+**降级策略（四层保险）**
+1. LLM=None → 直接返回 PLACEHOLDER（3 角色占位，`uncertainty:"高"`）
+2. LLM 调用异常 → PLACEHOLDER
+3. LLM JSON 无效 → PLACEHOLDER
+4. schema 校验失败 或 cross_validate 失败（high+approved 矛盾）→ PLACEHOLDER
+
+#### Where（证据）
+- 单元测试：`tests/assembly/test_stage5_review.py`（8 tests：no_llm/valid_llm/bad_json/high_severity_approved/schema_fail/fence_strip/llm_exception/placeholder_validates）
+- 路由测试：`tests/assembly/test_assembly_design_router.py`（含 stage5 409 门控 + S1→S5 happy path + export 409/200）
+- 更新 E2E：`tests/assembly/test_e2e_s1_s2_s3.py`（stage 5 从 501 改为 409 断言）
+- 全套结果：**100 passed in 1.83s**（branch `feat/assembly-scheme-p2-s2-s3`）
