@@ -141,7 +141,7 @@ def test_run_stage4b_with_valid_llm_output(loaded_skill, sample_stage4a):
     scheme_id = sample_stage4a["stage3_ref"]
     mock_llm = MagicMock()
     mock_llm.chat.completions.create.return_value.choices[0].message.content = (
-        json.dumps(_valid_llm_resp(scheme_id), ensure_ascii=False)
+        json.dumps(_valid_llm_resp("scheme-00000000-000000"), ensure_ascii=False)
     )
     result = run_stage4b_tooling(
         stage4a_payload=sample_stage4a,

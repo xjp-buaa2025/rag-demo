@@ -89,7 +89,7 @@ def _cross_validate(obj: dict, stage4a_payload: dict) -> bool:
     return True
 
 
-def _build_prompt(skill, stage4a_payload, kg_tools, user_guidance, all_tool_names: List[str] = None):
+def _build_prompt(skill, stage4a_payload, kg_tools, user_guidance, all_tool_names: Optional[List[str]] = None):
     prompt_template = skill.prompts.get("s4b_tooling", "")
     methodology = skill.methodology.get("s4_detailed_process", "")
     if all_tool_names is None:
@@ -126,9 +126,9 @@ def _parse_and_validate(raw: str, schema: dict, stage4a_payload: dict) -> Option
     try:
         s = raw.strip()
         if s.startswith("```"):
-            s = s.strip("`")
-            if s.lower().startswith("json\n"):
-                s = s[5:]
+            lines = s.splitlines()
+            end = -1 if lines and lines[-1].strip() == "```" else len(lines)
+            s = "\n".join(lines[1:end])
         obj = json.loads(s)
     except json.JSONDecodeError as e:
         logger.warning("Stage4b LLM JSON parse failed: %s; raw=%s", e, raw[:200])
@@ -152,7 +152,7 @@ def run_stage4b_tooling(
 ) -> Dict[str, Any]:
     """Execute S4b pipeline. Returns a dict valid per stage4b.schema.json."""
     schema = skill.schemas["stage4b"]
-    scheme_id = stage4a_payload.get("stage3_ref", "PLACEHOLDER")
+    scheme_id = stage4a_payload.get("stage3_ref", "PLACEHOLDER")  # S4a has no own id; it inherits scheme id from stage3_ref
 
     subject_name = stage4a_payload.get("subject", {}).get("system", "")
 
