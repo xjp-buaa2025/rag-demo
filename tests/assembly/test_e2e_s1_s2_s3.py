@@ -81,7 +81,19 @@ def test_e2e_stage4_through_5_still_501(client):
         },
     )
     scheme_id = create_resp.json()["scheme_id"]
-    for sk in ("4a", "4b", "4c", "4d", "5"):
+    # 4a is now active (409 without prior stage3); 4b-5 remain 501
+    r4a = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/4a",
+        json={"action": "generate", "payload": {}},
+    )
+    assert r4a.status_code == 409, f"stage 4a should 409 (needs stage3), got {r4a.status_code}"
+    # 4b now active: requires stage4a first, so returns 409 (not 501)
+    r4b = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/4b",
+        json={"action": "generate", "payload": {}},
+    )
+    assert r4b.status_code == 409, f"stage 4b should 409 (needs stage4a), got {r4b.status_code}"
+    for sk in ("4c", "4d", "5"):
         r = client.post(
             f"/assembly-design/scheme/{scheme_id}/stage/{sk}",
             json={"action": "generate", "payload": {}},

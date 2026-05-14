@@ -59,12 +59,68 @@ def test_run_stage_other_returns_501(client):
         "subject_system": "Test", "subject_scope": ["3 级轴流"], "design_intent": "工艺优化",
     }).json()
     sid = create["scheme_id"]
-    for stage_key in ["4a", "4b", "4c", "4d", "5"]:
+    for stage_key in ["4c", "4d", "5"]:
         resp = client.post(
             f"/assembly-design/scheme/{sid}/stage/{stage_key}",
             json={"action": "generate"},
         )
         assert resp.status_code == 501, f"stage {stage_key} should be 501, got {resp.status_code}"
+
+
+def test_stage4a_requires_stage3_first(client):
+    """POST /stage/4a must 409 if stage3 has not been run."""
+    create_resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+        },
+    )
+    scheme_id = create_resp.json()["scheme_id"]
+    r = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/4a",
+        json={"action": "generate", "payload": {}},
+    )
+    assert r.status_code == 409, r.text
+    assert "stage3" in r.text.lower()
+
+
+def test_stage4a_runs_after_s1_s2_s3(client):
+    """Happy path: S1 → S2 → S3 → S4a."""
+    create_resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+            "constraints": {"primary": "可靠性"},
+        },
+    )
+    scheme_id = create_resp.json()["scheme_id"]
+    assert client.post(f"/assembly-design/scheme/{scheme_id}/stage/1",
+                       json={"action": "generate", "payload": {}}).status_code == 200
+    assert client.post(f"/assembly-design/scheme/{scheme_id}/stage/2",
+                       json={"action": "generate", "payload": {}}).status_code == 200
+    assert client.post(f"/assembly-design/scheme/{scheme_id}/stage/3",
+                       json={"action": "generate", "payload": {}}).status_code == 200
+
+    r4a = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/4a",
+        json={"action": "generate", "payload": {}},
+    )
+    assert r4a.status_code == 200, r4a.text
+    body = r4a.json()
+    assert "procedures" in body
+    assert len(body["procedures"]) >= 1
+    assert "topology" in body
+    proc_ids = {p["id"] for p in body["procedures"]}
+    topo_ids = set(body["topology"]["sequence"])
+    assert proc_ids == topo_ids, f"topology mismatch: {proc_ids} vs {topo_ids}"
+
+    final = client.get(f"/assembly-design/scheme/{scheme_id}").json()
+    assert "stage4a" in final
+    assert "4a" in final["meta"]["stages_done"]
 
 
 def test_save_edits_overwrites_stage1(client):
@@ -332,3 +388,57 @@ def test_stage3_runs_after_stage1_stage2(client):
     final = client.get(f"/assembly-design/scheme/{scheme_id}").json()
     assert "stage3" in final
     assert "3" in final["meta"]["stages_done"]
+
+
+def test_stage4b_requires_stage4a_first(client):
+    """POST /stage/4b must 409 if stage4a has not been run."""
+    create_resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+        },
+    )
+    scheme_id = create_resp.json()["scheme_id"]
+    r = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/4b",
+        json={"action": "generate", "payload": {}},
+    )
+    assert r.status_code == 409, r.text
+    assert "stage4a" in r.text.lower()
+
+
+def test_stage4b_runs_after_full_chain(client):
+    """Happy path: S1 → S2 → S3 → S4a → S4b."""
+    create_resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+            "constraints": {"primary": "可靠性"},
+        },
+    )
+    scheme_id = create_resp.json()["scheme_id"]
+    assert client.post(f"/assembly-design/scheme/{scheme_id}/stage/1",
+                       json={"action": "generate", "payload": {}}).status_code == 200
+    assert client.post(f"/assembly-design/scheme/{scheme_id}/stage/2",
+                       json={"action": "generate", "payload": {}}).status_code == 200
+    assert client.post(f"/assembly-design/scheme/{scheme_id}/stage/3",
+                       json={"action": "generate", "payload": {}}).status_code == 200
+    assert client.post(f"/assembly-design/scheme/{scheme_id}/stage/4a",
+                       json={"action": "generate", "payload": {}}).status_code == 200
+
+    r4b = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/4b",
+        json={"action": "generate", "payload": {}},
+    )
+    assert r4b.status_code == 200, r4b.text
+    body = r4b.json()
+    assert "tools" in body
+    assert "dfa_tooling_score" in body
+
+    final = client.get(f"/assembly-design/scheme/{scheme_id}").json()
+    assert "stage4b" in final
+    assert "4b" in final["meta"]["stages_done"]

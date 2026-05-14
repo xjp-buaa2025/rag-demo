@@ -28,6 +28,8 @@ from backend.deps import get_state
 from backend.pipelines.assembly_scheme.stage1_intake import run_stage1_intake
 from backend.pipelines.assembly_scheme.stage2_requirements import run_stage2_requirements
 from backend.pipelines.assembly_scheme.stage3_concept import run_stage3_concept
+from backend.pipelines.assembly_scheme.stage4a_process import run_stage4a_process
+from backend.pipelines.assembly_scheme.stage4b_tooling import run_stage4b_tooling
 
 router = APIRouter(prefix="/assembly-design", tags=["assembly-design"])
 
@@ -132,8 +134,8 @@ def run_stage(scheme_id: str, stage_key: str, req: StageRequest, state=Depends(g
         raise HTTPException(404, f"scheme not found: {scheme_id}")
 
     # Stages not implemented yet
-    if stage_key in {"4a", "4b", "4c", "4d", "5"}:
-        raise HTTPException(501, f"stage {stage_key} not implemented in Plan 2")
+    if stage_key in {"4c", "4d", "5"}:
+        raise HTTPException(501, f"stage {stage_key} not implemented yet")
 
     if state.skill_registry is None:
         raise HTTPException(503, "skill registry not loaded")
@@ -196,6 +198,32 @@ def run_stage(scheme_id: str, stage_key: str, req: StageRequest, state=Depends(g
             result = run_stage3_concept(
                 stage1_payload=stage1_payload,
                 stage2_payload=stage2_payload,
+                skill=state.skill_registry,
+                llm_client=state.llm_client,
+                neo4j_driver=state.neo4j_driver,
+                user_guidance=req.user_guidance,
+            )
+
+        elif stage_key == "4a":
+            stage3_path = sd / "stage3.json"
+            if not stage3_path.exists():
+                raise HTTPException(409, "stage3 must be generated before stage4a")
+            stage3_payload = json.loads(stage3_path.read_text(encoding="utf-8"))
+            result = run_stage4a_process(
+                stage3_payload=stage3_payload,
+                skill=state.skill_registry,
+                llm_client=state.llm_client,
+                neo4j_driver=state.neo4j_driver,
+                user_guidance=req.user_guidance,
+            )
+
+        elif stage_key == "4b":
+            stage4a_path = sd / "stage4a.json"
+            if not stage4a_path.exists():
+                raise HTTPException(409, "stage4a must be generated before stage4b")
+            stage4a_payload = json.loads(stage4a_path.read_text(encoding="utf-8"))
+            result = run_stage4b_tooling(
+                stage4a_payload=stage4a_payload,
                 skill=state.skill_registry,
                 llm_client=state.llm_client,
                 neo4j_driver=state.neo4j_driver,
