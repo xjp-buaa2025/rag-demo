@@ -1,14 +1,10 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
+import type { RerunParams } from '../../../types/hitl'
 
 interface Props {
   stageN: 1 | 2
   onRerun: (params: RerunParams) => void
   running: boolean
-}
-
-export interface RerunParams {
-  confidence_threshold: number
-  gleaning_rounds: number
 }
 
 export default function ParamTuner({ stageN, onRerun, running }: Props) {

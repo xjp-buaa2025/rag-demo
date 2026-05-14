@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { BilingualTriple } from '../../../types'
+import { useState, useEffect, useCallback } from 'react'
+import type { BilingualTriple } from '../../../types/hitl'
 import {
   listTriplesBilingual, updateTriple, deleteTriple, addTriple,
 } from '../../../api/client'

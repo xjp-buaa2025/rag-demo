@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { StageReport } from '../../../types'
+import { useState, useEffect, useCallback } from 'react'
+import type { StageReport } from '../../../types/hitl'
 import {
   getStageReport, approveStage, diagnoseStage,
 } from '../../../api/client'
 import StageIssueCard from './StageIssueCard'
 import TriplesEditor from './TriplesEditor'
 import ExpertKnowledgeInput from './ExpertKnowledgeInput'
-import ParamTuner, { RerunParams } from './ParamTuner'
+import ParamTuner from './ParamTuner'
+import type { RerunParams } from '../../../types/hitl'
 import KgViewer from '../KgViewer'
 
 interface Props {

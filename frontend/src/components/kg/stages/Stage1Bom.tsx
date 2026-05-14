@@ -3,7 +3,7 @@ import { postKgStage1, getKgStagePreview } from '../../../api/client'
 import { useStageSSE } from '../../../hooks/useStageSSE'
 import type { KgSseFrame, TriplesPreview } from '../../../types'
 import StageReviewPanel from './StageReviewPanel'
-import { RerunParams } from './ParamTuner'
+import type { RerunParams } from '../../../types/hitl'
 
 interface Props {
   onComplete?: () => void
@@ -44,7 +44,7 @@ export default function Stage1Bom({ onComplete }: Props) {
     })
   }
 
-  const handleRerun = async (params: RerunParams) => {
+  const handleRerun = async (_params: RerunParams) => {
     if (!file) return
     setRerunning(true)
     setShowReview(false)

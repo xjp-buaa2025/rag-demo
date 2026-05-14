@@ -1,5 +1,4 @@
-import React from 'react'
-import { StageIssue } from '../../../types'
+import type { StageIssue } from '../../../types/hitl'
 
 interface Props {
   issue: StageIssue

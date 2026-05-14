@@ -3,7 +3,7 @@ import { postKgStage2, getKgStagePreview } from '../../../api/client'
 import { useStageSSE } from '../../../hooks/useStageSSE'
 import type { KgSseFrame, TriplesPreview } from '../../../types'
 import StageReviewPanel from './StageReviewPanel'
-import { RerunParams } from './ParamTuner'
+import type { RerunParams } from '../../../types/hitl'
 
 interface Props {
   onComplete?: () => void
@@ -44,7 +44,7 @@ export default function Stage2Manual({ onComplete }: Props) {
     })
   }
 
-  const handleRerun = async (params: RerunParams) => {
+  const handleRerun = async (_params: RerunParams) => {
     if (!file) return
     setRerunning(true)
     setShowReview(false)
@@ -81,7 +81,7 @@ export default function Stage2Manual({ onComplete }: Props) {
       <div className="flex items-center gap-3">
         <input
           type="file"
-          accept=".pdf"
+          accept=".pdf,.md"
           onChange={e => setFile(e.target.files?.[0] ?? null)}
           className="text-sm text-slate-600"
         />

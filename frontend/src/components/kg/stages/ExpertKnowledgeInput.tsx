@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { ExpertDiff } from '../../../types'
+import { useState } from 'react'
+import type { ExpertDiff } from '../../../types/hitl'
 import { submitExpertKnowledge, confirmExpertKnowledge } from '../../../api/client'
 
 interface Props {
