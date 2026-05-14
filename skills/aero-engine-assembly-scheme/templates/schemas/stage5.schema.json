@@ -1,16 +1,81 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "stage5.schema.json",
-  "title": "Stage 5 — Review & Export (placeholder v1)",
+  "title": "Stage 5 — Review & Export",
   "type": "object",
-  "required": ["review_panel", "overall_score", "recommendation"],
+  "required": ["stage4b_ref", "review_panel", "kc_traceability_matrix", "overall_score", "recommendation", "uncertainty"],
   "properties": {
-    "review_panel": {"type": "array"},
-    "metrics_coverage": {"type": "object"},
-    "kc_traceability_matrix": {"type": "array"},
+    "stage4b_ref": {
+      "type": "string",
+      "description": "scheme_id 继承自 stage4b"
+    },
+    "review_panel": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["role", "findings", "severity_issues"],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": ["工艺工程师", "质量工程师", "设计工程师"]
+          },
+          "findings": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "severity_issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["issue", "severity"],
+              "properties": {
+                "issue": {"type": "string", "minLength": 1},
+                "severity": {"type": "string", "enum": ["low", "medium", "high"]},
+                "iterate_to": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "kc_traceability_matrix": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kc_id", "kc_name", "procedures", "qc_checkpoints", "covered"],
+        "properties": {
+          "kc_id": {"type": "string"},
+          "kc_name": {"type": "string"},
+          "procedures": {"type": "array", "items": {"type": "string"}},
+          "qc_checkpoints": {"type": "array", "items": {"type": "string"}},
+          "covered": {"type": "boolean"}
+        }
+      }
+    },
     "overall_score": {"type": "number", "minimum": 0, "maximum": 5},
-    "recommendation": {"type": "string", "enum": ["approved", "approved_with_revision", "rejected"]},
-    "iterations": {"type": "array"},
+    "recommendation": {
+      "type": "string",
+      "enum": ["approved", "approved_with_revision", "rejected"]
+    },
+    "iterations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["issue", "severity", "iterate_to", "reason"],
+        "properties": {
+          "issue": {"type": "string"},
+          "severity": {"type": "string", "enum": ["low", "medium", "high"]},
+          "iterate_to": {"type": "string"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "uncertainty": {
+      "type": "string",
+      "enum": ["高", "中", "低"]
+    },
     "export_path": {"type": "string"}
   }
 }
