@@ -89,13 +89,20 @@ def _cross_validate(obj: dict, stage4a_payload: dict) -> bool:
     return True
 
 
-def _build_prompt(skill, stage4a_payload, kg_tools, user_guidance):
+def _build_prompt(skill, stage4a_payload, kg_tools, user_guidance, all_tool_names: List[str] = None):
     prompt_template = skill.prompts.get("s4b_tooling", "")
     methodology = skill.methodology.get("s4_detailed_process", "")
+    if all_tool_names is None:
+        all_tool_names = []
+    tool_names_section = (
+        f"### 当前工装名称列表（去重后，共 {len(all_tool_names)} 项）\n"
+        + "\n".join(f"- {n}" for n in all_tool_names)
+    )
     return (
         f"{prompt_template}\n\n"
         f"## 方法论上下文\n{methodology}\n\n"
         f"## S4a 产物\n```json\n{json.dumps(stage4a_payload, ensure_ascii=False, indent=2)}\n```\n\n"
+        f"{tool_names_section}\n\n"
         f"## KG 已有工装节点\n```json\n{json.dumps(kg_tools, ensure_ascii=False, indent=2)}\n```\n\n"
         f"## chamberlain 指导意见\n{user_guidance or '（无）'}\n\n"
         "请生成符合 stage4b.schema.json 的 JSON 对象："
@@ -149,8 +156,17 @@ def run_stage4b_tooling(
 
     subject_name = stage4a_payload.get("subject", {}).get("system", "")
 
+    # Extract deduplicated tool names from S4a procedures
+    all_tool_names: List[str] = []
+    seen: set = set()
+    for proc in stage4a_payload.get("procedures", []):
+        for name in proc.get("tooling", []):
+            if name not in seen:
+                seen.add(name)
+                all_tool_names.append(name)
+
     kg_tools = query_kg_tools(neo4j_driver, subject_name)
-    prompt = _build_prompt(skill, stage4a_payload, kg_tools, user_guidance)
+    prompt = _build_prompt(skill, stage4a_payload, kg_tools, user_guidance, all_tool_names)
     raw = _call_llm(llm_client, prompt)
     parsed = _parse_and_validate(raw, schema, stage4a_payload) if raw else None
 
