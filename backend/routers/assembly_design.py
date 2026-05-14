@@ -30,6 +30,7 @@ from backend.pipelines.assembly_scheme.stage2_requirements import run_stage2_req
 from backend.pipelines.assembly_scheme.stage3_concept import run_stage3_concept
 from backend.pipelines.assembly_scheme.stage4a_process import run_stage4a_process
 from backend.pipelines.assembly_scheme.stage4b_tooling import run_stage4b_tooling
+from backend.pipelines.assembly_scheme.stage5_review import run_stage5_review
 
 router = APIRouter(prefix="/assembly-design", tags=["assembly-design"])
 
@@ -134,7 +135,7 @@ def run_stage(scheme_id: str, stage_key: str, req: StageRequest, state=Depends(g
         raise HTTPException(404, f"scheme not found: {scheme_id}")
 
     # Stages not implemented yet
-    if stage_key in {"4c", "4d", "5"}:
+    if stage_key in {"4c", "4d"}:
         raise HTTPException(501, f"stage {stage_key} not implemented yet")
 
     if state.skill_registry is None:
@@ -230,6 +231,25 @@ def run_stage(scheme_id: str, stage_key: str, req: StageRequest, state=Depends(g
                 user_guidance=req.user_guidance,
             )
 
+        elif stage_key == "5":
+            stage4b_path = sd / "stage4b.json"
+            if not stage4b_path.exists():
+                raise HTTPException(409, "stage4b must be generated before stage5")
+            stage4a_path = sd / "stage4a.json"
+            stage2_path = sd / "stage2.json"
+            stage4b_payload = json.loads(stage4b_path.read_text(encoding="utf-8"))
+            stage4a_payload = json.loads(stage4a_path.read_text(encoding="utf-8")) if stage4a_path.exists() else {}
+            stage2_payload = json.loads(stage2_path.read_text(encoding="utf-8")) if stage2_path.exists() else {}
+            result = run_stage5_review(
+                stage4b_payload=stage4b_payload,
+                stage4a_payload=stage4a_payload,
+                stage2_payload=stage2_payload,
+                skill=state.skill_registry,
+                llm_client=state.llm_client,
+                neo4j_driver=state.neo4j_driver,
+                user_guidance=req.user_guidance,
+            )
+
         stage_path.write_text(
             json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
         )
@@ -255,6 +275,66 @@ def iterate_stage(scheme_id: str, req: IterateRequest):
 
 @router.get("/scheme/{scheme_id}/export")
 def export_scheme(scheme_id: str):
-    if not _scheme_dir(scheme_id).exists():
+    sd = _scheme_dir(scheme_id)
+    if not sd.exists():
         raise HTTPException(404, f"scheme not found: {scheme_id}")
-    raise HTTPException(501, "export not implemented in Plan 1")
+    stage5_path = sd / "stage5.json"
+    if not stage5_path.exists():
+        raise HTTPException(409, "stage5 must be generated before export")
+
+    stages: Dict[str, Any] = {}
+    for sk in ("1", "2", "3", "4a", "4b", "5"):
+        p = sd / f"stage{sk}.json"
+        if p.exists():
+            stages[sk] = json.loads(p.read_text(encoding="utf-8"))
+    meta = _read_meta(scheme_id)
+
+    lines = [
+        "# 装配方案导出报告",
+        "",
+        f"**方案 ID**: `{scheme_id}`",
+        f"**子系统**: {meta['subject']['system']}",
+        f"**设计意图**: {meta['subject'].get('design_intent', '')}",
+        f"**导出时间**: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        "",
+        "---",
+        "",
+    ]
+
+    stage_titles = {
+        "1": "S1 任务调研",
+        "2": "S2 需求分析",
+        "3": "S3 概念架构",
+        "4a": "S4a 工序总表",
+        "4b": "S4b 工装规划",
+        "5": "S5 评审报告",
+    }
+
+    for sk, title in stage_titles.items():
+        if sk not in stages:
+            continue
+        lines.append(f"## {title}")
+        lines.append("")
+        lines.append("```json")
+        lines.append(json.dumps(stages[sk], ensure_ascii=False, indent=2))
+        lines.append("```")
+        lines.append("")
+
+    s5 = stages.get("5", {})
+    kc_matrix = s5.get("kc_traceability_matrix", [])
+    if kc_matrix:
+        lines.append("## KC 追溯矩阵")
+        lines.append("")
+        lines.append("| KC ID | KC 名称 | 工序 | QC 检查点 | 覆盖 |")
+        lines.append("|-------|---------|------|-----------|------|")
+        for row in kc_matrix:
+            covered = "✓" if row.get("covered") else "✗"
+            procs = ", ".join(row.get("procedures", []))
+            qcs = "; ".join(row.get("qc_checkpoints", []))
+            lines.append(f"| {row.get('kc_id','')} | {row.get('kc_name','')} | {procs} | {qcs} | {covered} |")
+        lines.append("")
+
+    content_md = "\n".join(lines)
+    export_path = str(sd / "final_scheme.md")
+    (sd / "final_scheme.md").write_text(content_md, encoding="utf-8")
+    return {"export_path": export_path, "content_md": content_md}

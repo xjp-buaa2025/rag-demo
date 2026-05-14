@@ -93,9 +93,16 @@ def test_e2e_stage4_through_5_still_501(client):
         json={"action": "generate", "payload": {}},
     )
     assert r4b.status_code == 409, f"stage 4b should 409 (needs stage4a), got {r4b.status_code}"
-    for sk in ("4c", "4d", "5"):
+    # 4c and 4d remain unimplemented (501)
+    for sk in ("4c", "4d"):
         r = client.post(
             f"/assembly-design/scheme/{scheme_id}/stage/{sk}",
             json={"action": "generate", "payload": {}},
         )
         assert r.status_code == 501, f"stage {sk} should still be 501, got {r.status_code}"
+    # stage 5 is now active but requires stage4b first (409)
+    r5 = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/5",
+        json={"action": "generate", "payload": {}},
+    )
+    assert r5.status_code == 409, f"stage 5 should be 409 (needs stage4b), got {r5.status_code}"

@@ -59,12 +59,19 @@ def test_run_stage_other_returns_501(client):
         "subject_system": "Test", "subject_scope": ["3 级轴流"], "design_intent": "工艺优化",
     }).json()
     sid = create["scheme_id"]
-    for stage_key in ["4c", "4d", "5"]:
+    # 4c and 4d remain unimplemented (501)
+    for stage_key in ["4c", "4d"]:
         resp = client.post(
             f"/assembly-design/scheme/{sid}/stage/{stage_key}",
             json={"action": "generate"},
         )
         assert resp.status_code == 501, f"stage {stage_key} should be 501, got {resp.status_code}"
+    # stage 5 is now active but requires stage4b first (409)
+    resp5 = client.post(
+        f"/assembly-design/scheme/{sid}/stage/5",
+        json={"action": "generate"},
+    )
+    assert resp5.status_code == 409, f"stage 5 should be 409, got {resp5.status_code}"
 
 
 def test_stage4a_requires_stage3_first(client):
@@ -172,13 +179,14 @@ def test_iterate_endpoint_returns_501_for_v1(client):
     assert resp.status_code == 501
 
 
-def test_export_endpoint_returns_501_for_v1(client):
+def test_export_endpoint_returns_409_without_stage5(client):
+    """Export now returns 409 (not 501) when stage5 has not been run."""
     create = client.post("/assembly-design/scheme/new", json={
         "subject_system": "Test", "subject_scope": ["3 级轴流"], "design_intent": "工艺优化",
     }).json()
     sid = create["scheme_id"]
     resp = client.get(f"/assembly-design/scheme/{sid}/export")
-    assert resp.status_code == 501
+    assert resp.status_code == 409
 
 
 def test_create_scheme_rejects_empty_scope(client):
@@ -442,3 +450,100 @@ def test_stage4b_runs_after_full_chain(client):
     final = client.get(f"/assembly-design/scheme/{scheme_id}").json()
     assert "stage4b" in final
     assert "4b" in final["meta"]["stages_done"]
+
+
+def test_stage5_requires_stage4b_first(client):
+    """POST /stage/5 must 409 if stage4b has not been run."""
+    create_resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+        },
+    )
+    scheme_id = create_resp.json()["scheme_id"]
+    r = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/5",
+        json={"action": "generate", "payload": {}},
+    )
+    assert r.status_code == 409, r.text
+    assert "stage4b" in r.text.lower()
+
+
+def test_stage5_runs_after_full_chain(client):
+    """Happy path: S1 → S2 → S3 → S4a → S4b → S5."""
+    create_resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+            "constraints": {"primary": "可靠性"},
+        },
+    )
+    scheme_id = create_resp.json()["scheme_id"]
+    for stage_key in ("1", "2", "3", "4a", "4b"):
+        r = client.post(
+            f"/assembly-design/scheme/{scheme_id}/stage/{stage_key}",
+            json={"action": "generate", "payload": {}},
+        )
+        assert r.status_code == 200, f"stage {stage_key} failed: {r.text}"
+
+    r5 = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/5",
+        json={"action": "generate", "payload": {}},
+    )
+    assert r5.status_code == 200, r5.text
+    body = r5.json()
+    assert "review_panel" in body
+    assert len(body["review_panel"]) == 3
+    assert body["recommendation"] in ("approved", "approved_with_revision", "rejected")
+
+    final = client.get(f"/assembly-design/scheme/{scheme_id}").json()
+    assert "stage5" in final
+    assert "5" in final["meta"]["stages_done"]
+
+
+def test_export_requires_stage5_first(client):
+    """GET /export must 409 if stage5 has not been run."""
+    create_resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+        },
+    )
+    scheme_id = create_resp.json()["scheme_id"]
+    r = client.get(f"/assembly-design/scheme/{scheme_id}/export")
+    assert r.status_code == 409, r.text
+    assert "stage5" in r.text.lower()
+
+
+def test_export_generates_final_scheme_md(client):
+    """GET /export after full chain returns export_path and content_md."""
+    create_resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+            "constraints": {"primary": "可靠性"},
+        },
+    )
+    scheme_id = create_resp.json()["scheme_id"]
+    for stage_key in ("1", "2", "3", "4a", "4b", "5"):
+        r = client.post(
+            f"/assembly-design/scheme/{scheme_id}/stage/{stage_key}",
+            json={"action": "generate", "payload": {}},
+        )
+        assert r.status_code == 200, f"stage {stage_key} failed: {r.text}"
+
+    exp = client.get(f"/assembly-design/scheme/{scheme_id}/export")
+    assert exp.status_code == 200, exp.text
+    data = exp.json()
+    assert "export_path" in data
+    assert "content_md" in data
+    assert "# 装配方案" in data["content_md"]
+    assert scheme_id in data["content_md"]
