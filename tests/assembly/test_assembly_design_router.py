@@ -59,7 +59,7 @@ def test_run_stage_other_returns_501(client):
         "subject_system": "Test", "subject_scope": ["3 级轴流"], "design_intent": "工艺优化",
     }).json()
     sid = create["scheme_id"]
-    for stage_key in ["2", "3", "4a", "4b", "4c", "4d", "5"]:
+    for stage_key in ["3", "4a", "4b", "4c", "4d", "5"]:
         resp = client.post(
             f"/assembly-design/scheme/{sid}/stage/{stage_key}",
             json={"action": "generate"},
@@ -196,3 +196,89 @@ def test_concurrent_stage_writes_are_serialized(client, monkeypatch):
     # Re-fetch and check stages_done has no duplicates
     final = client.get(f"/assembly-design/scheme/{scheme_id}").json()
     assert final["meta"]["stages_done"].count("1") == 1, final["meta"]["stages_done"]
+
+
+def test_stage2_requires_stage1_first(client):
+    """POST /stage/2 must 409 if stage1 has not been run yet."""
+    create_resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+            "constraints": {"primary": "可靠性"},
+        },
+    )
+    scheme_id = create_resp.json()["scheme_id"]
+    resp = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/2",
+        json={"action": "generate", "payload": {}},
+    )
+    assert resp.status_code == 409, resp.text
+    assert "stage1" in resp.text.lower()
+
+
+def test_stage2_runs_after_stage1(client):
+    """Happy path: create scheme → run stage1 → run stage2 → fetch and see both."""
+    create_resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+            "constraints": {"primary": "可靠性"},
+        },
+    )
+    scheme_id = create_resp.json()["scheme_id"]
+    r1 = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/1",
+        json={"action": "generate", "payload": {}},
+    )
+    assert r1.status_code == 200, r1.text
+    r2 = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/2",
+        json={"action": "generate", "payload": {}},
+    )
+    assert r2.status_code == 200, r2.text
+    body = r2.json()
+    assert "user_needs" in body
+    assert "dfa_score" in body
+    assert body["stage1_ref"] == scheme_id
+    final = client.get(f"/assembly-design/scheme/{scheme_id}").json()
+    assert "stage1" in final
+    assert "stage2" in final
+    assert "2" in final["meta"]["stages_done"]
+
+
+def test_stage2_save_edits(client):
+    """save_edits action writes payload verbatim, no LLM call."""
+    create_resp = client.post(
+        "/assembly-design/scheme/new",
+        json={
+            "subject_system": "PT6A HPC",
+            "subject_scope": ["3 级轴流"],
+            "design_intent": "工艺优化",
+            "constraints": {"primary": "可靠性"},
+        },
+    )
+    scheme_id = create_resp.json()["scheme_id"]
+    client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/1",
+        json={"action": "generate", "payload": {}},
+    )
+    edited = {
+        "stage1_ref": scheme_id,
+        "user_needs": [{"id": "U99", "text": "陛下手改", "weight": 5}],
+        "engineering_metrics": [{"id": "M99", "name": "X", "target": ">=1", "linked_needs": ["U99"]}],
+        "assembly_features": [{"id": "F99", "name": "X", "spec": "X", "linked_metrics": ["M99"]}],
+        "key_characteristics": [{"id": "KC99", "name": "X", "target": "X", "criticality": "low", "linked_features": ["F99"]}],
+        "dfa_score": {"overall": 0.5, "theoretical_min_parts": 1, "actual_parts": 1, "bottlenecks": []},
+        "risks": [{"id": "R99", "text": "X", "severity": 1, "linked_kcs": ["KC99"]}],
+    }
+    r = client.post(
+        f"/assembly-design/scheme/{scheme_id}/stage/2",
+        json={"action": "save_edits", "payload": edited},
+    )
+    assert r.status_code == 200, r.text
+    final = client.get(f"/assembly-design/scheme/{scheme_id}").json()
+    assert final["stage2"]["user_needs"][0]["id"] == "U99"

@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from backend.deps import get_state
 from backend.pipelines.assembly_scheme.stage1_intake import run_stage1_intake
+from backend.pipelines.assembly_scheme.stage2_requirements import run_stage2_requirements
 
 router = APIRouter(prefix="/assembly-design", tags=["assembly-design"])
 
@@ -129,8 +130,9 @@ def run_stage(scheme_id: str, stage_key: str, req: StageRequest, state=Depends(g
     if not sd.exists():
         raise HTTPException(404, f"scheme not found: {scheme_id}")
 
-    if stage_key != "1":
-        raise HTTPException(501, f"stage {stage_key} not implemented in Plan 1")
+    # Stages not implemented yet
+    if stage_key in {"3", "4a", "4b", "4c", "4d", "5"}:
+        raise HTTPException(501, f"stage {stage_key} not implemented in Plan 2")
 
     if state.skill_registry is None:
         raise HTTPException(503, "skill registry not loaded")
@@ -145,9 +147,15 @@ def run_stage(scheme_id: str, stage_key: str, req: StageRequest, state=Depends(g
             stage_path.write_text(
                 json.dumps(req.payload, ensure_ascii=False, indent=2), encoding="utf-8"
             )
+            if stage_key not in meta["stages_done"]:
+                meta["stages_done"].append(stage_key)
+                _write_meta(scheme_id, meta)
             return {"saved": True, "scheme_id": scheme_id, "stage_key": stage_key}
 
-        if req.action in ("generate", "regenerate"):
+        if req.action not in ("generate", "regenerate"):
+            raise HTTPException(400, f"unknown action: {req.action}")
+
+        if stage_key == "1":
             user_input = {
                 "scheme_id": scheme_id,
                 "subject": meta["subject"],
@@ -160,15 +168,28 @@ def run_stage(scheme_id: str, stage_key: str, req: StageRequest, state=Depends(g
                 llm_client=state.llm_client,
                 neo4j_driver=state.neo4j_driver,
             )
-            stage_path.write_text(
-                json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            if stage_key not in meta["stages_done"]:
-                meta["stages_done"].append(stage_key)
-                _write_meta(scheme_id, meta)
-            return result
 
-        raise HTTPException(400, f"unknown action: {req.action}")
+        elif stage_key == "2":
+            stage1_path = sd / "stage1.json"
+            if not stage1_path.exists():
+                raise HTTPException(409, "stage1 must be generated before stage2")
+            stage1_payload = json.loads(stage1_path.read_text(encoding="utf-8"))
+            result = run_stage2_requirements(
+                stage1_payload=stage1_payload,
+                skill=state.skill_registry,
+                llm_client=state.llm_client,
+                rag_searcher=None,
+                neo4j_driver=state.neo4j_driver,
+                user_guidance=req.user_guidance,
+            )
+
+        stage_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        if stage_key not in meta["stages_done"]:
+            meta["stages_done"].append(stage_key)
+            _write_meta(scheme_id, meta)
+        return result
 
 
 @router.post("/scheme/{scheme_id}/reflux")
