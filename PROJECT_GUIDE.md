@@ -792,7 +792,9 @@ export HF_ENDPOINT=https://hf-mirror.com
 | 2026-04-02 | 三源互补知识图谱：① nodes_kg.py 引入 GraphRAG Gleaning（两轮抽取）+ description/weight 字段 + verify_kg_entities 节点（三级置信度验证）+ REPRESENTED_BY 图边（BOM→KG）；② nodes_manual.py 新增 extract_visual_kg 节点（爆炸图关键词过滤→视觉LLM→isPartOf/matesWith 三元组）；③ nodes_cad.py MERGE 去标签约束（CAD关系叠加到BOM节点）；④ factory.py 接入两个新节点；⑤ state.py 新增 visual_kg_triples/kg_verification_report 字段 |
 | 2026-04-02 | KgBuilder 前端重构：平铺列表→三栏卡片（各栏独立 file input + forcedCategory 修复 .docx 误归类问题）；bom_ingest_pipeline 路由修复（CAD 文件正确走 lg_cad_pipeline；BOM/CAD 均改为后台线程+队列，修复 LLM 等待期间 SSE 静默/前端永久"构建中"的 bug）|
 | 2026-04-13 | 三元组后处理管道（TASK_05）：新建 `backend/pipelines/kg_postprocess.py`（置信度过滤MIN=0.3 + 归一化 + 本体校验 + 去重四步流水线）；接入 `_write_all_stages_to_neo4j` 与 `/kg/stage4/validate` 端点；690→498 条，清除率 27.8%，response 新增 `postprocess` 统计字段 |
-| 2026-04-15 | BOM 层级修复（TASK_01）：① 新增 `_clean_ocr_noise`（正则净化 COMP0NENT/0F/0N/0VS/N0. 等 OCR 噪声，接入 OCR chunk 预处理和每行字段后处理）；② 强化 `_OCR_BOM_PROMPT`（新增规则7 NHA跨图单点前缀/规则8 INTRCHG互换件层级 + 4条 few-shot）；③ 新增 `_resolve_nha_triples`（后处理修正 tail==ROOT 且含 SEE FIG.X FOR NHA 的三元组，连接到顶层 Assembly）；新增测试 `tests/kg/test_bom_hierarchy.py`（15条单元测试）+ `tests/kg/test_bom_stage1_acceptance.py`（4条验收测试）|
+| 2026-04-15 | BOM 层级修复 Phase1（TASK_01）：① 新增 `_clean_ocr_noise`（正则净化 COMP0NENT/0F/0N/0VS/N0. 等 OCR 噪声，接入 OCR chunk 预处理和每行字段后处理）；② 强化 `_OCR_BOM_PROMPT`（新增规则7 NHA跨图单点前缀/规则8 INTRCHG互换件层级 + 4条 few-shot）；③ 新增 `_resolve_nha_triples`（后处理修正 tail==ROOT 且含 SEE FIG.X FOR NHA 的三元组，连接到顶层 Assembly）；新增测试 `tests/kg/test_bom_hierarchy.py`（15条单元测试）+ `tests/kg/test_bom_stage1_acceptance.py`（4条验收测试）|
+| 2026-04-20 | BOM 层级修复 Phase2（职责分离架构）：ROOT 率从 51%（73/142 条）→ 0.5%（1/220 条）。① 重写 `_OCR_BOM_PROMPT`——严禁 LLM 推断层级（`parent_id` 恒为 `""`），仅忠实提取；补充 ATTACHING PARTS/爆炸图页跳过/PRE-POST-SB 保留/6条 IPC few-shot；② 新增 `_apply_ipc_hierarchy(records)`——纯确定性规则填 `parent_id`：R0 root自保/R2 ATTACHING PARTS块标记/R3 attaching子件挂最近Assembly/R4 dash前缀与基件共享父/R5 整数 fig_item 挂 root_assembly；③ 修复 `_bom_df_to_entities_and_triples` 栈算法——while 循环增加 `len==1 and level==0` 守卫防止 root Assembly 被弹出；④ 扩展测试（TestApplyIpcHierarchy 5条 + TestLevel0Fix 3条），23/23 全绿；报告文件：`docs/reports/2026-04-20-bom-hierarchy-fix.md` |
+| 2026-04-22 | 新增黄金三元组集（Ground Truth Benchmark）：人工精读维修手册 3013242（72-30 章）生成 `storage/kg_stages/golden_triples.json` v2；108 个实体 / 99 条三元组 / 覆盖 7 实体类型 + 9 关系类型；写入 PROJECT_GUIDE §9.4.1，作为后续所有 KG 构建代码的评测基准。 |
 | 2026-05-09 | Assembly Scheme Skill Plan 1（T1-T13）：新增 skill 骨架（SKILL.md + 5阶段方法论 + 8个 JSON Schema + PT6A HPC golden 示范 + S1 提示词）+ 后端管道（skill_loader / stage1_intake / web_search）+ REST 路由（assembly_design.py）+ lifespan 集成 + 43 条测试全绿 |
 
 ---
@@ -841,3 +843,78 @@ export HF_ENDPOINT=https://hf-mirror.com
 新增环境变量 `TAVILY_API_KEY`（可选）：
 - 已配置：S1 联网检索三组查询，结果含 confidence 待用户审核
 - 未配置：web_search 静默返回空列表，S1 仍能跑通（仅用本地 KG + LLM）
+
+---
+
+### 16.P2 Plan 2 进展 — S2 需求分析 + S3 概念架构 (2026-05-14)
+
+> 状态：Plan 2 完成 — S2/S3 端到端可跑通，69 条 assembly 测试全绿。
+
+#### What
+在 P1（S1 管道）基础上，新增 S2（需求与约束分析）和 S3（概念架构生成）两个阶段，并补足 P1 遗留的三个缺陷修复。
+
+**新增管道**
+- `backend/pipelines/assembly_scheme/stage2_requirements.py`：`run_stage2_requirements()` — QFD-轻量 + Boothroyd-Dewhurst DFA-lite + KC + 风险
+- `backend/pipelines/assembly_scheme/stage3_concept.py`：`run_stage3_concept()` — 多候选架构生成（≥2），含 KG-静态可达性评估和 fit_score_to_metrics
+
+**新增 Skill 资产**
+- `methodology/s2_requirements_qfd.md`：QFD 三柱映射（用户需求→工程指标→装配特征）+ DFA-lite 算法 + KC 分级方法
+- `methodology/s3_concept_architecture.md`：候选架构综合评估五因子（reachability/interference/datum/KC_coverage/maintainability）
+- `prompts/s2_requirements.prompt.md`、`prompts/s3_concept.prompt.md`：LLM 提示词模板
+- `templates/schemas/stage2.schema.json`：7 个必填字段（stage1_ref + QFD 三柱 + KC + dfa_score + risks），minItems≥1
+- `templates/schemas/stage3.schema.json`：candidate_architectures minItems≥2，每条必含 assembly_simulation + datum_consistency + fit_score_to_metrics
+- `templates/golden/pt6a_hpc_stage2.json`、`templates/golden/pt6a_hpc_stage3.json`：PT6A HPC 示范数据，验证通过 jsonschema
+
+**P1 缺陷修复**
+- `subject_scope` 空列表防御：`NewSchemeRequest.subject_scope: List[str] = Field(..., min_length=1)` → POST 422
+- `assembly_lock`：`threading.Lock` 保护 meta.json 读-改-写，防并发 stages_done 损坏
+- 阶段顺序门控：stage/2 → 409 if stage1.json 缺失；stage/3 → 409 if stage2.json 缺失
+
+#### Why
+S1 仅产出任务卡片，无法进入实际设计决策；S2 将用户意图量化为可追溯的工程指标（QFD），S3 将指标映射到候选架构并通过 KG 可达性客观评分，使 HITL 复核有数据依据而非主观判断。  
+JSON Schema 强校验每个阶段输出，确保后续阶段读入时数据完整，避免"字段缺失导致的静默错误"。
+
+#### How（核心调用链）
+
+**stage/2 → run_stage2_requirements**
+```
+POST /assembly-design/scheme/{id}/stage/2
+  → router: check stage1.json exists (→ 409 if missing)
+  → assembly_lock.acquire()
+  → run_stage2_requirements(stage1_payload, skill, llm_client, ...)
+      → 构建 s2_requirements prompt（含 skill.prompts["s2_requirements"] + methodology）
+      → LLM call（None → PLACEHOLDER，parse fail → PLACEHOLDER）
+      → jsonschema.validate(result, stage2.schema.json)
+      → 强制覆写 stage1_ref = stage1_payload["scheme_id"]
+      → 返回 stage2 dict
+  → 写 stage2.json，更新 meta.json stages_done += "2"
+  → assembly_lock.release()
+```
+
+**stage/3 → run_stage3_concept**
+```
+POST /assembly-design/scheme/{id}/stage/3
+  → router: check stage2.json (→ 409 "stage2 not done")，check stage1.json
+  → assembly_lock.acquire()
+  → run_stage3_concept(stage1_payload, stage2_payload, skill, llm_client, neo4j_driver=None, ...)
+      → query_kg_subgraph(neo4j_driver, subject_name)  # None/异常 → 空 dict，优雅降级
+      → 构建 s3_concept prompt（含 KG 子图 + stage2 QFD 摘要）
+      → LLM call（None/fail → PLACEHOLDER，minItems<2 → PLACEHOLDER）
+      → jsonschema.validate(result, stage3.schema.json)
+      → 强制覆写 stage1_ref、stage2_ref
+      → 返回 stage3 dict
+  → 写 stage3.json，更新 meta.json stages_done += "3"
+  → assembly_lock.release()
+```
+
+**降级策略（三层保险）**
+1. LLM=None → 直接返回 PLACEHOLDER（含 `uncertainty:"高"`）
+2. LLM 返回无效 JSON → `json.JSONDecodeError` 捕获 → PLACEHOLDER
+3. LLM JSON 不过 schema → `jsonschema.ValidationError` 捕获 → PLACEHOLDER
+
+#### Where（证据）
+- 单元测试：`tests/assembly/test_stage2_requirements.py`（5 tests）、`tests/assembly/test_stage3_concept.py`（7 tests）
+- E2E 链路：`tests/assembly/test_e2e_s1_s2_s3.py`（2 tests：S1→S2→S3 全链 + S4/S5 仍返回 501）
+- 路由测试：`tests/assembly/test_assembly_design_router.py`（含 stage2/stage3 happy path + 409 门控 + save_edits）
+- Schema 测试：`tests/assembly/test_schemas.py`（含 stage2/stage3 schema 结构 + golden 验证）
+- 全套结果：69 passed in 0.79s（branch `feat/assembly-scheme-p2-s2-s3`）
