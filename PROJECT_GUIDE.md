@@ -796,6 +796,8 @@ export HF_ENDPOINT=https://hf-mirror.com
 | 2026-04-20 | BOM 层级修复 Phase2（职责分离架构）：ROOT 率从 51%（73/142 条）→ 0.5%（1/220 条）。① 重写 `_OCR_BOM_PROMPT`——严禁 LLM 推断层级（`parent_id` 恒为 `""`），仅忠实提取；补充 ATTACHING PARTS/爆炸图页跳过/PRE-POST-SB 保留/6条 IPC few-shot；② 新增 `_apply_ipc_hierarchy(records)`——纯确定性规则填 `parent_id`：R0 root自保/R2 ATTACHING PARTS块标记/R3 attaching子件挂最近Assembly/R4 dash前缀与基件共享父/R5 整数 fig_item 挂 root_assembly；③ 修复 `_bom_df_to_entities_and_triples` 栈算法——while 循环增加 `len==1 and level==0` 守卫防止 root Assembly 被弹出；④ 扩展测试（TestApplyIpcHierarchy 5条 + TestLevel0Fix 3条），23/23 全绿；报告文件：`docs/reports/2026-04-20-bom-hierarchy-fix.md` |
 | 2026-04-22 | 新增黄金三元组集（Ground Truth Benchmark）：人工精读维修手册 3013242（72-30 章）生成 `storage/kg_stages/golden_triples.json` v2；108 个实体 / 99 条三元组 / 覆盖 7 实体类型 + 9 关系类型；写入 PROJECT_GUIDE §9.4.1，作为后续所有 KG 构建代码的评测基准。 |
 | 2026-05-09 | Assembly Scheme Skill Plan 1（T1-T13）：新增 skill 骨架（SKILL.md + 5阶段方法论 + 8个 JSON Schema + PT6A HPC golden 示范 + S1 提示词）+ 后端管道（skill_loader / stage1_intake / web_search）+ REST 路由（assembly_design.py）+ lifespan 集成 + 43 条测试全绿 |
+| 2026-05-14 | Assembly Scheme Skill Plan 3 (S4a)：新增 stage4a_process.py（Mickey Mouse 序列法 + DFA 启发式拓扑排序工序链）+ stage4a.schema.json 正式 schema + s4_process.prompt.md；路由激活 stage/4a（需 stage3 前置，否则 409）；78 tests 全绿 |
+| 2026-05-14 | Assembly Scheme Skill Plan 4 (S4b)：新增 stage4b_tooling.py（工装去重提取 + KG 查询 + 四层降级 PLACEHOLDER）+ stage4b.schema.json + s4b_tooling.prompt.md；路由激活 stage/4b（需 stage4a 前置，否则 409）；88 tests 全绿 |
 
 ---
 
@@ -918,3 +920,113 @@ POST /assembly-design/scheme/{id}/stage/3
 - 路由测试：`tests/assembly/test_assembly_design_router.py`（含 stage2/stage3 happy path + 409 门控 + save_edits）
 - Schema 测试：`tests/assembly/test_schemas.py`（含 stage2/stage3 schema 结构 + golden 验证）
 - 全套结果：69 passed in 0.79s（branch `feat/assembly-scheme-p2-s2-s3`）
+
+---
+
+### 16.P3 Plan 3 进展 — S4a 详细装配工序排序 (2026-05-14)
+
+> 状态：Plan 3 完成 — S4a 端到端可跑通，78 条 assembly 测试全绿。
+
+#### What
+在 P2（S3 概念架构）基础上，新增 S4a（详细装配工序总表与顺序）阶段，实现从"候选架构"到"可执行工序链"的跃迁。
+
+**新增管道**
+- `backend/pipelines/assembly_scheme/stage4a_process.py`：`run_stage4a_process()` — Mickey Mouse 装配序列法 + DFA 启发式拓扑排序，输出有向无环工序链
+
+**新增 Skill 资产**
+- `prompts/s4_process.prompt.md`：S4a LLM 提示词（包含必须遵守规则 + 禁止反模式）
+- `templates/schemas/stage4a.schema.json`：完整正式 schema（procedures minItems≥1，每条必含 tooling/spec_values；topology.sequence 必须覆盖所有 procedure id）
+
+**路由激活**
+- `backend/routers/assembly_design.py`：移除 `"4a"` 的 501，新增 `elif stage_key == "4a"` 分支（依赖 stage3.json 存在，否则 409）
+
+#### Why
+S3 仅给出"装配哪几个模块"的候选架构，未细化"如何装"；S4a 将架构决策转化为有先后依赖关系的工序链（precedes DAG），每步携带工装清单和规范参数，是后续工装选型（S4b）和公差分配（S4c）的输入基础。
+
+#### How（核心调用链）
+
+```
+POST /assembly-design/scheme/{id}/stage/4a
+  → router: check stage3.json exists (→ 409 if missing)
+  → assembly_lock.acquire()
+  → run_stage4a_process(stage3_payload, skill, llm_client, neo4j_driver=None, ...)
+      → query_kg_procedures(neo4j_driver, subject_name)  # 从 KG 查已有 Procedure 节点
+      → 构建 s4_process prompt（含 S3 推荐架构 + KG 工序链）
+      → LLM call（None/fail → PLACEHOLDER，JSON 解析失败 → PLACEHOLDER）
+      → jsonschema.validate(result, stage4a.schema.json)
+      → 拓扑完整性校验：topology.sequence 必须 == {p["id"] for p in procedures}
+        （违反 → PLACEHOLDER，uncertainty: 高）
+      → 强制覆写 stage3_ref
+      → 返回 stage4a dict
+  → 写 stage4a.json，更新 meta.json stages_done += "4a"
+  → assembly_lock.release()
+```
+
+**降级策略（四层保险）**
+1. LLM=None → 直接返回 PLACEHOLDER（3 条占位工序，`uncertainty:"高"`）
+2. LLM 返回无效 JSON → PLACEHOLDER
+3. LLM JSON 不过 schema → PLACEHOLDER
+4. `topology.sequence` 与 `procedures` id 集合不一致 → PLACEHOLDER
+
+#### Where（证据）
+- 单元测试：`tests/assembly/test_stage4a_process.py`（7 tests：no_llm/no_kg/with_llm/bad_json/topo_mismatch/placeholder_validates + KG exception）
+- 路由测试：`tests/assembly/test_assembly_design_router.py`（含 stage4a 409 门控 + S1→S2→S3→S4a happy path）
+- 更新 E2E：`tests/assembly/test_e2e_s1_s2_s3.py`（4a 从 501 改为 409 断言）
+- 全套结果：**78 passed in 0.98s**（branch `feat/assembly-scheme-p2-s2-s3`）
+
+---
+
+### 16.P4 Plan 4 进展 — S4b 工装选型 (2026-05-14)
+
+> 状态：Plan 4 完成 — S4b 端到端可跑通，88 条 assembly 测试全绿。
+
+#### What
+在 P3（S4a 工序链）基础上，新增 S4b（工装选型）阶段，为每条工序的工装进行分类（通用/专用）、成本层级标注，并识别工艺性约束。
+
+**新增管道**
+- `backend/pipelines/assembly_scheme/stage4b_tooling.py`：`run_stage4b_tooling()` — 工装名去重提取 + KG Tool 节点查询 + LLM 生成 + 四层降级 PLACEHOLDER + `_cross_validate()` 交叉引用完整性校验
+
+**新增 Skill 资产**
+- `prompts/s4b_tooling.prompt.md`：S4b LLM 提示词（含去重工装名列表注入、8 条规则、5 条反模式）
+- `templates/schemas/stage4b.schema.json`：完整正式 schema（tools minItems≥1，每项含 id/name/category/cost_tier/used_in_procedures；dfa_tooling_score 范围 [0,1]）
+
+**路由激活**
+- `backend/routers/assembly_design.py`：移除 `"4b"` 的 501，新增 `elif stage_key == "4b"` 分支（依赖 stage4a.json 存在，否则 409）
+
+#### Why
+S4a 输出的工序链中，每条工序仅携带工装名称字符串，缺少通用/专用分类和成本层级。S4b 填补这一缺口，提供：① 统一编号的工装清单（T01/T02…）；② 专用工装的设计需求描述；③ 工装约束对工序顺序的影响分析；④ DFA 工装效率得分（generic 占比）。
+
+#### How（核心调用链）
+
+```
+POST /assembly-design/scheme/{id}/stage/4b
+  → router: check stage4a.json exists (→ 409 if missing)
+  → assembly_lock.acquire()
+  → run_stage4b_tooling(stage4a_payload, skill, llm_client, neo4j_driver=None, ...)
+      → 提取去重工装名列表（order-preserving，seen set）
+      → query_kg_tools(neo4j_driver, subject_name)  # None/异常 → []
+      → 构建 s4b_tooling prompt（含去重工装名 + S4a 工序链 + KG Tool 节点）
+      → LLM call（None/fail → PLACEHOLDER，无效 JSON → PLACEHOLDER）
+      → jsonschema.validate(result, stage4b.schema.json)
+      → _cross_validate(result, stage4a_payload)：
+          - tools[*].used_in_procedures 必须存在于 S4a procedures
+          - constraints[*].procedure_id 必须存在于 S4a procedures
+          - constraints[*].tool_id 必须存在于 tools 列表
+          （任一失败 → PLACEHOLDER，uncertainty: "高"）
+      → 强制覆写 stage4a_ref（继承自 stage3_ref）
+      → 返回 stage4b dict
+  → 写 stage4b.json，更新 meta.json stages_done += "4b"
+  → assembly_lock.release()
+```
+
+**降级策略（四层保险）**
+1. LLM=None → 直接返回 PLACEHOLDER（3 条占位工装，`uncertainty:"高"`）
+2. LLM 返回无效 JSON → PLACEHOLDER
+3. LLM JSON 不过 schema → PLACEHOLDER
+4. `used_in_procedures` / constraint ids 交叉引用失败 → PLACEHOLDER
+
+#### Where（证据）
+- 单元测试：`tests/assembly/test_stage4b_tooling.py`（8 tests：no_llm/kg_no_driver/kg_exception/valid_llm/bad_json/dangling_proc_ref/dangling_tool_ref/placeholder_validates）
+- 路由测试：`tests/assembly/test_assembly_design_router.py`（含 stage4b 409 门控 + S1→S2→S3→S4a→S4b happy path）
+- 更新 E2E：`tests/assembly/test_e2e_s1_s2_s3.py`（4b 从 501 改为 409 断言）
+- 全套结果：**88 passed in 1.40s**（branch `feat/assembly-scheme-p2-s2-s3`）
