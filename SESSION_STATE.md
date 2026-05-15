@@ -25,7 +25,7 @@
 | S5 评审与导出 | ✅ 完成 | P5 |
 
 ### 后续建议
-1. **前端集成**：在 KG 阶段组件中接入 assembly-design 端点，展示 S5 评审报告 + KC 追溯矩阵
+1. **前端集成**：✅ 已完成（Plan 6）— `/assembly-design` 独立页面，支持创建方案、S1→S5 逐阶段生成、产物展示、MD 导出
 2. **KG 诊断**：按 bubbly-chasing-pizza.md P0 实施 docx BOM 解析器
 3. **开新会话**：请陛下开启新对话（Reset Session）以节约 Token
 
