@@ -27,6 +27,12 @@ storage/images/
 *.log
 ingest_error.log
 *.xlsx
+*.epub
+*.pkl
+
+# LaTeX build artifacts
+paper/err*.txt
+paper/out*.txt
 
 # Claude Code local config (contains permissions, not for repo)
 .claude/

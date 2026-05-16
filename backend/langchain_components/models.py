@@ -72,6 +72,11 @@ class FallbackChatModel(BaseChatModel):
             print(f"[LangChain] 主 LLM 流式失败（{e}），切换到备用 LLM...")
             yield from self.fallback._stream(messages, stop, run_manager, **kwargs)
 
+    def bind_tools(self, tools, **kwargs):
+        """委托给 primary 的 bind_tools（ChatOpenAI 原生支持 OpenAI tool_choice 格式）。
+        fallback 在工具调用路径不参与降级，因两者均为 OpenAI 兼容接口。"""
+        return self.primary.bind_tools(tools, **kwargs)
+
     @property
     def _identifying_params(self) -> dict:
         """返回模型标识信息，用于日志和调试。"""

@@ -1,0 +1,361 @@
+% ═════════════════════════════════════════════════════════════════════════════
+%  第四章  实验与结果
+% ═════════════════════════════════════════════════════════════════════════════
+\section{实验与结果}
+\label{sec:experiment}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{实验配置}
+\label{sec:exp-setup}
+
+实验运行于一台 Windows 11 工作站，
+硬件配置为 Intel Core i7-13 系列处理器、32\,GB DDR5 内存与
+NVIDIA GeForce RTX 5070 GPU。
+本地部署的模型组件包括 BGE-M3 文本编码器（1024 维）与
+BGE-Reranker-Base 交叉编码器精排模型，均通过 PyTorch 加载至 GPU 进行推理。
+向量数据库选用 Qdrant 本地文件模式，图数据库为 Neo4j 5 社区版（Docker 容器）。
+大语言模型采用主备双线策略：主模型为 MiniMax M2.5（OpenAI 兼容协议），
+备用模型为 SiliconFlow 平台部署的 Qwen2.5-14B-Instruct，
+当主线返回 4xx 或超时时由 \texttt{FallbackLLMClient} 自动切换。
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{数据集构建}
+\label{sec:exp-dataset}
+
+\subsubsection{知识源语料}
+
+实验所用语料来源于 Pratt \& Whitney Canada PT6A 系列航空发动机的真实工程文档，
+覆盖整机 10 个 ATA 章节（61/70/71/72/73/74/75/76/77/79）。
+文档总规模与三源 KG 构建产出统计如表~\ref{tab:dataset-stats}~所示。
+
+\textbf{数据来源与合规性}：
+PT6A 维修手册（Maintenance Manual P/N 3013242）、零件目录（IPC P/N 3013243）
+及训练用 STEP 模型（C52696C / C89119）来自可公开获取的
+航空培训与售后服务资料。
+本文仅在学术研究环境中使用上述文档，未对外二次分发原始 PDF 文件；
+评测问答集与三元组结构化结果可按本文实验配置导出，
+以便在授权范围内复现实验。
+所述数据的知识产权、使用许可与出口管制责任仍以原始版权方和授权条款为准。
+
+\begin{table}[htbp]
+  \centering
+  \caption{PT6A 三源知识图谱构建统计}
+  \label{tab:dataset-stats}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabularx}{\linewidth}{lXr}
+    \toprule
+    \textbf{数据源} & \textbf{描述} & \textbf{规模} \\
+    \midrule
+    \multirow{4}{*}{\textbf{文本语料}}
+      & PT6A 维修手册（textin OCR Markdown 三分册） & 1.78\,MB \\
+      & 整机 ATA 章节引用 & 1100+ 次 \\
+      & 文本块（chunk）数（BGE-M3 编码） & 3{,}376 \\
+      & 整机表格（HTML 形式保留） & 198 \\
+    \midrule
+    \multirow{2}{*}{\textbf{结构化}}
+      & BOM 表（IPC 风格 docx 转 csv） & 581 子表 / 3{,}717 PN \\
+      & CAD STEP 文件（C52696C / C89119） & 2 个 \\
+    \midrule
+    \multirow{4}{*}{\textbf{KG 三元组}}
+      & Stage 1（BOM）：isPartOf + interchangesWith & 3{,}586 \\
+      & Stage 2（手册 LLM 抽取）：7 类关系 & 6{,}022 \\
+      & Stage 3（CAD）：5 类关系 & 1{,}209 \\
+      & 后处理 + 跨源对齐写入 Neo4j & \textbf{8{,}752 边 / 7{,}333 节点} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsubsection{评测问答集}
+
+为兼顾评测严谨性与系统覆盖广度，本文构建了双层评测集：
+
+\textbf{Tier-1 精评集（60 题）}~聚焦于压气机子系统（ATA 72-30），
+来源为人工精读维修手册第 72-30 章后建立的黄金三元组集
+（108 实体 / 99 三元组 / 9 类关系全覆盖），通过模板化反向生成
+零件结构、工序工具、技术规范、几何配合四类问题，
+分布严格按黄金集真实关系比例（A 20 / B 12 / C 9 / D 19 题）。
+每题包含中英双语问题与参考答案、来源 ATA 章节、关联子图标识，
+并通过 BGE-M3 在 Qdrant 中反向召回 Top-5 候选 chunks 作为评测锚点。
+该层评测更适合验证系统对已知结构关系的召回与生成能力，
+并不等同于真实生产环境中的开放式自然提问。
+
+\textbf{Tier-2 粗评集（20 题）}~跨章节覆盖涡轮装配（72-50）、
+燃油系统（73-10/20）、控制与指示（76-77）、滑油系统（79）四个子系统，
+每题以高关联度零件作为锚点，利用 KG 子图生成装配场景问题。
+该层评测不提供 \texttt{gold\_chunk} 标注，仅以 LLM-Judge 进行半自动评分，
+用于验证系统在跨章节场景下的鲁棒性；其结论主要作为补充证据。
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{评价指标}
+\label{sec:exp-metrics}
+
+\subsubsection{检索阶段指标（Tier-1）}
+
+对每条问题 $q$，给定系统返回的 Top-$K$ 候选块集合 $R_K$ 与黄金候选集 $G$，定义：
+
+\begin{equation}
+  \text{Recall@}K
+  = \frac{|R_K \cap G|}{|G|}
+  \label{eq:recall}
+\end{equation}
+
+\begin{equation}
+  \text{MRR}
+  = \frac{1}{|Q|} \sum_{q \in Q} \frac{1}{\mathrm{rank}_q^{*}}
+  \label{eq:mrr}
+\end{equation}
+
+其中 $\mathrm{rank}_q^{*}$ 为问题 $q$ 中第一个相关结果在 $R_K$ 中的位次。
+进一步报告 Hit@1、Hit@5 与 NDCG@5 以反映 Top-$K$ 内排序质量：
+
+\begin{equation}
+  \text{NDCG@}K
+  = \frac{1}{|Q|}\sum_{q \in Q}
+    \frac{\sum_{i=1}^{K}\dfrac{\mathbb{1}[d_i \in G]}{\log_2(i+1)}}
+         {\sum_{i=1}^{\min(|G|,K)}\dfrac{1}{\log_2(i+1)}}
+  \label{eq:ndcg}
+\end{equation}
+
+\subsubsection{生成阶段指标}
+
+由于参考答案高度抽象（来自人工精读黄金集），
+而系统生成答案多基于手册原文段落，二者在表述粒度上天然不一致，
+本文采用 \textbf{LLM-as-Judge} 三维评分作为主要生成指标：
+
+\begin{itemize}
+  \item \textit{Relevance}（相关性）—— 答案与问题的相关程度（0--5）
+  \item \textit{Completeness}（完整性）—— 答案是否覆盖了关键信息（0--5）
+  \item \textit{Correctness}（正确性）—— 答案与参考答案的事实一致程度（0--5）
+\end{itemize}
+
+由 Qwen2.5-14B-Instruct 担任 Judge，温度设为 0.1 以保证评分稳定。
+每条 QA 取三维度得分的平均值作为综合质量指标。
+本文未对所有样本执行重复评分或专家盲评，因此 LLM-Judge 结论应理解为半自动评测结果。
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{基线方法}
+\label{sec:exp-baselines}
+
+由于现有工业 RAG 工作（特别是 HybridRAG\cite{shen2025hybridrag}）未开源、
+且本文主要贡献聚焦于三源 KG 构建与多路检索融合而非检索算法替换，
+本文采用\textbf{内部消融基线}以保证比较可复现性。
+所有基线统一使用本文知识库（Qdrant 文本向量 + BM25 索引 + Neo4j 整机 KG），
+通过路径开关 \texttt{path\_mask} 配置不同检索路径组合（表~\ref{tab:baselines}）。
+
+\begin{table}[htbp]
+  \centering
+  \caption{内部消融基线配置}
+  \label{tab:baselines}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabularx}{\linewidth}{llXc}
+    \toprule
+    \textbf{ID} & \textbf{方法} & \textbf{启用路径} & \textbf{Reranker} \\
+    \midrule
+    B1 & Naive RAG (Dense-only)        & BGE-M3 单路       & 否 \\
+    B2 & BM25-only                     & 稀疏单路           & 否 \\
+    B3 & Hybrid (Dense + BM25 RRF)     & 文本双路           & 是 \\
+    B4 & MHRAG (Dense + BM25 + KG)     & 文本双路 + KG 子图 & 是 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+三路检索结果的合并策略与第~\ref{sec:rrf}~节描述一致：
+密集（Dense）与稀疏（BM25）通过互惠排名融合（RRF, $k=60$）合并；
+图谱子图（KG）作为结构化上下文直接加入候选池。
+对于启用 Reranker 的配置，候选结果再经交叉编码器精排取 Top-5 作为生成阶段的上下文；
+未启用 Reranker 的单路基线则直接取对应检索路径的 Top-5。
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{主实验结果}
+\label{sec:exp-main}
+
+\subsubsection{Tier-1 精评：检索阶段对比}
+
+表~\ref{tab:exp-tier1-main}~汇总 4 个基线配置在 Tier-1 精评集（60 题）上的检索阶段指标。
+所有配置均达到 Hit@5 = 1.000，说明 PT6A 维修手册第 72-30 章的语料覆盖密度较高。
+B1 Dense-only 在 Hit@1 上达到 0.983，体现 BGE-M3 在专业语料上的强表征能力。
+引入 KG 子图后，B4 的 Recall@5 低于 B3（0.697 vs 0.769），
+原因是当前检索评价分母主要以黄金文本块为主，而 KG 子图作为异质上下文会占用 Top-5 位置。
+因此，检索阶段指标需要与生成阶段指标结合解读。
+
+\begin{table}[htbp]
+  \centering
+  \caption{Tier-1 精评：检索阶段基线对比（60 题平均）}
+  \label{tab:exp-tier1-main}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\linewidth}{lYYYYY}
+    \toprule
+    \textbf{基线} & Recall@5 & MRR & Hit@1 & Hit@5 & NDCG@5 \\
+    \midrule
+    B1 Dense-only         & \textbf{0.778} & \textbf{0.992} & \textbf{0.983} & 1.000 & \textbf{0.987} \\
+    B2 BM25-only          & 0.719 & 0.938 & 0.900 & 1.000 & 0.951 \\
+    B3 Hybrid (RRF)       & 0.769 & 0.983 & 0.967 & 1.000 & 0.974 \\
+    B4 MHRAG              & 0.697 & 0.926 & 0.867 & 1.000 & 0.951 \\
+    \bottomrule
+  \end{tabularx}
+  \\[2pt]
+  \footnotesize{注：B4 的 Recall@5 下降并不必然表示回答质量下降；
+  该现象反映了文本块评价标准与 KG 子图异质上下文之间的张力。}
+\end{table}
+
+\subsubsection{Tier-1 精评：生成阶段对比}
+
+表~\ref{tab:exp-tier1-judge}~报告 LLM-Judge 三维评分。
+B4 MHRAG 在 Correctness 维度取得数值最高的得分（2.35），
+相对 B1 Dense-only 提升 10.8\%，相对 B3 Hybrid 提升 14.6\%。
+这说明 KG 子图对事实核验和关系补全有直接帮助。
+在 Relevance 与 Completeness 维度上，B4 同样高于 B3，
+但提升幅度相对标准差较小，因此本文将其解读为稳定趋势而非统计显著结论。
+
+\begin{table}[htbp]
+  \centering
+  \caption{Tier-1 精评：生成阶段 LLM-Judge 三维评分（0--5）}
+  \label{tab:exp-tier1-judge}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\linewidth}{lYYY}
+    \toprule
+    \textbf{基线} & Relevance ($\mu\pm\sigma$) & Completeness ($\mu\pm\sigma$) & Correctness ($\mu\pm\sigma$) \\
+    \midrule
+    B1 Dense-only         & $3.38 \pm 1.39$ & $2.88 \pm 1.34$ & $2.12 \pm 1.80$ \\
+    B2 BM25-only          & $3.43 \pm 1.20$ & $2.78 \pm 1.15$ & $2.00 \pm 1.51$ \\
+    B3 Hybrid (RRF)       & $3.48 \pm 1.21$ & $2.88 \pm 1.32$ & $2.05 \pm 1.74$ \\
+    B4 MHRAG              & $\textbf{3.50} \pm 1.27$ & $\textbf{3.02} \pm 1.27$ & $\textbf{2.35} \pm 1.68$ \\
+    \bottomrule
+  \end{tabularx}
+  \\[2pt]
+  \footnotesize{$\sigma$ 为 60 题样本标准差。Judge 三维内部 Pearson 相关性平均为 +0.848（n=12 维度对），详见附录~\ref{appendix:judge}。}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig8_main_compare.pdf}
+  \caption{Tier-1 主实验结果对比。左侧显示文本块检索指标，右侧显示生成质量指标；B4 在纯检索排序上并不占优，但在答案正确性与完整性上更稳定。}
+  \label{fig:main-compare}
+\end{figure}
+
+\subsubsection{题型分组分析}
+
+题型分组结果显示，KG 路径的收益并非均匀分布：
+其主要价值集中在需要显式结构关系的问题上。
+B 工序工具类问题依赖工序、工具和规范之间的连接关系，
+KG 子图能直接提供 \textit{requires} 与 \textit{specifiedBy} 等边，
+因此相较 Dense-only 有更明显收益。
+C 技术规范类问题则受益于 KG 中对扭矩、间隙和材料要求的结构化聚合。
+相反，D 几何配合类问题的答案锚点多出现在连续手册文本中，
+密集-稀疏文本融合已经可以覆盖大部分信息，KG 的边际收益较小。
+
+\subsubsection{Tier-2 跨章节粗评}
+
+表~\ref{tab:exp-tier2}~报告 Tier-2 粗评（20 题，跨 72-50/73/76-77/79 四章节）的 LLM-Judge 评分。
+该评测集无 \texttt{gold\_chunk\_ids} 标注，故仅报告生成阶段指标。
+
+\begin{table}[htbp]
+  \centering
+  \caption{Tier-2 跨章节粗评：LLM-Judge 三维评分（20 题）}
+  \label{tab:exp-tier2}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\linewidth}{lYYY}
+    \toprule
+    \textbf{基线} & Relevance & Completeness & Correctness \\
+    \midrule
+    B1 Dense-only         & 3.10 & 2.40 & 2.00 \\
+    B2 BM25-only          & 3.65 & 2.80 & 2.65 \\
+    B3 Hybrid (RRF)       & 3.25 & 2.55 & 2.05 \\
+    B4 MHRAG              & \textbf{3.75} & \textbf{3.05} & \textbf{2.70} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Tier-2 跨章节场景下，B4 MHRAG 在三项生成指标上均取得数值最高值。
+相对 BM25-only，B4 在 Relevance 上提升 2.7\%，在 Completeness 上提升 8.9\%，
+在 Correctness 上提升 1.9\%。
+这一结果表明，BM25 对跨章节问题中的精确术语仍然非常重要，
+而 KG 子图能够进一步补足单一关键词检索难以覆盖的装配层级和关系链。
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{消融实验}
+\label{sec:exp-ablation}
+
+在当前三路框架下，本文重点比较三条核心路径的作用：
+Dense 负责语义召回，BM25 负责精确字符串匹配，KG 负责结构化关系补全。
+由表~\ref{tab:exp-tier1-main} 和表~\ref{tab:exp-tier1-judge} 可见，
+单独依赖 Dense 可以取得更高的检索排序指标，但生成阶段 Correctness 低于 B4；
+单独依赖 BM25 在跨章节粗评中具有较强 Relevance，但 Tier-1 Completeness 最低；
+Dense+BM25 的混合检索提高了文本召回稳定性，
+而进一步加入 KG 子图后，生成阶段 Correctness 从 B3 的 2.05 提升至 2.35。
+
+因此，本文的核心消融结论是：
+\textbf{文本双路检索保证覆盖，KG 子图提高事实约束。}
+这种组合在纯检索指标上并不总是占优，
+但在需要装配层级、工序依赖和技术规范的专业问答中，
+能够提供更可靠的结构化上下文。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig9_ablation_delta.pdf}
+  \caption{三路检索消融视角下各基线相对 B4 MHRAG 的指标差异。文本单路或双路在部分检索指标上更高，但在 LLM-Judge 生成质量上整体低于 B4。}
+  \label{fig:ablation-delta}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{工程性能与幻觉率分析}
+\label{sec:exp-engineering}
+
+参照 Shen 等\cite{shen2025hybridrag}在 Scientific Reports 发表的 HybridRAG
+工程指标体系，本节从端到端延迟（Latency）、答非所问率（Hallucination Rate, HR）
+与显存占用（VRAM）三个工程维度进行对比。
+
+\textbf{Latency 计量方式}：单题平均延迟由检索阶段总耗时与生成阶段总耗时
+分别除以题量再相加得到，等价于工程部署中单题端到端响应时间。
+\textbf{HR 定义}：参照\cite{shen2025hybridrag}的"答非所问率"概念，
+本文以 LLM-Judge Correctness 维度评分小于 2.0 视为答非所问，
+统计该比例作为 HR 指标。
+\textbf{VRAM 估算}：本文 LLM 通过 OpenAI 兼容 API 调用远端 vLLM 服务，
+本地仅承担 BGE-M3 编码与 BGE-Reranker 精排推理，
+表中显存为各模型 fp16 推理理论值与 CUDA 工作区开销之和。
+
+\begin{table}[htbp]
+  \centering
+  \caption{各基线工程性能与幻觉率对比（80 题双层评测集）}
+  \label{tab:exp-engineering}
+  \small
+  \begin{tabular}{lrrrrr}
+    \toprule
+    基线 & 检索 (s) $\downarrow$ & 生成 (s) $\downarrow$ & E2E (s) $\downarrow$ & HR (\%) $\downarrow$ & VRAM (GB) $\downarrow$ \\
+    \midrule
+    B1 Dense-only      & 2.17 & 3.05 & 5.22 & 46.25 & 1.60 \\
+    B2 BM25-only       & \textbf{2.03} & \textbf{2.94} & \textbf{4.98} & \textbf{35.00} & --   \\
+    B3 Hybrid (RRF)    & 3.82 & 3.40 & 7.21 & 43.75 & 1.60 \\
+    B4 MHRAG           & 4.78 & 2.98 & 7.76 & \textbf{35.00} & 1.60 \\
+    \midrule
+    \multicolumn{2}{l}{HybridRAG\cite{shen2025hybridrag}（参考）} & --
+    & 14.19 & 15.01 & 26.12 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig12_engineering.pdf}
+  \caption{工程性能对比。KG 路径增加检索阶段耗时，但 B4 在答非所问率与正确性之间取得更稳妥的折中。}
+  \label{fig:engineering}
+\end{figure}
+
+B4 MHRAG 的检索阶段延迟高于文本检索基线，
+主要原因是 KG 路径需要先进行语义锚节点定位，再访问 Neo4j 扩展一跳邻域。
+但其 HR 与 BM25-only 持平，并低于 Dense-only，
+同时在 Correctness 上高于所有内部基线。
+这说明 KG 路径的主要价值并非降低答非所问率的绝对比例，
+而是在可接受延迟内增强答案的事实约束和结构化完整性。
+
+与 HybridRAG\cite{shen2025hybridrag} 的工程指标只能作部署形态参考：
+参考论文采用本地化 LLM 推理，需将完整模型权重常驻显存；
+本文采用远端 vLLM 服务 + OpenAI 兼容 API 调用模式，
+本地仅承担 embedding 与精排推理。
+因此，本文的本地显存更低并不直接等价于算法层面的显存优势，
+而是说明该架构更适合资源受限的工业现场部署。
+
+综上，本文 MHRAG 的实验故事并不是"所有指标同时占优"，
+而是在文本检索召回已经较强的基础上，
+通过三源知识图谱把装配层级、工序依赖和技术规范显式注入上下文，
+以适度的检索延迟换取更好的事实一致性与跨章节完整性。

@@ -293,7 +293,8 @@ async def lifespan(app: FastAPI):
     print(f"[backend] 初始化完成，知识库共 {count} 条文档块。LLM: {label}")
 
     # 兜底：若 Qdrant 为空且 data/ 目录有文件，后台自动触发入库
-    if count == 0:
+    # 环境变量 DISABLE_AUTO_INGEST=1 可关闭此行为（实验受控入库时使用）
+    if count == 0 and os.getenv("DISABLE_AUTO_INGEST", "").lower() not in ("1", "true", "yes"):
         import glob as _glob
         import threading as _threading
         from backend.routers.ingest import _run_ingest as _bg_run_ingest

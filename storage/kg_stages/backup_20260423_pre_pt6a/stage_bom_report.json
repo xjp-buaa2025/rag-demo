@@ -1,0 +1,32 @@
+{
+  "stage": "bom",
+  "generated_at": "2026-04-22T07:49:41.162387+00:00",
+  "stats": {
+    "entities_count": 184,
+    "triples_count": 184,
+    "relation_breakdown": {
+      "isPartOf": 184
+    },
+    "confidence_histogram": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "bom_coverage_ratio": null,
+    "isolated_entities_count": 116,
+    "low_confidence_count": 0
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "title": "Isolated entities detected",
+      "title_zh": "存在孤立实体",
+      "description": "116 个实体没有与任何其他实体建立关系（占比 63%）",
+      "suggestion": "在编辑面板为孤立实体手动补充关系，或确认是否为数据噪声",
+      "affected_triple_ids": []
+    }
+  ],
+  "diff": null
+}

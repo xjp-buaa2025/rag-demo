@@ -8,7 +8,8 @@
 // 非 SSE 接口返回普通 Promise<T>。
 // ============================================================
 
-import type { HealthResponse, IngestStatus, BomStatus, Chunk, Message, SseFrame, KgGraphData, KgTaskCreateResponse, KgTaskStatus, StagesStatus, TriplesPreview, ValidationReport, KgSseFrame, SyncNeo4jResult, FlatTriple, StageReport, StageStateInfo, BilingualTriple, ExpertDiff } from '../types'
+import type { HealthResponse, IngestStatus, BomStatus, Chunk, Message, SseFrame, KgGraphData, KgTaskCreateResponse, KgTaskStatus, StagesStatus, TriplesPreview, ValidationReport, KgSseFrame, SyncNeo4jResult, FlatTriple } from '../types'
+import type { StageReport, StageStateInfo, BilingualTriple, ExpertDiff } from '../types/hitl'
 
 const BASE = '/api'
 

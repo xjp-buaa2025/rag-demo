@@ -1,0 +1,324 @@
+\documentclass[12pt, a4paper]{article}
+
+% ── 中文支持（Overleaf 请选 XeLaTeX 编译器）──────────────────────────────────
+\usepackage[UTF8, heading=true]{ctex}
+
+% ── 页面布局 ─────────────────────────────────────────────────────────────────
+\usepackage[top=2.5cm, bottom=2.5cm, left=3cm, right=3cm]{geometry}
+
+% ── 数学 ─────────────────────────────────────────────────────────────────────
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+
+% ── 图表 ─────────────────────────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{array}
+% Y 列：在 tabularx 中表示居中等宽列
+\newcolumntype{Y}{>{\centering\arraybackslash}X}
+\usepackage{caption}
+\usepackage{subcaption}
+
+% ── 代码块 ───────────────────────────────────────────────────────────────────
+\usepackage{listings}
+\usepackage{xcolor}
+\lstset{
+    basicstyle=\small\ttfamily,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{gray},
+    commentstyle=\color{gray},
+    keywordstyle=\color{blue},
+    stringstyle=\color{orange},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    tabsize=2,
+    showstringspaces=false,
+}
+
+% ── 超链接 ───────────────────────────────────────────────────────────────────
+\usepackage[colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue]{hyperref}
+
+% ── 行距 ─────────────────────────────────────────────────────────────────────
+\usepackage{setspace}
+\onehalfspacing
+
+% ── 参考文献 ─────────────────────────────────────────────────────────────────
+\usepackage[numbers, sort&compress]{natbib}
+
+% ── 标题信息 ─────────────────────────────────────────────────────────────────
+\title{\textbf{面向航空发动机装配的多源知识图谱增强混合 RAG 框架}}
+\author{肖俊鹏}
+\date{\today}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\begin{document}
+
+\maketitle
+
+% ── 摘要 ─────────────────────────────────────────────────────────────────────
+\begin{abstract}
+针对航空发动机装配领域知识密集、来源异构、查询精确性要求高的特点，
+本文提出面向 PT6A 涡桨发动机的多源知识图谱增强混合检索生成（Multi-source Hybrid RAG, MHRAG）框架。
+方法层面，本文设计三源知识图谱构建流水线，
+通过 BOM 解析、CAD 结构化解析与维修手册 LLM 抽取三轨协同，
+并经三级级联实体对齐汇入统一图谱；
+检索层面提出三路并行架构，
+将 BGE-M3 密集向量、BM25 稀疏检索与
+基于 BGE-M3 语义 ANN 的 Neo4j 知识图谱子图通过
+互惠排名融合（RRF）统一排序，并经 BGE-Reranker 交叉编码器精排送入 LLM 生成。
+基于 PT6A 维修手册、IPC/BOM 与 STEP 模型等三源资料构建出含 7{,}333 节点 / 8{,}752 边的知识图谱，
+在含 60 题精评与 20 题跨章节粗评的双层评测集上，
+MHRAG 在 Tier-1 生成质量评测中取得 Relevance 3.50、Completeness 3.02 与
+Correctness 2.35 的稳定表现，相对 Dense-only 在 Correctness 维度提升 10.8\%；
+在 Tier-2 跨章节粗评中，相对 BM25-only 在 Completeness 与 Correctness 维度
+分别提升 8.9\% 与 1.9\%。
+消融分析显示，KG 子图路径主要提升工序工具与技术规范类问题的完整性和事实一致性，
+BM25 路径则对零件编号、扭矩和公差等精确字符串查询提供必要补充。
+工程性能上，本文方法在 7.76\,s 端到端延迟和 1.60\,GB 本地显存占用下
+取得 35.00\% 的答非所问率（HR），展示了面向工业现场部署的可行性。
+\end{abstract}
+
+\newpage
+\tableofcontents
+\newpage
+
+% ═══════════════════════════════════════════════════════════════════════════
+% 第 1 章  引言
+% ═══════════════════════════════════════════════════════════════════════════
+\input{chapters/chapter1}
+
+
+% ═══════════════════════════════════════════════════════════════════════════
+% 第 2 章  相关工作
+% ═══════════════════════════════════════════════════════════════════════════
+\input{chapters/chapter2}
+
+
+% ═══════════════════════════════════════════════════════════════════════════
+% 第 3 章  方法
+% ═══════════════════════════════════════════════════════════════════════════
+\input{chapters/chapter3}   % ← 已完成，直接引入
+
+
+% ═══════════════════════════════════════════════════════════════════════════
+% 第 4 章  实验与结果
+% ═══════════════════════════════════════════════════════════════════════════
+\input{chapters/chapter4}
+
+
+% ═══════════════════════════════════════════════════════════════════════════
+% 第 5 章  讨论
+% ═══════════════════════════════════════════════════════════════════════════
+\input{chapters/chapter5}
+
+
+% ═══════════════════════════════════════════════════════════════════════════
+% 第 6 章  结论
+% ═══════════════════════════════════════════════════════════════════════════
+\input{chapters/chapter6}
+
+
+% ═══════════════════════════════════════════════════════════════════════════
+% 附录
+% ═══════════════════════════════════════════════════════════════════════════
+\input{chapters/appendix}
+
+
+% ═══════════════════════════════════════════════════════════════════════════
+% 参考文献
+% ═══════════════════════════════════════════════════════════════════════════
+% 方式 A（推荐）：上传 references.bib 后启用
+% \bibliographystyle{unsrtnat}
+% \bibliography{references}
+
+% 方式 B：手动列表（按正文引用出现顺序排列）
+\begin{thebibliography}{99}
+
+% [1][2] 知识图谱基础综述
+\bibitem{hogan2021kg}
+A.~Hogan, E.~Blomqvist, M.~Cochez, \textit{et al.},
+``Knowledge Graphs,''
+\textit{ACM Computing Surveys}, vol.~54, no.~7, pp.~1--37, 2021.
+
+\bibitem{ji2022kgsurvey}
+S.~Ji, S.~Pan, E.~Cambria, P.~Marttinen, and P.~S.~Yu,
+``A Survey on Knowledge Graphs: Representation, Acquisition, and Applications,''
+\textit{IEEE Trans. Neural Networks and Learning Systems}, vol.~33, no.~2, pp.~494--514, 2022.
+
+% [3] LLM综述
+\bibitem{zhao2023llmsurvey}
+W.~X.~Zhao, K.~Zhou, J.~Li, \textit{et al.},
+``A Survey of Large Language Models,''
+\textit{arXiv:2303.18223}, 2023.
+
+% [4][5] RAG基础
+\bibitem{lewis2020rag}
+P.~Lewis, E.~Perez, A.~Piktus, \textit{et al.},
+``Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks,''
+in \textit{Proc. NeurIPS}, 2020.
+
+\bibitem{gao2023ragsurvey}
+Y.~Gao, Y.~Xiong, X.~Gao, \textit{et al.},
+``Retrieval-Augmented Generation for Large Language Models: A Survey,''
+\textit{arXiv:2312.10997}, 2023.
+
+% [6] Lost in the Middle
+\bibitem{liu2023lostinmiddle}
+N.~F.~Liu, K.~Lin, J.~Hewitt, \textit{et al.},
+``Lost in the Middle: How Language Models Use Long Contexts,''
+\textit{Trans. ACL}, vol.~12, pp.~157--173, 2024.
+
+% [7][8][9] 航空故障KG
+\bibitem{tang2023aircraft}
+X.~L.~Tang, \textit{et al.},
+``Exploring Research on the Construction and Application of Knowledge Graphs for Aircraft Fault Diagnosis,''
+\textit{Sensors}, vol.~23, no.~11, pp.~5295--5313, 2023.
+
+\bibitem{meng2024aircraft}
+X.~Meng, \textit{et al.},
+``Fault Knowledge Graph Construction and Platform Development for Aircraft PHM,''
+\textit{Sensors}, vol.~24, no.~1, p.~231, 2024.
+
+\bibitem{wu2024engine}
+C.~Wu, L.~Zhang, X.~L.~Tang, L.~J.~Cui, and X.~Y.~Xie,
+``Construction and Application of Fault Knowledge Graphs for Aircraft Engine Lubrication Systems,''
+\textit{Journal of Beijing University of Aeronautics and Astronautics}, vol.~50, no.~4, pp.~1336--1346, 2024.
+
+% [10][11] 航空装配KG+LLM
+\bibitem{liu2024jointkg}
+P.~Liu, L.~Qian, X.~Zhao, and B.~Tao,
+``Joint Knowledge Graph and Large Language Model for Fault Diagnosis and Its Application in Aviation Assembly,''
+\textit{IEEE Trans. Industrial Informatics}, vol.~20, no.~6, pp.~8160--8169, Jun.~2024.
+
+\bibitem{liu2023avkg}
+P.~Liu, L.~Qian, X.~Zhao, and B.~Tao,
+``The Construction of Knowledge Graphs in the Aviation Assembly Domain Based on a Joint Knowledge Extraction Model,''
+\textit{IEEE Access}, vol.~11, pp.~26483--26495, 2023.
+
+% [12] 装配资源KG
+\bibitem{shi2022arkg}
+X.~Shi, X.~Tian, J.~Gu, \textit{et al.},
+``Knowledge Graph-Based Assembly Resource Knowledge Reuse towards Complex Product Assembly Process,''
+\textit{Sustainability}, vol.~14, no.~23, p.~15541, 2022.
+
+% [13] HybridRAG
+\bibitem{shen2025hybridrag}
+X.~Xie, X.~Tang, S.~Gu, and L.~Cui,
+``An Intelligent Guided Troubleshooting Method for Aircraft Based on HybridRAG,''
+\textit{Scientific Reports}, vol.~15, p.~17752, 2025.
+
+% [15] RAG-LLM综述(KDD)
+\bibitem{fan2024ragsurvey}
+W.~Fan, Y.~Ding, L.~Ning, \textit{et al.},
+``A Survey on RAG Meeting LLMs: Towards Retrieval-Augmented Large Language Models,''
+in \textit{Proc. ACM KDD}, 2024.
+
+% [16][17][18] 检索方法（注：[19] 已并入综述，此处无独立条目）
+\bibitem{ma2023query}
+X.~Ma, Y.~Wang, and J.~Lin,
+``Query Rewriting for Retrieval-Augmented Large Language Models,''
+\textit{arXiv:2305.14283}, 2023.
+
+\bibitem{luan2021sparse}
+Y.~Luan, J.~Eisenstein, K.~Toutanova, and M.~Collins,
+``Sparse, Dense, and Attentional Representations for Text Retrieval,''
+\textit{Trans. ACL}, vol.~9, pp.~329--345, 2021.
+
+\bibitem{nogueira2019passage}
+R.~Nogueira and K.~Cho,
+``Passage Re-ranking with BERT,''
+\textit{arXiv:1901.04085}, 2019.
+
+% [19] GraphRAG
+\bibitem{edge2024graphrag}
+D.~Edge, H.~Trinh, N.~Cheng, \textit{et al.},
+``From Local to Global: A Graph RAG Approach to Query-Focused Summarization,''
+\textit{arXiv:2404.16130}, 2024.
+
+% [20][21] 稠密检索模型
+\bibitem{karpukhin2020dpr}
+V.~Karpukhin, B.~Oguz, S.~Min, \textit{et al.},
+``Dense Passage Retrieval for Open-Domain Question Answering,''
+in \textit{Proc. EMNLP}, 2020.
+
+\bibitem{bge2023}
+S.~Xiao, Z.~Liu, P.~Zhang, \textit{et al.},
+``C-Pack: Packaged Resources To Advance General Chinese Embedding,''
+\textit{arXiv:2309.07597}, 2023.
+
+% [22][23] 稀疏检索 / RRF
+\bibitem{robertson2009bm25}
+S.~Robertson and H.~Zaragoza,
+``The Probabilistic Relevance Framework: BM25 and Beyond,''
+\textit{Foundations and Trends in Information Retrieval}, vol.~3, no.~4, pp.~333--389, 2009.
+
+\bibitem{cormack2009rrf}
+G.~V.~Cormack, C.~L.~A.~Clarke, and S.~Buettcher,
+``Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods,''
+in \textit{Proc. SIGIR}, 2009.
+
+% [24][25] Transformer/BERT
+\bibitem{vaswani2017attention}
+A.~Vaswani, N.~Shazeer, N.~Parmar, \textit{et al.},
+``Attention Is All You Need,''
+in \textit{Proc. NeurIPS}, 2017.
+
+\bibitem{devlin2019bert}
+J.~Devlin, M.-W.~Chang, K.~Lee, and K.~Toutanova,
+``BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding,''
+in \textit{Proc. NAACL}, 2019.
+
+% [26] KG+LLM路线图
+\bibitem{pan2024kgllmsurvey}
+S.~Pan, L.~Luo, Y.~Wang, \textit{et al.},
+``Unifying Large Language Models and Knowledge Graphs: A Roadmap,''
+\textit{IEEE Trans. Knowledge and Data Engineering}, 2024.
+
+% [27] 共指消解（跨源实体对齐方法参考）
+\bibitem{wu2020corefresolution}
+T.~Wu, \textit{et al.},
+``Coreference Resolution as Query-based Span Prediction,''
+\textit{arXiv:1911.01746}, 2020.
+
+% [28] STEP/BOM标准
+\bibitem{srinivasan2017bom}
+V.~Srinivasan,
+``Standardized Exchange of Product Data: STEP, ISO 10303,''
+\textit{CAD Standards}, 2017.
+
+% [29][30] 多智能体
+\bibitem{guo2024multiagent}
+T.~Guo, X.~Chen, Y.~Wang, \textit{et al.},
+``Large Language Model based Multi-Agents: A Survey of Progress and Challenges,''
+\textit{arXiv:2402.01680}, 2024.
+
+\bibitem{park2023generative}
+J.~S.~Park, J.~C.~O'Brien, C.~J.~Cai, \textit{et al.},
+``Generative Agents: Interactive Simulacra of Human Behavior,''
+in \textit{Proc. UIST}, 2023.
+
+% [33] Human-in-the-Loop
+\bibitem{amershi2014power}
+S.~Amershi, M.~Cakmak, W.~B.~Knox, and T.~Kulesza,
+``Power to the People: The Role of Humans in Interactive Machine Learning,''
+\textit{AI Magazine}, vol.~35, no.~4, pp.~105--120, 2014.
+
+% [34][35] 工业与装配智能化
+\bibitem{blumenthal2020nlp}
+A.~Blumenthal, \textit{et al.},
+``NLP-Based Information Extraction from Technical Manuals,''
+in \textit{Proc. ICAS}, 2020.
+
+\bibitem{zhao2022assembly}
+H.~Zhao, \textit{et al.},
+``BERT-Based Assembly Instruction Understanding for Intelligent Manufacturing,''
+\textit{Journal of Manufacturing Systems}, 2022.
+
+\end{thebibliography}
+
+\end{document}

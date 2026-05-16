@@ -69,7 +69,7 @@ def make_bom_nodes(app_state: Any, neo4j_cfg: dict):
         if not raw_text.strip():
             return {"error": "无表格内容可转换", "log_messages": ["[llm_to_csv] 无内容"]}
 
-        chunks = _split_for_llm(raw_text)
+        chunks = _split_for_llm(raw_text, max_chars=30000)
         logs = [f"[llm_to_csv] 文档分为 {len(chunks)} 段，开始 LLM 转换…"]
         all_records = []
 

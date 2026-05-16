@@ -1,0 +1,916 @@
+{
+  "generated_at": "2026-04-22T08:55:00.495487+00:00",
+  "source_files": [
+    "C52696C.STEP"
+  ],
+  "triples": [
+    {
+      "head": "C52696C-10",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-20",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-30",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-40",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-80",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-90",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-150",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-260",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-280",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-340",
+      "relation": "isPartOf",
+      "tail": "C52696C-280",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-300",
+      "relation": "isPartOf",
+      "tail": "C52696C-280",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-270",
+      "relation": "isPartOf",
+      "tail": "C52696C-280",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-320",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-120",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "head_bom_id": "ASM-CPR-001",
+      "head_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "head_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-140",
+      "relation": "isPartOf",
+      "tail": "C52696C-120",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "tail_bom_id": "ASM-CPR-001",
+      "tail_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "tail_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-140-blade",
+      "relation": "isPartOf",
+      "tail": "C52696C-120",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "tail_bom_id": "ASM-CPR-001",
+      "tail_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "tail_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-160",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "head_bom_id": "ASM-CPR-001",
+      "head_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "head_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-180",
+      "relation": "isPartOf",
+      "tail": "C52696C-160",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "tail_bom_id": "ASM-CPR-001",
+      "tail_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "tail_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-180-blade",
+      "relation": "isPartOf",
+      "tail": "C52696C-160",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "tail_bom_id": "ASM-CPR-001",
+      "tail_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "tail_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-210",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "head_bom_id": "ASM-CPR-001",
+      "head_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "head_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-250",
+      "relation": "isPartOf",
+      "tail": "C52696C-210",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "tail_bom_id": "ASM-CPR-001",
+      "tail_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "tail_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-250-blade",
+      "relation": "isPartOf",
+      "tail": "C52696C-210",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "tail_bom_id": "ASM-CPR-001",
+      "tail_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "tail_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-290",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-450",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-440",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-430",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-420",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-50",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-360",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-350",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-80-hub",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-330",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "370-2 holes",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "380-3 holes",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-400",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-310",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-390",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-220",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-230",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-70",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-60",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-530",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-520",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "300-ball lock",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-490",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-480",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-500",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-510",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-470",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-460",
+      "relation": "isPartOf",
+      "tail": "C52696C",
+      "confidence": 1.0,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-10",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-20",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-30",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-40",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-80",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-90",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "100&110",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-150",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "190&200",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-260",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-280",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-320",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-120",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "tail_bom_id": "ASM-CPR-001",
+      "tail_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "tail_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-160",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "tail_bom_id": "ASM-CPR-001",
+      "tail_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "tail_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-210",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "tail_bom_id": "ASM-CPR-001",
+      "tail_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "tail_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-290",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-450",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-440",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-430",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-420",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-50",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-360",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-350",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-80-hub",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-330",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "370-2 holes",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "380-3 holes",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-400",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-310",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-390",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-220",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-230",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-70",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-60",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-530",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-520",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "300-ball lock",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-490",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-480",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-500",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-510",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-470",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C",
+      "relation": "matesWith",
+      "tail": "C52696C-460",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-210",
+      "relation": "matesWith",
+      "tail": "C52696C-250",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "head_bom_id": "ASM-CPR-001",
+      "head_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "head_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-210",
+      "relation": "matesWith",
+      "tail": "C52696C-250-blade",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "head_bom_id": "ASM-CPR-001",
+      "head_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "head_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-160",
+      "relation": "matesWith",
+      "tail": "C52696C-180",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "head_bom_id": "ASM-CPR-001",
+      "head_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "head_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-160",
+      "relation": "matesWith",
+      "tail": "C52696C-180-blade",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "head_bom_id": "ASM-CPR-001",
+      "head_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "head_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-120",
+      "relation": "matesWith",
+      "tail": "C52696C-140",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "head_bom_id": "ASM-CPR-001",
+      "head_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "head_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-120",
+      "relation": "matesWith",
+      "tail": "C52696C-140-blade",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP",
+      "head_bom_id": "ASM-CPR-001",
+      "head_bom_name": "COMPRESSOR ROTOR INSTALLATION",
+      "head_align_method": "structure_match"
+    },
+    {
+      "head": "C52696C-280",
+      "relation": "matesWith",
+      "tail": "C52696C-340",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-280",
+      "relation": "matesWith",
+      "tail": "C52696C-300",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "C52696C-280",
+      "relation": "matesWith",
+      "tail": "C52696C-270",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "190&200",
+      "relation": "matesWith",
+      "tail": "C52696C-190",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "190&200",
+      "relation": "matesWith",
+      "tail": "C52696C-200",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "100&110",
+      "relation": "matesWith",
+      "tail": "C52696C-100",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    },
+    {
+      "head": "100&110",
+      "relation": "matesWith",
+      "tail": "C52696C-110",
+      "confidence": 0.9,
+      "source": "CAD",
+      "cad_source_file": "C52696C.STEP"
+    }
+  ],
+  "stats": {
+    "triples_count": 106,
+    "assembly_nodes": 50,
+    "constraints": 56,
+    "adjacency": 0
+  }
+}

@@ -1,0 +1,198 @@
+% ═════════════════════════════════════════════════════════════════════════════
+%  附 录
+% ═════════════════════════════════════════════════════════════════════════════
+\appendix
+
+\section{附录 A：LLM-Judge 评分协议}
+\label{appendix:judge}
+
+为提升评分可重复性与透明度，本附录公开本文使用的 LLM-Judge 完整提示词及稳定性分析。
+
+\subsection{评分提示词全文}
+
+\begin{lstlisting}[language={}, basicstyle=\small\ttfamily,
+                   breaklines=true, frame=single, rulecolor=\color{gray}]
+你是 RAG 答案评估专家。请对以下答案打分。
+
+【问题】{question}
+【参考标准答案】{gold_answer}
+【系统答案】{generated_answer}
+
+请从三个维度打 0-5 分（整数），并简要给出依据：
+1. relevance（相关性）：答案与问题相关程度
+2. completeness（完整性）：答案是否覆盖了关键信息
+3. correctness（正确性）：答案与标准答案一致程度
+
+严格按 JSON 输出，不要 markdown 包裹：
+{"relevance": <int>, "completeness": <int>,
+ "correctness": <int>, "reason": "<一句话>"}
+\end{lstlisting}
+
+\subsection{评分模型与超参数}
+
+\begin{itemize}
+  \item \textbf{评分模型}：Qwen2.5-14B-Instruct（与生成主模型为不同模型实例，
+        避免自评偏置）
+  \item \textbf{Temperature}：0.1（接近确定性输出，控制随机性）
+  \item \textbf{max\_tokens}：300（足够覆盖 JSON + 简短理由）
+  \item \textbf{输出格式}：严格 JSON，解析失败时回退为 0 分（保守惩罚）
+  \item \textbf{Gold answer 截断}：600 字符以内
+  \item \textbf{Generated answer 截断}：1000 字符以内
+\end{itemize}
+
+\subsection{评分内部一致性分析}
+
+由于本文 LLM-Judge 通过远端 vLLM API 调用产生评分，
+全量重复评分（80 题 × 4 基线 × N 次）的成本不可忽视。
+本文以 \textbf{Judge 三维内部一致性}作为评分稳定性的间接验证。
+
+设三维评分序列分别为 $\mathbf{r}, \mathbf{c}, \mathbf{q}$
+（对应 Relevance、Completeness、Correctness），
+计算三对维度的 Pearson 相关系数：
+
+\begin{table}[htbp]
+  \centering
+  \caption{Judge 三维评分内部 Pearson 相关性（Tier-1，60 题）}
+  \label{tab:judge-consistency}
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\linewidth}{lYYY}
+    \toprule
+    基线 & $\rho$(Rel, Comp) & $\rho$(Rel, Corr) & $\rho$(Comp, Corr) \\
+    \midrule
+    B1 Dense-only      & +0.83 & +0.87 & +0.82 \\
+    B2 BM25-only       & +0.83 & +0.85 & +0.83 \\
+    B3 Hybrid (RRF)    & +0.86 & +0.93 & +0.86 \\
+    B4 MHRAG           & +0.81 & +0.90 & +0.79 \\
+    \midrule
+    \multicolumn{2}{l}{\textbf{平均（12 维度对）}} & \multicolumn{2}{r}{\textbf{+0.848}} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+三维评分平均相关性 \textbf{+0.848}，
+处于「合理一致」区间——既非完美 1.0（说明三维并非简单复读），
+也远高于随机水平 0（说明评分非偶然），
+表明 Judge 对同一答案在三个维度上给出协调评判，
+间接支持其评分稳定性。
+
+\subsection{评分协议局限性}
+
+\begin{enumerate}
+  \item \textbf{未做完整 Judge 重复评分}：
+        理想情况下应对每条记录 N 次独立评分，
+        计算 intra-rater Cohen's Kappa；本文受 API 调用成本约束未实施，
+        是后续工作的明确补强方向。
+  \item \textbf{未做人工标注一致性}：
+        Judge 评分未与人类专家盲评做交叉验证，
+        Tier-2 跨章节场景下因缺乏标准答案而主要依赖 Judge 主观判断，
+        论文结论的外部效度需谨慎解读。
+  \item \textbf{Judge 模型本身的领域知识局限}：
+        Qwen2.5-14B-Instruct 未针对航空领域微调，
+        对 PT6A 专业术语的理解可能弱于专家，
+        会在术语相近但语义有别的题目上失之精细。
+\end{enumerate}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\section{附录 B：典型问答案例分析}
+\label{appendix:cases}
+
+为便于审稿人直观评估系统行为，本附录从 80 题评测集中选取 4 个成功案例
+（每个题型一例）与 1 个失败案例展示完整问答链路。
+每个案例包含问题、参考答案、系统答案、关键检索片段以及 Judge 评分。
+
+\subsection{案例 1（A 类零件结构）：成功识别父级装配体}
+
+\begin{description}
+  \item[\textnormal{Q004}] 在 PT6A 压气机装配中，压气机引气阀总成
+        （Compressor Bleed Valve Assembly）属于哪个装配体？
+  \item[\textnormal{Gold}] 压气机引气阀总成属于燃气发生器壳体（Gas Generator Case）。
+  \item[\textnormal{System}] 压气机引气阀总成（Compressor Bleed Valve Assembly）
+        \textbf{安装在燃气发生器壳体（gas generator case）上的 7 点钟位置}。
+        因此，它属于燃气发生器壳体。
+  \item[\textnormal{检索}] 5 个候选块；其中 1 个 KG 子图（含
+        \textit{isPartOf} 关系），4 个手册文本块。
+  \item[\textnormal{Judge}] Relevance = 5，Completeness = 5，Correctness = 5。
+\end{description}
+
+\textit{分析}：KG 子图直接命中 \textit{isPartOf} 关系，
+为答案提供权威结构性约束，与手册文本相互印证。
+
+\subsection{案例 2（B 类工序工具）：跨工序时序推理}
+
+\begin{description}
+  \item[\textnormal{Q030}] PT6A 装配中，完成「卸下中央防火封罩
+        （Post-SB1445 型）」之后下一步应执行什么工序？
+  \item[\textnormal{Gold}] 下一步执行「安装中央防火封罩（Post-SB1445 型）」
+        （Installation of Post-SB1445 Center Fireseal Mount Ring）。
+  \item[\textnormal{System}] 完成卸下中央防火封罩（Post-SB1445 型）之后，
+        下一步应执行安装中央防火封罩（Post-SB1445 型）的工序。
+  \item[\textnormal{检索}] 5 候选块；KG 子图包含 \textit{precedes} 关系链。
+  \item[\textnormal{Judge}] Relevance = 5，Completeness = 5，Correctness = 5。
+\end{description}
+
+\textit{分析}：本题依赖工序间显式时序关系，
+是 KG 路径独立贡献最直接的题型；
+\textit{precedes} 边在仅依赖文本检索时容易被章节顺序假象误导。
+
+\subsection{案例 3（C 类技术规范）：扭矩参数检索}
+
+\begin{description}
+  \item[\textnormal{Q035}] 执行「安装中央防火封罩（Post-SB1445 型）」涉及哪些技术规范？
+  \item[\textnormal{Gold}] 螺母扭矩 21~螺栓 45--55 lb·in；32 号螺栓 32--36 lb·in；
+        装配前涂抹 PWC08-002 锁固胶……
+  \item[\textnormal{System}] 安装中央防火封罩（Post-SB1445 型）的技术规范包括：
+        1. 涂抹 PWC08-002 胶……2. 螺母扭矩 32--36 lb·in。
+  \item[\textnormal{检索}] 5 候选块；含 KG \textit{specifiedBy} 子图。
+  \item[\textnormal{Judge}] Relevance = 4，Completeness = 3，Correctness = 4。
+\end{description}
+
+\textit{分析}：本题为「非完美但合格」案例。
+答案保留了正确的扭矩范围（32--36 lb·in），但遗漏了另一颗螺栓的扭矩（45--55 lb·in），
+故 Completeness 仅 3 分。这反映出多规范并列题型对完整召回的更高要求，
+也提示后续工作可在 KG 中显式扩展「同工序多规范并列」的关系建模。
+
+\subsection{案例 4（D 类几何配合）：装配关系识别}
+
+\begin{description}
+  \item[\textnormal{Q043}] PT6A 压气机中，二级转子叶片（2nd Stage Rotor Blade）
+        与二级压气机盘的配合关系是什么？
+  \item[\textnormal{Gold}] 二级转子叶片 → 二级压气机盘 之间存在配合关系，
+        配合方式为 dovetail\_slot（叶片榫尾-转子盘接口）。
+  \item[\textnormal{System}] 二级转子叶片（2nd Stage Rotor Blade）通过 dovetail
+        （燕尾槽）配合安装在第二级压气机盘（second-stage rotor disk）的边缘上。
+  \item[\textnormal{检索}] 5 候选块（仅文本，无 KG）。
+  \item[\textnormal{Judge}] Relevance = 5，Completeness = 5，Correctness = 5。
+\end{description}
+
+\textit{分析}：本题文本块已充分包含 dovetail 配合方式描述，
+KG 路径并非必需。这印证了消融实验中 \textit{$-$KG} 在 D 类题型上的较小退化幅度。
+
+\subsection{案例 5（失败案例）：父级装配体误判}
+
+\begin{description}
+  \item[\textnormal{Q008}] 在 PT6A 压气机装配中，叶轮壳体（Impeller Housing）属于哪个装配体？
+  \item[\textnormal{Gold}] 叶轮壳体属于压气机转子装配（Compressor Rotor Assembly）。
+  \item[\textnormal{System}] 叶轮壳体的上级装配体是燃气发生器壳体（gas generator case）。
+        根据参考资料，叶轮壳体在前部，位于燃气发生器壳体内壳中。
+  \item[\textnormal{检索}] 5 候选块（仅文本，无 KG 子图命中）。
+  \item[\textnormal{Judge}] Relevance = 3，Completeness = 4，\textbf{Correctness = 0}。
+\end{description}
+
+\textit{失败原因分析}：
+\begin{enumerate}
+  \item \textbf{KG 路径未命中}：本题 KG 子图召回失败，
+        ANN 锚点未对应到 \textit{Impeller Housing} 节点的 \textit{isPartOf} 父节点；
+        从 Neo4j 实际图谱看，该零件的 \textit{isPartOf} 边在
+        BOM 解析阶段被聚合到了泛父节点，未保留细粒度装配体归属。
+  \item \textbf{文本歧义}：手册原文同时描述了
+        「叶轮壳体位于燃气发生器壳体内」（位置关系）与
+        「叶轮壳体属于压气机转子装配」（结构关系），
+        LLM 错把位置关系当作装配归属。
+  \item \textbf{改进方向}：在 KG 本体中将
+        \textit{isContainedIn}（位置关系）与 \textit{isPartOf}（装配归属）
+        显式区分，而非如当前实现合并为单一父子关系；同时在 BOM
+        解析阶段保留细粒度装配体归属。
+\end{enumerate}
+
+本案例反映出现有方法在 \textbf{零件位置关系与装配归属关系语义重叠}
+情况下的局限性，是后续工作的明确改进方向。

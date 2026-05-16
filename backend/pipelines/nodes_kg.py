@@ -54,9 +54,9 @@ _KG_EXTRACTION_PROMPT = """\
 实体类型（6类）：
 - Part：具体零部件（需有明确名称，如"高压压气机第3级叶片" 或 "Stage 3 compressor blade"）
 - Assembly：含子零件的子系统（如"高压压气机" 或 "High Pressure Compressor"）
-- Procedure：具体装配操作动作（如"插入叶片榫头" 或 "Insert blade dovetail"）
+- Procedure：具体装配操作动作（如"插入叶片榫头" 或 "Insert blade dovetail"）；必须包含 procedure_type 字段，取值规则：上下文来自 Removal/Installation 章节 → "installation"；来自 Inspection/Check 章节 → "inspection"；来自 Approved Repairs 章节 → "repair"；无法判断 → "unknown"
 - Tool：装配工具器具（如"扭力扳手" 或 "Torque wrench"）
-- Specification：数值技术要求（必须含具体数值和单位，如"50N·m"、"0.05~0.12mm"）
+- Specification：数值技术要求（必须含具体数值和单位，如"50N·m"、"0.05~0.12mm"）；必须包含 spec_type 字段，取值规则：来自安装章节的数值 → "assembly_tolerance"；来自检验章节的数值 → "service_limit"；来自修理章节的数值 → "rejection_limit"；无法判断 → "unknown"
 - Interface：配合面或接口（如"榫头-榫槽配合" 或 "Dovetail interface"）
 
 关系类型（5类）：
@@ -67,28 +67,28 @@ _KG_EXTRACTION_PROMPT = """\
 - matesWith：零件间存在配合关系（head和tail都是Part/Assembly）
 
 字段要求：
-- 实体字段：id（局部唯一字符串）、type、text（原文名称，保留原始语言）、description（1-2句说明该实体功能/作用/特征，不可为空）
+- 实体字段：id（局部唯一字符串）、type、text（原文名称，保留原始语言）、description（1-2句说明该实体功能/作用/特征，不可为空）、procedure_type（仅 Procedure 实体必填）、spec_type（仅 Specification 实体必填）
 - 关系字段：head（实体id）、tail（实体id）、type、weight（整数1-10，该关系的置信度和重要性，10为最高）
 
-Few-shot示例1（中文工序链）：
+Few-shot示例1（中文工序链，来自 Installation 章节）：
 文本：首先检查叶片榫头表面，确认无毛刺，然后将叶片榫头对准叶盘榫槽缓慢插入，最后用扭力扳手施加50N·m预紧扭矩。
-{{"entities":[{{"id":"e1","type":"Procedure","text":"检查叶片榫头表面","description":"装配前检查叶片榫头表面质量，确认无毛刺、划伤等缺陷"}},{{"id":"e2","type":"Procedure","text":"插入叶片榫头至叶盘榫槽","description":"将叶片榫头对准叶盘榫槽缓慢插入的装配工序"}},{{"id":"e3","type":"Procedure","text":"施加预紧扭矩","description":"使用扭力扳手对叶片施加规定预紧扭矩，确保装配可靠性"}},{{"id":"e4","type":"Part","text":"叶片榫头","description":"叶片根部的榫形结构，用于嵌入叶盘榫槽实现固定"}},{{"id":"e5","type":"Tool","text":"扭力扳手","description":"可控制输出扭矩大小的专用装配工具"}},{{"id":"e6","type":"Specification","text":"50N·m","description":"预紧扭矩的规定数值，确保叶片装配后的夹紧力满足设计要求"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e2","tail":"e3","type":"precedes","weight":9}},{{"head":"e4","tail":"e2","type":"participatesIn","weight":8}},{{"head":"e3","tail":"e5","type":"requires","weight":9}},{{"head":"e3","tail":"e6","type":"specifiedBy","weight":10}}]}}
+{{"entities":[{{"id":"e1","type":"Procedure","text":"检查叶片榫头表面","description":"装配前检查叶片榫头表面质量，确认无毛刺、划伤等缺陷","procedure_type":"installation"}},{{"id":"e2","type":"Procedure","text":"插入叶片榫头至叶盘榫槽","description":"将叶片榫头对准叶盘榫槽缓慢插入的装配工序","procedure_type":"installation"}},{{"id":"e3","type":"Procedure","text":"施加预紧扭矩","description":"使用扭力扳手对叶片施加规定预紧扭矩，确保装配可靠性","procedure_type":"installation"}},{{"id":"e4","type":"Part","text":"叶片榫头","description":"叶片根部的榫形结构，用于嵌入叶盘榫槽实现固定"}},{{"id":"e5","type":"Tool","text":"扭力扳手","description":"可控制输出扭矩大小的专用装配工具"}},{{"id":"e6","type":"Specification","text":"50N·m","description":"预紧扭矩的规定数值，确保叶片装配后的夹紧力满足设计要求","spec_type":"assembly_tolerance"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e2","tail":"e3","type":"precedes","weight":9}},{{"head":"e4","tail":"e2","type":"participatesIn","weight":8}},{{"head":"e3","tail":"e5","type":"requires","weight":9}},{{"head":"e3","tail":"e6","type":"specifiedBy","weight":10}}]}}
 
-Few-shot示例2（英文工序链，实体保留英文）：
+Few-shot示例2（英文工序链，实体保留英文，来自 Installation 章节）：
 文本：First inspect the blade dovetail surface for burrs. Then carefully insert the blade dovetail into the disk slot. Finally, apply 50 N·m torque using a torque wrench.
-{{"entities":[{{"id":"e1","type":"Procedure","text":"Inspect blade dovetail surface","description":"Pre-assembly check of blade dovetail surface for burrs or defects"}},{{"id":"e2","type":"Procedure","text":"Insert blade dovetail into disk slot","description":"Carefully insert blade dovetail into disk slot during assembly"}},{{"id":"e3","type":"Procedure","text":"Apply torque","description":"Apply specified torque using torque wrench to secure blade"}},{{"id":"e4","type":"Part","text":"Blade dovetail","description":"Root of blade with dovetail shape for fitting into disk slot"}},{{"id":"e5","type":"Tool","text":"Torque wrench","description":"Specialized tool for applying precise torque values"}},{{"id":"e6","type":"Specification","text":"50 N·m","description":"Required torque value for blade assembly"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e2","tail":"e3","type":"precedes","weight":9}},{{"head":"e4","tail":"e2","type":"participatesIn","weight":8}},{{"head":"e3","tail":"e5","type":"requires","weight":9}},{{"head":"e3","tail":"e6","type":"specifiedBy","weight":10}}]}}
+{{"entities":[{{"id":"e1","type":"Procedure","text":"Inspect blade dovetail surface","description":"Pre-assembly check of blade dovetail surface for burrs or defects","procedure_type":"installation"}},{{"id":"e2","type":"Procedure","text":"Insert blade dovetail into disk slot","description":"Carefully insert blade dovetail into disk slot during assembly","procedure_type":"installation"}},{{"id":"e3","type":"Procedure","text":"Apply torque","description":"Apply specified torque using torque wrench to secure blade","procedure_type":"installation"}},{{"id":"e4","type":"Part","text":"Blade dovetail","description":"Root of blade with dovetail shape for fitting into disk slot"}},{{"id":"e5","type":"Tool","text":"Torque wrench","description":"Specialized tool for applying precise torque values"}},{{"id":"e6","type":"Specification","text":"50 N·m","description":"Required torque value for blade assembly","spec_type":"assembly_tolerance"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e2","tail":"e3","type":"precedes","weight":9}},{{"head":"e4","tail":"e2","type":"participatesIn","weight":8}},{{"head":"e3","tail":"e5","type":"requires","weight":9}},{{"head":"e3","tail":"e6","type":"specifiedBy","weight":10}}]}}
 
-Few-shot示例3（中文配合关系）：
+Few-shot示例3（中文配合关系，来自 Inspection 章节）：
 文本：高压压气机转子叶片通过榫头-榫槽配合安装在叶盘上，配合间隙为0.05~0.12mm。
-{{"entities":[{{"id":"e1","type":"Part","text":"高压压气机转子叶片","description":"高压压气机级的旋转叶片，通过榫头安装在叶盘上，承受高温高压气流"}},{{"id":"e2","type":"Part","text":"叶盘","description":"压气机转子盘，盘缘设有榫槽用于安装叶片"}},{{"id":"e3","type":"Interface","text":"榫头-榫槽配合","description":"叶片榫头与叶盘榫槽之间的配合界面，是叶片固定的关键接口"}},{{"id":"e4","type":"Specification","text":"0.05~0.12mm","description":"榫头-榫槽配合间隙的允许范围，超出则影响装配质量"}}],"relations":[{{"head":"e1","tail":"e2","type":"matesWith","weight":9}},{{"head":"e3","tail":"e4","type":"specifiedBy","weight":10}}]}}
+{{"entities":[{{"id":"e1","type":"Part","text":"高压压气机转子叶片","description":"高压压气机级的旋转叶片，通过榫头安装在叶盘上，承受高温高压气流"}},{{"id":"e2","type":"Part","text":"叶盘","description":"压气机转子盘，盘缘设有榫槽用于安装叶片"}},{{"id":"e3","type":"Interface","text":"榫头-榫槽配合","description":"叶片榫头与叶盘榫槽之间的配合界面，是叶片固定的关键接口"}},{{"id":"e4","type":"Specification","text":"0.05~0.12mm","description":"榫头-榫槽配合间隙的允许范围，超出则影响装配质量","spec_type":"service_limit"}}],"relations":[{{"head":"e1","tail":"e2","type":"matesWith","weight":9}},{{"head":"e3","tail":"e4","type":"specifiedBy","weight":10}}]}}
 
-Few-shot示例4（中文工具和规范）：
+Few-shot示例4（中文工具和规范，来自 Approved Repairs 章节）：
 文本：使用T-205专用工具锁紧锁片，再用扭力扳手施加规定扭矩，分三次施加不得一次到位。
-{{"entities":[{{"id":"e1","type":"Procedure","text":"锁紧锁片","description":"使用专用工具将锁片锁紧固定的装配工序"}},{{"id":"e2","type":"Procedure","text":"施加规定扭矩","description":"分三次用扭力扳手施加规定扭矩，不得一次到位"}},{{"id":"e3","type":"Tool","text":"T-205专用锁紧工具","description":"型号T-205的专用工具，用于锁紧锁片操作"}},{{"id":"e4","type":"Tool","text":"扭力扳手","description":"可控制输出扭矩大小的专用装配工具"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e1","tail":"e3","type":"requires","weight":10}},{{"head":"e2","tail":"e4","type":"requires","weight":10}}]}}
+{{"entities":[{{"id":"e1","type":"Procedure","text":"锁紧锁片","description":"使用专用工具将锁片锁紧固定的装配工序","procedure_type":"repair"}},{{"id":"e2","type":"Procedure","text":"施加规定扭矩","description":"分三次用扭力扳手施加规定扭矩，不得一次到位","procedure_type":"repair"}},{{"id":"e3","type":"Tool","text":"T-205专用锁紧工具","description":"型号T-205的专用工具，用于锁紧锁片操作"}},{{"id":"e4","type":"Tool","text":"扭力扳手","description":"可控制输出扭矩大小的专用装配工具"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e1","tail":"e3","type":"requires","weight":10}},{{"head":"e2","tail":"e4","type":"requires","weight":10}}]}}
 
-Few-shot示例5（英文含零件编号，实体保留完整编号）：
+Few-shot示例5（英文含零件编号，实体保留完整编号，来自 Removal/Installation 章节）：
 文本：Remove nuts (MS9767-09), washers and bolts (MS9556-07) securing ring halves to brackets. Apply torque 32 to 36 lb.in to mounting nuts.
-{{"entities":[{{"id":"e1","type":"Procedure","text":"Remove nuts, washers and bolts securing ring halves to brackets","description":"Removal procedure for fasteners securing ring halves to mounting brackets"}},{{"id":"e2","type":"Procedure","text":"Apply torque to mounting nuts","description":"Torque application procedure for mounting nuts to specified range"}},{{"id":"e3","type":"Part","text":"Nut MS9767-09","description":"Mounting nut with part number MS9767-09 used to secure ring halves"}},{{"id":"e4","type":"Part","text":"Bolt MS9556-07","description":"Bolt with part number MS9556-07 used to fasten ring halves to brackets"}},{{"id":"e5","type":"Tool","text":"Torque wrench","description":"Calibrated torque wrench for applying specified torque to fasteners"}},{{"id":"e6","type":"Specification","text":"32-36 lb.in","description":"Required torque range for mounting nuts during assembly"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e3","tail":"e1","type":"participatesIn","weight":8}},{{"head":"e4","tail":"e1","type":"participatesIn","weight":8}},{{"head":"e2","tail":"e5","type":"requires","weight":9}},{{"head":"e2","tail":"e6","type":"specifiedBy","weight":10}}]}}
+{{"entities":[{{"id":"e1","type":"Procedure","text":"Remove nuts, washers and bolts securing ring halves to brackets","description":"Removal procedure for fasteners securing ring halves to mounting brackets","procedure_type":"installation"}},{{"id":"e2","type":"Procedure","text":"Apply torque to mounting nuts","description":"Torque application procedure for mounting nuts to specified range","procedure_type":"installation"}},{{"id":"e3","type":"Part","text":"Nut MS9767-09","description":"Mounting nut with part number MS9767-09 used to secure ring halves"}},{{"id":"e4","type":"Part","text":"Bolt MS9556-07","description":"Bolt with part number MS9556-07 used to fasten ring halves to brackets"}},{{"id":"e5","type":"Tool","text":"Torque wrench","description":"Calibrated torque wrench for applying specified torque to fasteners"}},{{"id":"e6","type":"Specification","text":"32-36 lb.in","description":"Required torque range for mounting nuts during assembly","spec_type":"assembly_tolerance"}}],"relations":[{{"head":"e1","tail":"e2","type":"precedes","weight":9}},{{"head":"e3","tail":"e1","type":"participatesIn","weight":8}},{{"head":"e4","tail":"e1","type":"participatesIn","weight":8}},{{"head":"e2","tail":"e5","type":"requires","weight":9}},{{"head":"e2","tail":"e6","type":"specifiedBy","weight":10}}]}}
 
 【实体命名规则】（中英文均适用）
 1. Part/Assembly 名称必须保留完整描述，禁止简化为 "Bolt"、"Nut"、"Washer"、"Ring" 等泛称
@@ -353,6 +353,14 @@ def _write_kg_nodes_batch(session, batch: list) -> None:
                 x.description      = CASE WHEN n.description IS NOT NULL AND n.description <> ''
                                           THEN n.description
                                           ELSE coalesce(x.description, '')
+                                     END,
+                x.procedure_type   = CASE WHEN n.procedure_type IS NOT NULL AND n.procedure_type <> ''
+                                          THEN n.procedure_type
+                                          ELSE coalesce(x.procedure_type, 'unknown')
+                                     END,
+                x.spec_type        = CASE WHEN n.spec_type IS NOT NULL AND n.spec_type <> ''
+                                          THEN n.spec_type
+                                          ELSE coalesce(x.spec_type, 'unknown')
                                      END
         """
         session.run(cypher, nodes=nodes)
@@ -987,6 +995,8 @@ def make_kg_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
                             "aligned_part_id":  entity.get("aligned_part_id"),
                             "alignment_method": entity.get("alignment_method", "unmatched"),
                             "description":      entity.get("description", ""),
+                            "procedure_type":   entity.get("procedure_type", ""),
+                            "spec_type":        entity.get("spec_type", ""),
                         })
 
                     for rel in triple.get("relations", []):
@@ -1107,6 +1117,8 @@ def make_kg_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
                             "bom_part_id":      entity.get("bom_part_id"),
                             "cad_part_name":    entity.get("cad_part_name"),
                             "source":           source,
+                            "procedure_type":   entity.get("procedure_type", ""),
+                            "spec_type":        entity.get("spec_type", ""),
                         })
 
                     for rel in triple.get("relations", []):

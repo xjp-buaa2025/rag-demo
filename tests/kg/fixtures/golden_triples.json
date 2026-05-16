@@ -1,6 +1,6 @@
 [
   {
-    "head": "Remove external lines and components",
+    "head": "Remove external lines and components passing through fireseal mount ring",
     "relation": "precedes",
     "tail": "Remove nuts and bolts joining ring halves at flanges",
     "source_text": "Remove external lines and components passing through fireseal mount ring... Remove nuts and bolts joining ring halves at flanges.",
@@ -10,16 +10,16 @@
   {
     "head": "Remove nuts and bolts joining ring halves at flanges",
     "relation": "precedes",
-    "tail": "Remove nuts, washers and bolts that secure ring halves to brackets",
+    "tail": "Remove nuts, washers and bolts that secure ring halves to brackets on gas generator case",
     "source_text": "Remove nuts and bolts joining ring halves at flanges. Remove nuts, washers and bolts that secure ring halves to brackets on gas generator case.",
     "source_page": "72-30-01 Page 201",
     "confidence": 1.0
   },
   {
-    "head": "nuts and bolts",
-    "relation": "participatesIn",
-    "tail": "Remove nuts and bolts joining ring halves at flanges",
-    "source_text": "Remove nuts and bolts joining ring halves at flanges.",
+    "head": "Remove nuts, washers and bolts that secure ring halves to brackets on gas generator case",
+    "relation": "precedes",
+    "tail": "Remove ring halves",
+    "source_text": "Remove nuts, washers and bolts that secure ring halves to brackets on gas generator case. Remove ring halves.",
     "source_page": "72-30-01 Page 201",
     "confidence": 1.0
   },
@@ -42,201 +42,465 @@
   {
     "head": "Remove the combustion chamber liner",
     "relation": "precedes",
-    "tail": "Remove the nuts (9) and bolts (7) joining the fireseal ring halves",
+    "tail": "Remove the nuts (9) and bolts (7) joining the fireseal ring halves (4 and 10)",
     "source_text": "Remove the combustion chamber liner... Remove the nuts (9) and bolts (7) joining the fireseal ring halves",
     "source_page": "72-30-01 Page 201",
     "confidence": 1.0
   },
   {
-    "head": "Remove the nuts (9) and bolts (7) joining the fireseal ring halves",
+    "head": "Remove nuts, washers and bolts securing ring halves and vane segment strips to gas generator case",
     "relation": "precedes",
-    "tail": "Remove the nuts (6), washers (5) and bolts (1) securing the ring halves",
-    "source_text": "Remove the nuts (9) and bolts (7) joining the fireseal ring halves... Remove the nuts (6), washers (5) and bolts (1) securing the ring halves",
-    "source_page": "72-30-01 Page 201-202",
-    "confidence": 1.0
-  },
-  {
-    "head": "Remove the nuts (6), washers (5) and bolts (1) securing the ring halves",
-    "relation": "precedes",
-    "tail": "Remove the vane segment strips (2)",
-    "source_text": "Remove the nuts (6), washers (5) and bolts (1) securing the ring halves... Remove the vane segment strips (2)",
+    "tail": "Remove vane segment strips and note location",
+    "source_text": "Remove nuts, washers and bolts securing ring halves and vane segment strips to gas generator case. Remove vane segment strips and note location.",
     "source_page": "72-30-01 Page 202-203",
     "confidence": 1.0
   },
   {
-    "head": "Remove the vane segment strips (2)",
+    "head": "Remove vane segment strips and note location",
     "relation": "precedes",
-    "tail": "Remove the fireseal ring halves",
-    "source_text": "Remove the vane segment strips (2) and note the location for reinstallation. Remove the fireseal ring halves (4 and 10).",
+    "tail": "Remove fireseal ring halves",
+    "source_text": "Remove vane segment strips and note location for reinstallation. Remove fireseal ring halves.",
     "source_page": "72-30-01 Page 203",
     "confidence": 1.0
   },
   {
-    "head": "power section",
+    "head": "Position ring halves on gas generator case and secure to mounting brackets",
+    "relation": "precedes",
+    "tail": "Join ring halves at flanges with bolts and self-locking nuts",
+    "source_text": "Position the ring halves on the gas generator case and secure... Join the ring halves at the flanges with bolts and self-locking nuts.",
+    "source_page": "72-30-01 Page 203",
+    "confidence": 1.0
+  },
+  {
+    "head": "Join ring halves at flanges with bolts and self-locking nuts",
+    "relation": "precedes",
+    "tail": "Tighten and torque nuts 32 to 36 lb.in",
+    "source_text": "Join ring halves at flanges... Tighten and torque nuts 32 to 36 lb.in.",
+    "source_page": "72-30-01 Page 203",
+    "confidence": 1.0
+  },
+  {
+    "head": "Remove left-hand spray tube (9)",
+    "relation": "precedes",
+    "tail": "Locate left-hand spray tube on front face of rear fireseal",
+    "source_text": "Remove left-hand spray tube (9)... Locate left-hand spray tube on front face of rear fireseal",
+    "source_page": "72-30-02 Page 201-203",
+    "confidence": 1.0
+  },
+  {
+    "head": "Locate left-hand spray tube on front face of rear fireseal",
+    "relation": "precedes",
+    "tail": "Install tee on tube",
+    "source_text": "Locate left-hand spray tube on front face of rear fireseal... Install tee on tube.",
+    "source_page": "72-30-02 Page 203",
+    "confidence": 1.0
+  },
+  {
+    "head": "Install tee on tube",
+    "relation": "precedes",
+    "tail": "Locate right-hand spray tube on front face",
+    "source_text": "Install tee on tube... Locate right-hand spray tube on front face",
+    "source_page": "72-30-02 Page 203",
+    "confidence": 1.0
+  },
+  {
+    "head": "Remove the engine from the airframe and install in the stand",
+    "relation": "precedes",
+    "tail": "Remove the power section from the gas generator assembly and install in the stand",
+    "source_text": "Remove the engine from the airframe... Remove the power section from the gas generator assembly and install in the stand",
+    "source_page": "72-30-04 Page 202",
+    "confidence": 1.0
+  },
+  {
+    "head": "Remove the power section from the gas generator assembly and install in the stand",
+    "relation": "precedes",
+    "tail": "Remove the compressor turbine disk and blade assembly",
+    "source_text": "Remove the power section... Remove the compressor turbine disk and blade assembly",
+    "source_page": "72-30-04 Page 202",
+    "confidence": 1.0
+  },
+  {
+    "head": "Remove the compressor turbine disk and blade assembly",
+    "relation": "precedes",
+    "tail": "Remove the combustion chamber liner",
+    "source_text": "Remove the compressor turbine disk and blade assembly... Remove the combustion chamber liner",
+    "source_page": "72-30-04 Page 202",
+    "confidence": 1.0
+  },
+  {
+    "head": "Remove the combustion chamber liner",
+    "relation": "precedes",
+    "tail": "Remove the compressor turbine vane ring, shroud housing assembly and exit ducts",
+    "source_text": "Remove the combustion chamber liner... Remove the compressor turbine vane ring, shroud housing assembly and exit ducts",
+    "source_page": "72-30-04 Page 202",
+    "confidence": 1.0
+  },
+  {
+    "head": "Install the compressor turbine vane ring, shroud housing assembly and exit ducts",
+    "relation": "precedes",
+    "tail": "Install the combustion chamber liner",
+    "source_text": "Install the compressor turbine vane ring, shroud housing assembly and exit ducts... Install the combustion chamber liner",
+    "source_page": "72-30-04 Page 202",
+    "confidence": 1.0
+  },
+  {
+    "head": "Install the combustion chamber liner",
+    "relation": "precedes",
+    "tail": "Install the compressor turbine disk and blade assembly",
+    "source_text": "Install the combustion chamber liner... Install the compressor turbine disk and blade assembly",
+    "source_page": "72-30-04 Page 202",
+    "confidence": 1.0
+  },
+  {
+    "head": "Part-off to dimension",
+    "relation": "precedes",
+    "tail": "Machine remaining stub to dimension",
+    "source_text": "part-off to dimension... Face (machine) the remaining stub to dimension",
+    "source_page": "72-30-04 Page 209",
+    "confidence": 1.0
+  },
+  {
+    "head": "Machine remaining stub to dimension",
+    "relation": "precedes",
+    "tail": "Open up clamp assembly",
+    "source_text": "Face (machine) the remaining stub to dimension... Open up the clamp assembly",
+    "source_page": "72-30-04 Page 209",
+    "confidence": 1.0
+  },
+  {
+    "head": "Clean inside gas generator case",
+    "relation": "precedes",
+    "tail": "Install combustion chamber liner",
+    "source_text": "Clean inside gas generator case... Install combustion chamber liner",
+    "source_page": "72-30-04 Page 214",
+    "confidence": 1.0
+  },
+  {
+    "head": "Install combustion chamber liner",
+    "relation": "precedes",
+    "tail": "Install fuel manifold adapter(s)",
+    "source_text": "Install combustion chamber liner... Install fuel manifold adapter(s)",
+    "source_page": "72-30-04 Page 214",
+    "confidence": 1.0
+  },
+  {
+    "head": "Install fuel manifold adapter(s)",
+    "relation": "precedes",
+    "tail": "Install power section",
+    "source_text": "Install fuel manifold adapter(s)... Install power section",
+    "source_page": "72-30-04 Page 214",
+    "confidence": 1.0
+  },
+  {
+    "head": "External lines",
     "relation": "participatesIn",
-    "tail": "Remove the power section",
-    "source_text": "Remove the power section (Ref. 72-00-00, REMOVAL/INSTALLATION).",
+    "tail": "Remove external lines and components passing through fireseal mount ring",
+    "source_text": "Remove external lines and components passing through fireseal mount ring",
     "source_page": "72-30-01 Page 201",
     "confidence": 1.0
   },
   {
-    "head": "apply silicone adhesive",
-    "relation": "precedes",
-    "tail": "Locate the top ring half",
-    "source_text": "apply silicone adhesive (PWC08-002) to the mating surfaces... Locate the top ring half (4) on the gas generator case",
-    "source_page": "72-30-01 Page 203",
-    "confidence": 1.0
-  },
-  {
-    "head": "Locate the top ring half",
-    "relation": "precedes",
-    "tail": "Locate the vane segment strip",
-    "source_text": "Locate the top ring half (4) on the gas generator case (3)... Locate the vane segment strip (2) inside the gas generator case",
-    "source_page": "72-30-01 Page 203",
-    "confidence": 1.0
-  },
-  {
-    "head": "Locate the vane segment strip",
-    "relation": "precedes",
-    "tail": "Locate the bottom ring half",
-    "source_text": "Locate the vane segment strip (2) inside the gas generator case (3)... Locate the bottom ring half (10) on the gas generator case (3)",
-    "source_page": "72-30-01 Page 203",
-    "confidence": 1.0
-  },
-  {
-    "head": "silicone adhesive",
+    "head": "Power section",
     "relation": "participatesIn",
-    "tail": "apply silicone adhesive",
-    "source_text": "apply silicone adhesive (PWC08-002) to the mating surfaces",
-    "source_page": "72-30-01 Page 203",
+    "tail": "Remove the power section from the gas generator assembly and install in the stand",
+    "source_text": "Remove the power section from the gas generator assembly and install in the stand",
+    "source_page": "72-30-04 Page 202",
     "confidence": 1.0
   },
   {
-    "head": "Remove air inlet screen",
-    "relation": "precedes",
-    "tail": "Loosen coupling nut and remove right-hand spray tube",
-    "source_text": "Remove air inlet screen... Loosen coupling nut and remove right-hand spray tube (1) from tee (3).",
+    "head": "Compressor turbine disk and blade assembly",
+    "relation": "participatesIn",
+    "tail": "Remove the compressor turbine disk and blade assembly",
+    "source_text": "Remove the compressor turbine disk and blade assembly",
+    "source_page": "72-30-04 Page 202",
+    "confidence": 1.0
+  },
+  {
+    "head": "Combustion chamber liner",
+    "relation": "participatesIn",
+    "tail": "Remove the combustion chamber liner",
+    "source_text": "Remove the combustion chamber liner",
+    "source_page": "72-30-04 Page 202",
+    "confidence": 1.0
+  },
+  {
+    "head": "Left-hand spray tube (9)",
+    "relation": "participatesIn",
+    "tail": "Remove left-hand spray tube (9)",
+    "source_text": "Remove left-hand spray tube (9) from front face of rear mount ring",
     "source_page": "72-30-02 Page 201",
     "confidence": 1.0
   },
   {
-    "head": ".SEAL, AIR",
-    "relation": "isPartOf",
-    "tail": "ROTOR BALANCING ASSEMBLY, COMPRESSOR",
-    "source_text": "ROTOR BALANCING ASSEMBLY, COMPRESSOR... .SEAL, AIR",
-    "source_page": "72-30-05 Figure 2 Page 3",
+    "head": "Vane Segment Strip 2",
+    "relation": "participatesIn",
+    "tail": "Remove vane segment strips and note location",
+    "source_text": "Remove the vane segment strips (2) and note the location for reinstallation.",
+    "source_page": "72-30-01 Page 203",
     "confidence": 1.0
   },
   {
-    "head": ".BEARING OPTION (IC)",
+    "head": "3030349 SEAL ASSEMBLY,AIR, COMPRESSOR REAR STATOR PRE-SB13032",
     "relation": "isPartOf",
-    "tail": "ROTOR BALANCING ASSEMBLY, COMPRESSOR",
-    "source_text": "ROTOR BALANCING ASSEMBLY, COMPRESSOR... .BEARING OPTION (IC)",
-    "source_page": "72-30-05 Figure 2 Page 4",
+    "tail": "3034344 COMPRESSOR ROTOR INSTALLATION",
+    "source_text": "COMPRESSOR ROTOR INSTALLATION... .SEAL ASSEMBLY,AIR, COMPRESSOR REAR STATOR PRE-SB13032",
+    "source_page": "BOM Figure 2",
     "confidence": 1.0
   },
   {
-    "head": "..BEARING, ROLLER, FLANGED NO.2",
+    "head": "3103074-01 SEAL ASSEMBLY, AIR, COMPRESSOR REAR STATOR POST-SB13032",
     "relation": "isPartOf",
-    "tail": ".BEARING OPTION (IC)",
-    "source_text": ".BEARING OPTION (IC)... ..BEARING, ROLLER, FLANGED NO.2",
-    "source_page": "72-30-05 Figure 2 Page 4",
+    "tail": "3034344 COMPRESSOR ROTOR INSTALLATION",
+    "source_text": "COMPRESSOR ROTOR INSTALLATION... .SEAL ASSEMBLY, AIR, COMPRESSOR REAR STATOR POST-SB13032",
+    "source_page": "BOM Figure 2",
     "confidence": 1.0
   },
   {
-    "head": ".SHAFT, STUB, COMPRESSOR",
+    "head": "3028004 BEARING, ROLLER, FLANGED NO.2",
     "relation": "isPartOf",
-    "tail": "ROTOR BALANCING ASSEMBLY, COMPRESSOR",
-    "source_text": "ROTOR BALANCING ASSEMBLY, COMPRESSOR... .SHAFT, STUB, COMPRESSOR",
-    "source_page": "72-30-05 Figure 2 Page 4",
+    "tail": "3006146 TWO-WAY INTRCHG WITH P/N 3032208 (IC)CONSISTS OF: .BEARING, ROLLER, FLANGED NO.2",
+    "source_text": "BEARING OPTION (IC)... .BEARING, ROLLER, FLANGED NO.2",
+    "source_page": "BOM Figure 2",
     "confidence": 1.0
   },
   {
-    "head": ".IMPELLER, CENTRIFUGAL",
+    "head": "3102455-01 BEARING,ROLLER,FLANGED NO.2",
     "relation": "isPartOf",
-    "tail": "ROTOR BALANCING ASSEMBLY, COMPRESSOR",
-    "source_text": "ROTOR BALANCING ASSEMBLY, COMPRESSOR... .IMPELLER, CENTRIFUGAL",
-    "source_page": "72-30-05 Figure 2 Page 5",
+    "tail": "3006146 TWO-WAY INTRCHG WITH P/N 3032208 (IC)CONSISTS OF: .BEARING, ROLLER, FLANGED NO.2",
+    "source_text": "BEARING OPTION (IC)... .BEARING, ROLLER, FLANGED NO.2 ATTACHING PARTS",
+    "source_page": "BOM Figure 2",
     "confidence": 1.0
   },
   {
-    "head": "..HOUSING IMPELLER, COMPRESSOR STATOR",
+    "head": "3102336-01 SHAFT,STUB,COMPRESSOR",
     "relation": "isPartOf",
-    "tail": ".COMPRESSOR STATOR ASSEMBLY, THIRD-STAGE",
-    "source_text": ".COMPRESSOR STATOR ASSEMBLY, THIRD-STAGE... ..HOUSING IMPELLER, COMPRESSOR STATOR",
-    "source_page": "72-30-05 Figure 2 Page 5",
+    "tail": "3106368-01 SEAL,AIR,_COMPRESSOR ROTOR",
+    "source_text": "SEAL,AIR, COMPRESSOR ROTOR... .SHAFT,STUB,COMPRESSOR",
+    "source_page": "BOM Figure 2",
     "confidence": 1.0
   },
   {
-    "head": "second-stage stator assembly",
+    "head": "3017463 IMPELLER,CENTRIFUGAL",
+    "relation": "isPartOf",
+    "tail": "ROOT",
+    "source_text": "IMPELLER,CENTRIFUGAL (top-level assembly)",
+    "source_page": "BOM Figure 2",
+    "confidence": 1.0
+  },
+  {
+    "head": "3036793 IMPELLER,CENTRIFUGAL",
+    "relation": "isPartOf",
+    "tail": "3036098 IMPELLER,CENTRIFUGAL",
+    "source_text": "IMPELLER,CENTRIFUGAL... .IMPELLER,CENTRIFUGAL",
+    "source_page": "BOM Figure 2",
+    "confidence": 1.0
+  },
+  {
+    "head": "3102563-01 COMPRESSOR STATOR ASSEMBLY, THIRD-STAGE PRE-SB13055 INTRCHG WITH P/N 3106863-01",
+    "relation": "isPartOf",
+    "tail": "ROOT",
+    "source_text": "COMPRESSOR STATOR ASSEMBLY, THIRD-STAGE (top-level assembly)",
+    "source_page": "BOM Figure 2",
+    "confidence": 1.0
+  },
+  {
+    "head": "3106863-01 COMPRESSOR STATOR ASSEMBLY,",
+    "relation": "isPartOf",
+    "tail": "3102563-01 COMPRESSOR STATOR ASSEMBLY, THIRD-STAGE PRE-SB13055 INTRCHG WITH P/N 3106863-01",
+    "source_text": "COMPRESSOR STATOR ASSEMBLY, THIRD-STAGE... .COMPRESSOR STATOR ASSEMBLY",
+    "source_page": "BOM Figure 2",
+    "confidence": 1.0
+  },
+  {
+    "head": "3102462-01 HOUSING IMPELLER, COMPRESSOR",
+    "relation": "isPartOf",
+    "tail": "ROOT",
+    "source_text": "HOUSING IMPELLER, COMPRESSOR (top-level assembly)",
+    "source_page": "BOM Figure 2",
+    "confidence": 1.0
+  },
+  {
+    "head": "3109209-01 BEARING,BALL",
+    "relation": "isPartOf",
+    "tail": "3119806-01 BEARING OPTION (IC)",
+    "source_text": "BEARING OPTION (IC)... .BEARING,BALL",
+    "source_page": "BOM Figure 2",
+    "confidence": 1.0
+  },
+  {
+    "head": "3112117-01 BEARING,BALL TWO-WAY INTRCHG WITH P/N 3112117-02 BEARING OPTION (IC)",
+    "relation": "isPartOf",
+    "tail": "3119806-01 BEARING OPTION (IC)",
+    "source_text": "BEARING OPTION (IC)... .BEARING,BALL TWO-WAY INTRCHG WITH P/N 3112117-02",
+    "source_page": "BOM Figure 2",
+    "confidence": 1.0
+  },
+  {
+    "head": "3102464-01 ROTOR BALANCING ASSEMBLY, COMPRESSOR SEE FIG.1FOR NHA",
+    "relation": "isPartOf",
+    "tail": "ROOT",
+    "source_text": "ROTOR BALANCING ASSEMBLY, COMPRESSOR (top-level assembly)",
+    "source_page": "BOM Figure 1",
+    "confidence": 1.0
+  },
+  {
+    "head": "3028960 SHROUD,COMPRESSOR STATOR",
+    "relation": "isPartOf",
+    "tail": "3119072-01 POST-SB13055 PRE-SB13241 TWO-WAY INTRCHG WITH P/N 3119072-01 COMPRESSORSTATORASSEMBLY, SECOND-STAGE P0ST-SB13241",
+    "source_text": "COMPRESSOR STATOR ASSEMBLY, SECOND-STAGE... .SHROUD,COMPRESSOR STATOR",
+    "source_page": "BOM Figure 2",
+    "confidence": 1.0
+  },
+  {
+    "head": "3034313 DISK, COMPRESSOR ROTOR,THIRD-",
+    "relation": "isPartOf",
+    "tail": "ROOT",
+    "source_text": "DISK, COMPRESSOR ROTOR, THIRD-STAGE (top-level part)",
+    "source_page": "BOM Figure 1",
+    "confidence": 1.0
+  },
+  {
+    "head": "Center fireseal mount ring",
     "relation": "matesWith",
-    "tail": "first- and third-stage stator assemblies",
-    "source_text": "the second-stage stator assembly is retained between flanges in the first- and third-stage stator assemblies.",
-    "source_page": "72-30-05 Page 1",
+    "tail": "Gas generator case",
+    "source_text": "the complete ring which is fastened to the gas generator case by mounting brackets",
+    "source_page": "72-30-01 Page 1",
     "confidence": 1.0
   },
   {
-    "head": "first-stage stator assembly",
+    "head": "Upper half of center fireseal mount ring",
     "relation": "matesWith",
-    "tail": "flange on the front face of the compressor inlet case",
-    "source_text": "first-stage stator assembly is retained within a flange on the front face of the compressor inlet case.",
-    "source_page": "72-30-05 Page 1",
+    "tail": "Lower half of center fireseal mount ring",
+    "source_text": "The upper and lower halves are bolted together to form a complete ring",
+    "source_page": "72-30-01 Page 1",
     "confidence": 1.0
   },
   {
-    "head": "inner race of the No. 2 bearing",
+    "head": "Coupling shaft",
     "relation": "matesWith",
-    "tail": "compressor rotor air seal",
-    "source_text": "The inner race of the No. 2 bearing is interposed between compressor rotor air seal and the compressor turbine rotor air seal",
-    "source_page": "72-30-05 Page 3/4",
-    "confidence": 0.8
-  },
-  {
-    "head": "flange of the No. 2 bearing outer race",
-    "relation": "matesWith",
-    "tail": "centerbore of the gas generator case",
-    "source_text": "The flange of the No. 2 bearing outer race is secured to the centerbore of the gas generator case by four bolts",
-    "source_page": "72-30-05 Page 3/4",
+    "tail": "Rear hub",
+    "source_text": "a coupling shaft attached to the rear hub of the rotor",
+    "source_page": "72-30-00 Page 3",
     "confidence": 1.0
   },
   {
-    "head": "apply silicone adhesive",
+    "head": "Coupling shaft",
+    "relation": "matesWith",
+    "tail": "Accessory gearbox",
+    "source_text": "the compressor turbine drives the accessory gearbox through a coupling shaft",
+    "source_page": "72-30-00 Page 3",
+    "confidence": 0.9
+  },
+  {
+    "head": "Rear hub",
+    "relation": "matesWith",
+    "tail": "First-stage compressor disk",
+    "source_text": "The hub is an extension of the first-stage compressor disk.",
+    "source_page": "72-30-00 Page 3",
+    "confidence": 1.0
+  },
+  {
+    "head": "Gas generator assembly",
+    "relation": "matesWith",
+    "tail": "Flange interface at forward end of gas generator casing",
+    "source_text": "A flange at the front end of the gas generator casing forms the attachment point for the power section",
+    "source_page": "72-30-00 Page 1",
+    "confidence": 1.0
+  },
+  {
+    "head": "Gas generator assembly",
+    "relation": "matesWith",
+    "tail": "Studs interface at rear of inlet case",
+    "source_text": "studs at the rear of the inlet case carry the accessory gearbox",
+    "source_page": "72-30-00 Page 1",
+    "confidence": 1.0
+  },
+  {
+    "head": "Apply silicone adhesive to the mating surfaces",
     "relation": "requires",
-    "tail": "PWC08-002",
+    "tail": "silicone adhesive",
     "source_text": "apply silicone adhesive (PWC08-002) to the mating surfaces",
     "source_page": "72-30-01 Page 203",
     "confidence": 1.0
   },
   {
-    "head": "Clean surfaces to be bonded",
+    "head": "Machine remaining stub to dimension",
     "relation": "requires",
-    "tail": "alcohol (PWC11-002) or (PWC11-014)",
-    "source_text": "Clean surfaces to be bonded with alcohol (PWC11-002) or (PWC11-014).",
-    "source_page": "72-30-01 Page 204",
-    "confidence": 1.0
-  },
-  {
-    "head": "Face (machine) the remaining stub",
-    "relation": "requires",
-    "tail": "cutter (PWC32483)",
-    "source_text": "Face (machine) the remaining stub to dimension 1.290 ± 1.280 inch using a cutter (PWC32483)",
+    "tail": "Cutter PWC32483",
+    "source_text": "Face (machine) the remaining stub to dimension using a cutter (PWC32483)",
     "source_page": "72-30-04 Page 209",
     "confidence": 1.0
   },
   {
-    "head": "Face (machine) the remaining stub",
-    "relation": "specifiedBy",
-    "tail": "dimension 1.290 ± 1.280 inch",
-    "source_text": "Face (machine) the remaining stub to dimension 1.290 ± 1.280 inch",
+    "head": "Machine remaining stub to dimension",
+    "relation": "requires",
+    "tail": "Gage PWC32484",
+    "source_text": "Face (machine) the remaining stub to dimension using a cutter (PWC32483) with a gage (PWC32484)",
     "source_page": "72-30-04 Page 209",
-    "confidence": 0.8
+    "confidence": 1.0
   },
   {
-    "head": "Tighten the washers",
+    "head": "Clean the exterior of the spray tubes",
+    "relation": "requires",
+    "tail": "Soft cloth",
+    "source_text": "Clean the exterior of the spray tubes with a soft cloth moistened in solvent",
+    "source_page": "72-30-02 Page 203",
+    "confidence": 1.0
+  },
+  {
+    "head": "Position ring halves on gas generator case and secure to mounting brackets",
+    "relation": "requires",
+    "tail": "Bolt 1",
+    "source_text": "secure with bolts (1) inserted from the inside",
+    "source_page": "72-30-01 Page 203",
+    "confidence": 1.0
+  },
+  {
+    "head": "Clean inside gas generator case",
+    "relation": "requires",
+    "tail": "Suction cleaner",
+    "source_text": "Clean inside gas generator case with suitable suction cleaner.",
+    "source_page": "72-30-04 Page 214",
+    "confidence": 1.0
+  },
+  {
+    "head": "Tighten and torque nuts 32 to 36 lb.in",
     "relation": "specifiedBy",
-    "tail": "torque 45 to 55 lb.in.",
+    "tail": "32 to 36 lb.in",
+    "source_text": "Tighten and torque the nuts 32 to 36 lb.in.",
+    "source_page": "72-30-01 Page 203",
+    "confidence": 1.0
+  },
+  {
+    "head": "Nut 6",
+    "relation": "specifiedBy",
+    "tail": "45 to 55 lb.in",
     "source_text": "Tighten the washers (5) and nuts (6) and torque 45 to 55 lb.in.",
     "source_page": "72-30-01 Page 203",
+    "confidence": 1.0
+  },
+  {
+    "head": "Locate left-hand spray tube on front face of rear fireseal",
+    "relation": "specifiedBy",
+    "tail": "35 to 40 lb.in",
+    "source_text": "Tighten nuts and torque 35 to 40 lb.in.",
+    "source_page": "72-30-02 Page 203",
+    "confidence": 1.0
+  },
+  {
+    "head": "Tighten coupling nuts of both spray tubes",
+    "relation": "specifiedBy",
+    "tail": "270 to 300 lb.in",
+    "source_text": "Tighten coupling nuts of both spray tubes to 270 to 300 lb.in",
+    "source_page": "72-30-02 Page 203",
+    "confidence": 1.0
+  },
+  {
+    "head": "Allow sealant to cure",
+    "relation": "specifiedBy",
+    "tail": "72 hours",
+    "source_text": "Allow the sealant to cure at room temperature for approximately 72 hours",
+    "source_page": "72-30-01 Page 206",
     "confidence": 1.0
   }
 ]

@@ -287,3 +287,313 @@ def retrieve(body: RetrieveRequest, state: AppState = Depends(get_state)):
         for c in top
     ]
     return RetrieveResponse(chunks=chunks)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# /retrieve_ablation —— 主实验消融端点（支持 path_mask）
+# ═════════════════════════════════════════════════════════════════════════════
+
+class AblationRequest(BaseModel):
+    query: str
+    top_k: int = Field(default=5, ge=1, le=50)
+    paths: List[str] = Field(default=["dense", "bm25", "clip", "kg"])
+    use_rerank: bool = True
+    recall_n: int = Field(default=20, ge=1, le=100)
+    fusion_k: int = Field(default=60, ge=1, le=200)
+
+
+_KG_INDEX = {"names": None, "labels": None, "vectors": None, "loaded": False}
+
+
+def _ensure_kg_index(neo4j_cfg: dict, embedding_mgr):
+    """懒加载：从 Neo4j 取全部 entity 名，用 BGE-M3 编码缓存"""
+    if _KG_INDEX["loaded"]:
+        return
+    try:
+        from neo4j import GraphDatabase
+        import numpy as np
+        drv = GraphDatabase.driver(
+            neo4j_cfg.get("uri", "bolt://localhost:7687"),
+            auth=(neo4j_cfg.get("user", "neo4j"),
+                  neo4j_cfg.get("pass", neo4j_cfg.get("password", "neo4j"))),
+        )
+        rows = []
+        with drv.session() as s:
+            cypher = (
+                "MATCH (n) WHERE n.kg_name IS NOT NULL "
+                "RETURN n.kg_name AS name, labels(n)[0] AS lbl, "
+                "coalesce(n.description, n.part_name, '') AS desc"
+            )
+            for r in s.run(cypher).data():
+                if r.get("name"):
+                    rows.append(r)
+        drv.close()
+        if not rows:
+            return
+        # 编码文本：name + 截断的 description
+        texts = []
+        for r in rows:
+            n = r["name"]
+            d = (r.get("desc") or "")[:60]
+            texts.append(f"{n} {d}".strip() if d else n)
+        # BGE-M3 批量编码（已 L2 normalize）
+        vecs = embedding_mgr.encode_text(texts)
+        _KG_INDEX["names"] = [r["name"] for r in rows]
+        _KG_INDEX["labels"] = [r["lbl"] for r in rows]
+        _KG_INDEX["vectors"] = np.asarray(vecs, dtype="float32")
+        _KG_INDEX["loaded"] = True
+        print(f"[kg_index] BGE-M3 ANN index built: {len(rows)} entities, "
+              f"vec shape={_KG_INDEX['vectors'].shape}")
+    except Exception as e:
+        import traceback
+        print(f"[kg_index] build err: {e}")
+        traceback.print_exc()
+
+
+def kg_search_neo4j(neo4j_cfg: dict, query: str, n: int, embedding_mgr=None) -> List[dict]:
+    """
+    KG 检索（v2）：BGE-M3 语义 ANN 召回锚点 entity → 1 跳邻域。
+    embedding_mgr=None 时降级回旧的关键词 CONTAINS 匹配。
+    """
+    if not neo4j_cfg:
+        return []
+    try:
+        from neo4j import GraphDatabase
+    except ImportError:
+        return []
+
+    # ── ANN 路径（推荐） ────────────────────────────────────
+    if embedding_mgr is not None:
+        try:
+            import numpy as np
+            _ensure_kg_index(neo4j_cfg, embedding_mgr)
+            if _KG_INDEX["loaded"]:
+                qvec = embedding_mgr.encode_text([query])[0]
+                qvec = np.asarray(qvec, dtype="float32")
+                sims = _KG_INDEX["vectors"] @ qvec  # cosine（已 L2 norm）
+                top_idx = np.argsort(-sims)[:n]
+                top_names = [_KG_INDEX["names"][i] for i in top_idx]
+                top_labels = [_KG_INDEX["labels"][i] for i in top_idx]
+                top_scores = [float(sims[i]) for i in top_idx]
+
+                # 拉 1 跳邻居
+                cypher = """
+                UNWIND $names AS nm
+                MATCH (n {kg_name: nm})
+                OPTIONAL MATCH (n)-[r]->(neighbor)
+                RETURN n.kg_name AS name, labels(n)[0] AS lbl,
+                       collect(DISTINCT {rel: type(r), tail: neighbor.kg_name})[0..6] AS edges
+                """
+                drv = GraphDatabase.driver(
+                    neo4j_cfg.get("uri", "bolt://localhost:7687"),
+                    auth=(neo4j_cfg.get("user", "neo4j"),
+                          neo4j_cfg.get("pass", neo4j_cfg.get("password", "neo4j"))),
+                )
+                rows_by_name = {}
+                with drv.session() as s:
+                    for row in s.run(cypher, names=top_names).data():
+                        rows_by_name[row["name"]] = row
+                drv.close()
+
+                chunks = []
+                for nm, lbl, score in zip(top_names, top_labels, top_scores):
+                    row = rows_by_name.get(nm, {})
+                    edges = row.get("edges") or []
+                    edge_lines = []
+                    for e in edges:
+                        if e and e.get("rel") and e.get("tail"):
+                            edge_lines.append(f"  -[{e['rel']}]→ {e['tail']}")
+                    edge_str = "\n".join(edge_lines) if edge_lines else "  (no outgoing edges)"
+                    text = f"[KG entity: {nm} ({lbl})]\n{edge_str}"
+                    chunks.append({
+                        "id": f"kg::{nm[:80]}",
+                        "text": text,
+                        "source": f"KG-{lbl}",
+                        "page": 0,
+                        "distance": score,  # 余弦相似度
+                        "chunk_type": "kg_subgraph",
+                        "image_path": "",
+                        "image_url": None,
+                        "rerank_score": None,
+                        "kg_anchor": nm,
+                        "kg_ann_score": score,
+                    })
+                return chunks
+        except Exception as e:
+            import traceback
+            print(f"[kg_search ANN] err: {e}, fallback to keyword")
+            traceback.print_exc()
+
+    # ── 关键词降级（向后兼容） ─────────────────────────────
+    import re
+    en_tokens = [t for t in re.findall(r"[A-Za-z][A-Za-z0-9_/\-]*", query) if len(t) >= 3]
+    anchors = en_tokens[:4]
+    if not anchors:
+        return []
+    cypher = """
+    UNWIND $anchors AS kw
+    MATCH (n) WHERE n.kg_name CONTAINS kw
+    WITH n, kw LIMIT 30
+    OPTIONAL MATCH (n)-[r]->(neighbor)
+    RETURN n.kg_name AS name, labels(n)[0] AS lbl,
+           collect(DISTINCT {rel: type(r), tail: neighbor.kg_name})[0..6] AS edges,
+           kw AS hit_keyword
+    LIMIT $n
+    """
+    chunks = []
+    try:
+        drv = GraphDatabase.driver(
+            neo4j_cfg.get("uri", "bolt://localhost:7687"),
+            auth=(neo4j_cfg.get("user", "neo4j"),
+                  neo4j_cfg.get("pass", neo4j_cfg.get("password", "neo4j"))),
+        )
+        with drv.session() as s:
+            for row in s.run(cypher, anchors=anchors, n=n).data():
+                name = row.get("name", "")
+                lbl = row.get("lbl", "")
+                edges = row.get("edges") or []
+                edge_lines = []
+                for e in edges:
+                    if e and e.get("rel") and e.get("tail"):
+                        edge_lines.append(f"  -[{e['rel']}]→ {e['tail']}")
+                edge_str = "\n".join(edge_lines) if edge_lines else "  (no outgoing edges)"
+                text = f"[KG entity: {name} ({lbl})]\n{edge_str}"
+                chunks.append({
+                    "id": f"kg::{name[:80]}",
+                    "text": text,
+                    "source": f"KG-{lbl}",
+                    "page": 0,
+                    "distance": 1.0,
+                    "chunk_type": "kg_subgraph",
+                    "image_path": "",
+                    "image_url": None,
+                    "rerank_score": None,
+                    "kg_anchor": name,
+                })
+        drv.close()
+    except Exception as e:
+        print(f"[retrieve_ablation] KG search error: {e}")
+    return chunks
+
+
+@router.post("/retrieve_ablation", response_model=RetrieveResponse,
+             summary="消融实验端点（按 path_mask 启用各路径）")
+def retrieve_ablation(body: AblationRequest, state: AppState = Depends(get_state)):
+    """
+    支持论文§4.6 消融的 4 路检索：
+      paths=['dense']                  -> Dense-only
+      paths=['bm25']                   -> BM25-only
+      paths=['dense','bm25']           -> Hybrid (RRF)
+      paths=['dense','bm25','clip']    -> +CLIP
+      paths=['dense','bm25','clip','kg'] -> MHRAG full
+    """
+    total = state.get_doc_count()
+    if total == 0:
+        return RetrieveResponse(chunks=[])
+
+    paths = set(body.paths or [])
+    n = min(body.recall_n, total)
+
+    dense_results = []
+    bm25_results = []
+    clip_results = []
+    kg_results = []
+
+    if "dense" in paths:
+        try:
+            dense_results = qdrant_search_text(state.qdrant_client, state.embedding_mgr, body.query, n)
+        except Exception as e:
+            print(f"[retrieve_ablation] dense err: {e}")
+
+    if "bm25" in paths:
+        try:
+            bm25_results = bm25_search_text(state.bm25_manager, body.query, n * 2)
+        except Exception as e:
+            print(f"[retrieve_ablation] bm25 err: {e}")
+
+    if "clip" in paths:
+        try:
+            clip_results = qdrant_search_image(state.qdrant_client, state.embedding_mgr, body.query,
+                                                 max(1, n // 2))
+        except Exception as e:
+            print(f"[retrieve_ablation] clip err: {e}")
+
+    if "kg" in paths:
+        neo4j_cfg = {
+            "uri": os.getenv("NEO4J_URI", "bolt://localhost:7687"),
+            "user": os.getenv("NEO4J_USER", "neo4j"),
+            "pass": os.getenv("NEO4J_PASS", "password"),
+        }
+        kg_results = kg_search_neo4j(
+            neo4j_cfg, body.query, max(1, n // 2),
+            embedding_mgr=state.embedding_mgr,
+        )
+
+    # 融合 dense + bm25
+    if "dense" in paths and "bm25" in paths and dense_results and bm25_results:
+        text_fused = reciprocal_rank_fusion(dense_results, bm25_results, k=body.fusion_k)
+    elif "dense" in paths:
+        text_fused = dense_results
+    elif "bm25" in paths:
+        # 单 BM25：从 Qdrant 拿 payload
+        ids = [b["id"] for b in bm25_results[:n]]
+        text_fused = []
+        if ids:
+            try:
+                points = state.qdrant_client.retrieve(
+                    collection_name=COLLECTION_NAME, ids=ids, with_payload=True,
+                )
+                id_map = {str(p.id): p for p in points}
+                for b in bm25_results[:n]:
+                    p = id_map.get(b["id"])
+                    if p:
+                        payload = p.payload or {}
+                        text_fused.append({
+                            "id": str(p.id),
+                            "text": payload.get("text", ""),
+                            "source": payload.get("source", "未知"),
+                            "page": payload.get("page", 0),
+                            "distance": b["bm25_score"],
+                            "chunk_type": payload.get("chunk_type", "text"),
+                            "image_path": payload.get("image_path", ""),
+                            "image_url": _image_url(payload.get("image_path", "")),
+                            "rerank_score": None,
+                        })
+            except Exception as e:
+                print(f"[retrieve_ablation] bm25 payload err: {e}")
+    else:
+        text_fused = []
+
+    # 合并 text_fused + clip + kg
+    all_results = []
+    seen_ids = set()
+    for c in text_fused + clip_results + kg_results:
+        cid = c["id"]
+        if cid not in seen_ids:
+            seen_ids.add(cid)
+            all_results.append(c)
+
+    if body.use_rerank and state.reranker is not None and all_results:
+        try:
+            pairs = [(body.query, c["text"]) for c in all_results]
+            scores = state.reranker.predict(pairs)
+            for c, s in zip(all_results, scores):
+                c["rerank_score"] = float(s)
+            all_results = sorted(all_results, key=lambda c: c["rerank_score"], reverse=True)
+        except Exception as e:
+            print(f"[retrieve_ablation] rerank err: {e}")
+
+    top = all_results[:body.top_k]
+    chunks = [
+        ChunkResult(
+            text=(c.get("text") or "")[:2000],
+            source=c.get("source") or "未知",
+            page=c.get("page", 0),
+            distance=c.get("distance", 0.0),
+            rerank_score=c.get("rerank_score"),
+            chunk_type=c.get("chunk_type", "text"),
+            image_url=c.get("image_url"),
+        )
+        for c in top
+    ]
+    return RetrieveResponse(chunks=chunks)

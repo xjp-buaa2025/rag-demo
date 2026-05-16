@@ -1,0 +1,582 @@
+% ═════════════════════════════════════════════════════════════════════════════
+%  第三章  方法
+% ═════════════════════════════════════════════════════════════════════════════
+\section{方法}
+\label{sec:method}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{系统总体架构}
+\label{sec:overview}
+
+本文提出的面向航空发动机装配的多源混合检索增强生成框架整体分为
+\textbf{离线知识构建}和\textbf{在线问答推理}两个阶段。
+
+\textbf{离线阶段}分为文本索引构建与三源知识图谱构建两条流水线：
+前者处理非结构化的装配技术手册，经文档解析、语义切块和文本向量化后存入向量数据库；
+后者联合处理 BOM、CAD 模型与维修手册文本，
+通过三源知识图谱构建方法将零件结构关系、装配工序和配合约束等知识写入图数据库。
+文本索引与图谱知识相互补充，共同构成系统的统一知识底座。
+
+\textbf{在线阶段}：用户输入自然语言问题后，系统首先通过大语言模型（LLM）进行
+多查询扩展，再并行启动三条检索路径——密集向量检索、BM25稀疏检索、
+知识图谱检索——通过互惠排名融合（RRF）将三路结果合并为
+统一排名，经交叉编码器精排后送入LLM完成答案生成，
+最终以服务器推送事件（SSE）流式返回给用户。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig1_architecture.pdf}
+  \caption{MHRAG 三路检索增强生成总体架构。系统由文本密集检索、BM25 稀疏检索与 KG 子图检索三条路径组成。}
+  \label{fig:arch}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{三源知识图谱构建}
+\label{sec:kg}
+
+航空发动机装配领域的知识分散于三类本质不同的数据源：
+BOM（物料清单）表提供零件的权威身份信息，是图谱实体的注册基础；
+三维CAD模型以确定性几何数据编码装配层级关系与配合约束；
+维修手册以长文档形式承载工序逻辑、工具要求与技术规范等过程性知识。
+三类数据源的信息边界清晰互补，单一来源均无法构成完整知识底座。
+本文为三类来源设计了多智能体协同抽取流水线，
+最终汇入统一的Neo4j图数据库，
+形成完整的装配知识图谱~$\mathcal{G} = (\mathcal{V}, \mathcal{E})$。
+
+% ·············································································
+\subsubsection{知识图谱本体设计}
+\label{sec:ontology}
+
+为规范图谱的语义边界，本文结合三源数据特点与航空发动机装配领域需求，
+设计了包含7类实体和9类关系的本体模式（Schema），如表~\ref{tab:ontology}~所示。
+相较于Liu等人\cite{liu2023avkg}在航空装配文本KG中设计的5类实体和3类关系，
+以及Shi等人\cite{shi2022arkg}面向装配资源复用的"功能-结构-工序-资源"本体框架，
+本文本体的核心扩展在于：（1）从BOM表引入零件权威身份注册机制，
+（2）从CAD解析引入几何约束节点（\textit{GeoConstraint}），
+（3）设计跨源实体对齐规则，将三类来源数据统一归并到相同的实体节点之上。
+
+\begin{table}[htbp]
+  \centering
+  \caption{航空发动机装配知识图谱本体模式（Schema）}
+  \label{tab:ontology}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabularx}{\linewidth}{llX}
+    \toprule
+    \textbf{类别} & \textbf{名称（Label）} & \textbf{核心属性 / 说明 / 主要数据来源} \\
+    \midrule
+    \multirow{7}{*}{\textbf{实体节点}}
+      & \textit{Part}（零件）
+        & \texttt{part\_number, name, material, quantity}；
+          最小不可拆解的物理单元；BOM + CAD + 手册 \\
+      & \textit{Assembly}（组件）
+        & \texttt{name, level, function}；
+          由多个零件或子组件构成的逻辑/物理集合；BOM + CAD \\
+      & \textit{Procedure}（工序）
+        & \texttt{step\_id, description, sequence\_no}；
+          描述"如何做"的具体动作步骤；维修手册 \\
+      & \textit{Tool}（工具）
+        & \texttt{tool\_id, name, type, spec}；
+          执行工序所需的辅助设备、量具或夹具；维修手册 \\
+      & \textit{Specification}（技术规范）
+        & \texttt{type, value, unit}；
+          定量技术要求，如扭矩"50\,N$\cdot$m"、间隙"0.05\textasciitilde0.12\,mm"；手册 + CAD(PMI) \\
+      & \textit{Interface}（装配接口）
+        & \texttt{interface\_type}；
+          零件间发生相互作用的物理表面或连接位点；CAD配合约束 \\
+      & \textit{GeoConstraint}（几何约束）
+        & \texttt{constraint\_type}；
+          纯数学层面的位置关系（同轴、贴合、平行等）；CAD原始数据 \\
+    \midrule
+    \multirow{9}{*}{\textbf{关系边}}
+      & \textit{isPartOf}
+        & 零件/组件 $\rightarrow$ 组件；组成结构（父子关系）；高（BOM主导） \\
+      & \textit{precedes}
+        & 工序A $\rightarrow$ 工序B；时间/逻辑上的先后顺序；极高（手册核心逻辑） \\
+      & \textit{participatesIn}
+        & 零件 $\rightarrow$ 工序；哪个零件在哪一步被安装/操作；中（手册+BOM对齐） \\
+      & \textit{requires}
+        & 工序 $\rightarrow$ 工具；完成该步骤必须使用的工具；中（手册） \\
+      & \textit{specifiedBy}
+        & 工序/接口 $\rightarrow$ 技术规范；某动作或接口须遵循的定量标准；中（手册+PMI） \\
+      & \textit{matesWith}
+        & 零件A $\rightarrow$ 零件B；物理层面的接触或配合；高（CAD约束） \\
+      & \textit{adjacentTo}
+        & 零件A $\rightarrow$ 零件B；空间上的邻近关系（未必接触）；低（CAD空间分析） \\
+      & \textit{hasInterface}
+        & 零件 $\rightarrow$ 装配接口；零件具备的物理连接特征；高（CAD特征提取） \\
+      & \textit{constrainedBy}
+        & 装配接口 $\rightarrow$ 几何约束；接口背后的数学定位逻辑；高（CAD原始数据） \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+表~\ref{tab:ontology}~列出了 7 类实体节点与 9 类核心语义关系的属性定义、
+语义边界与数据来源职责，构成本文图谱的语义骨架。
+其中，实体类按"零件结构（\textit{Part} / \textit{Assembly}）—
+过程动作（\textit{Procedure} / \textit{Tool} / \textit{Specification}）—
+几何约束（\textit{Interface} / \textit{GeoConstraint}）"三层语义组织；
+关系类则覆盖"组成结构（\textit{isPartOf}）—时序逻辑（\textit{precedes}）—
+参与执行（\textit{participatesIn} / \textit{requires}）—
+技术约束（\textit{specifiedBy}）—物理配合（\textit{matesWith} / \textit{adjacentTo} /
+\textit{hasInterface} / \textit{constrainedBy}）"五大语义维度，
+完整刻画了从静态零件清单到动态装配工序的全流程知识。
+为直观展现实体类之间的连接拓扑及其与数据源的对应关系，
+图~\ref{fig:ontology}~以"BOM/CAD、维修手册、CAD 几何"三类数据源
+为分组将节点排列于三列泳道，并以箭头标注 7 条跨节点关系；
+3 条自连关系（\textit{matesWith}、\textit{adjacentTo}、\textit{precedes}）
+因端点同属一类节点，统一在图底部说明栏列出。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/fig3_ontology.pdf}
+  \caption{航空发动机装配知识图谱本体模式（7 类实体；9 类核心语义关系；构建图谱时另含 SAME\_AS / interchangesWith 两类辅助关系）}
+  \label{fig:ontology}
+\end{figure}
+
+本体模式在知识抽取时作为强约束注入提示词，
+确保图谱边界清晰、无类型歧义。
+各数据源的职责分工为：
+BOM表作为零件实体（\textit{Part}/\textit{Assembly}）的权威注册表，
+提供 \texttt{part\_number}、\texttt{name}、\texttt{quantity} 等身份信息；
+CAD模型负责构建装配层级骨架与几何约束（\textit{isPartOf}、\textit{matesWith}、
+\textit{adjacentTo}、\textit{hasInterface}、\textit{constrainedBy}）；
+维修手册负责填充过程性知识（\textit{Procedure}、\textit{Tool}、\textit{Specification}
+及 \textit{precedes}、\textit{requires}、\textit{participatesIn}、\textit{specifiedBy} 关系）。
+
+% ·············································································
+\subsubsection{多智能体协同知识抽取流水线}
+\label{sec:multi-agent-kg}
+
+三类数据源在格式与语义层面存在本质差异：
+BOM 以结构化表格承载零件身份注册信息，对字段精度要求高、对语义理解需求低；
+CAD 模型以几何拓扑与 STEP 标准记录编码装配层级与配合约束，
+本质上是确定性的数学结构，必须通过几何引擎读取；
+维修手册则以长文本和表格承载工序过程与技术规范，
+充满指代、省略与跨章节引用。
+若仅以单一 LLM 抽取流水线处理三类异构来源，
+要么会损失 BOM 结构化字段的精度（LLM 在长数字串识别上易产生幻觉），
+要么会遗漏手册中的隐性时序与跨页引用关系。
+为此，本文设计了由三类抽取智能体与验证智能体构成的协同抽取流水线：
+分别针对 BOM 表、CAD 模型与手册文本采用专门化处理策略，
+最终经统一的三级实体对齐与一致性校验环节汇入 Neo4j 图谱。
+
+\paragraph{智能体A：BOM解析智能体（BOM Parser）}
+
+BOM解析智能体读取结构化Excel/ERP导出文件，
+提取零件编号（PN）、名称、数量、材料等字段，
+在Neo4j中创建 \textit{Part} 和 \textit{Assembly} 节点，
+作为图谱实体的权威注册表。
+由于BOM表通常为平铺格式（无层级列），不直接提供父子关系，
+装配层级（\textit{isPartOf}）的主要来源由CAD模型承担。
+
+\paragraph{智能体B：CAD结构化解析智能体（CAD Parser）}
+
+给定STEP格式CAD文件~$\mathcal{F}$，
+本智能体使用Open CASCADE Technology（OCCT）的Python绑定
+\texttt{pythonocc-core}从中确定性地提取三类几何知识。
+
+\textit{（1）装配层级提取。}
+STEP文件中的装配使用记录（NAUO）
+编码了零件的父子包含关系。
+对每一条NAUO记录~$(r_p, r_c)$，
+通过\texttt{PRODUCT}实体表将引用编号解析为人类可读的零件名称，
+生成\texttt{isPartOf}有向三元组：
+\begin{equation}
+  \langle \text{child},\ \texttt{isPartOf},\ \text{parent} \rangle
+  \label{eq:ispartof}
+\end{equation}
+全部三元组构成完整的装配层级树~$\mathcal{T} \subseteq \mathcal{G}$，
+同时将解析出的零件名称与BOM智能体创建的节点进行实体对齐，
+通过 \texttt{MERGE} 操作更新已有节点而非创建重复实体。
+
+\textit{（2）配合约束提取。}
+基于NAUO关联关系和\texttt{GEOMETRIC\_TOLERANCE}记录，
+提取零件间的物理配合关系及其几何约束类型，生成：
+\begin{equation}
+  \langle \text{part}_a,\ \texttt{matesWith},\ \text{part}_b \rangle
+  \quad \text{含属性}\ \{\mathit{constraint\_type},\ \mathit{interface}\}
+  \label{eq:mateswith}
+\end{equation}
+同时生成 \textit{Interface} 节点和 \textit{GeoConstraint} 节点，
+以 \textit{hasInterface} 和 \textit{constrainedBy} 关系连接，
+形成"零件 $\xrightarrow{\textit{hasInterface}}$ 接口
+$\xrightarrow{\textit{constrainedBy}}$ 几何约束"的三层结构，
+精确区分物理接触面与数学定位逻辑。
+
+\textit{（3）空间邻接关系提取。}
+本文采用双路实现策略以兼顾几何精度与部署可用性。
+\textbf{物理路径（Physical）}：
+若运行环境集成 \texttt{pythonocc-core}，
+对每对实体几何体~$(\sigma_i, \sigma_j)$
+计算其轴对齐包围盒（AABB）$\mathcal{B}_i$ 和 $\mathcal{B}_j$ 之间的间距：
+\begin{equation}
+  \delta_{ij} =
+  \sqrt{\sum_{u \in \{x,y,z\}}
+    \max\!\left(0,\ \max\bigl(u_i^{\min}, u_j^{\min}\bigr)
+                     - \min\bigl(u_i^{\max}, u_j^{\max}\bigr)\right)^{\!2}}
+  \label{eq:gap}
+\end{equation}
+当~$\delta_{ij} < \tau$（默认$\tau = 2\,\text{mm}$）时写入
+$\langle \text{part}_a,\,\texttt{adjacentTo},\,\text{part}_b \rangle$
+（含属性 $gap\_mm = \delta_{ij}$）。
+\textbf{逻辑路径（Logical Sibling）}：
+当目标部署环境无 OCC 依赖时，
+回退至基于 STEP 装配树的兄弟节点近似——
+同一父装配下的任意两个子装配单元均视为空间邻接，
+属性 $\textit{method} = \mathtt{logical\_sibling}$ 标识其推断来源。
+该降级策略在标准化 IPC 装配树（如 PT6A 维修手册附录 BOM）下
+仍能产出有意义的邻接拓扑，保证下游 KG 检索路径的鲁棒性。
+\begin{equation}
+  \langle \text{part}_a,\ \texttt{adjacentTo},\ \text{part}_b \rangle
+  \quad \text{含属性}\ \{\textit{method},\ gap\_mm\}
+  \label{eq:adjacent}
+\end{equation}
+
+\paragraph{智能体C：文本抽取智能体（Text Extractor）}
+
+维修手册通常为长文本与表格混排文档，本智能体负责从中抽取过程性知识三元组。
+对文档解析后的每个文本块~$c_i$，
+构造携带完整本体模式的结构化Few-shot提示词
+（内置工序链、工具规范、配合关系三类示例），
+驱动LLM输出JSON格式的实体-关系集合：
+\begin{equation}
+  \mathcal{T}_i = \Phi_{\text{LLM}}(c_i,\ \mathcal{O})
+                = \bigl\{(e_h^{(k)},\ r^{(k)},\ e_t^{(k)})\bigr\}_{k=1}^{K_i}
+  \label{eq:llm-extract}
+\end{equation}
+其中~$\mathcal{O}$~为本体模式，$e_h$、$e_t$~分别为头实体和尾实体，$r$~为关系类型。
+随后通过\textbf{二轮Gleaning机制}进行补全：
+第二轮提示词明确要求LLM仅输出首轮遗漏的实体和关系，有效减少知识遗漏。
+
+% ·············································································
+\subsubsection{知识融合与一致性校验}
+\label{sec:kg-fusion}
+
+各抽取智能体输出的三元组在写入Neo4j前，须经过三级实体对齐和验证智能体校验，
+以解决多源数据中的同名异物和信息冲突问题。
+
+\textbf{三级级联实体对齐：}
+\begin{enumerate}
+  \item \textbf{规则级}：基于预置的航空领域缩写词典
+        （如 HPC $\rightarrow$ 高压压气机、HPT $\rightarrow$ 高压涡轮）进行精确映射；
+  \item \textbf{模糊级}：使用编辑距离（SequenceMatcher）
+        对相似度高于阈值的实体名称进行合并，
+        处理手册中"主轴承"与BOM中"主轴承组件（PN: 1002-AX）"等表述差异；
+  \item \textbf{语义级}：对前两级未能对齐的候选实体，
+        使用BGE-M3语义向量余弦相似度作最终判断。
+\end{enumerate}
+
+\textbf{验证智能体（Verification Agent）：}
+负责对融合结果进行一致性交叉比对。
+若手册抽取结果与BOM/CAD数据存在冲突
+（如手册描述某型号发动机存在独立风扇叶片，但BOM和CAD均无对应节点），
+验证智能体抛出异常并记录置信度分数，
+通过余弦相似度或语义评估计算抽取结果的可信度后决定保留或丢弃。
+
+此外，针对\textit{precedes}关系可能引入的工序环路，
+采用Kahn拓扑排序算法进行有向无环图（DAG）验证，
+一旦检出环路则截断置信度最低的边，保证装配工序图的有效性。
+
+全部三源数据最终通过\texttt{MERGE}操作叠加写入同一Neo4j实例，
+构成统一的装配知识图谱~$\mathcal{G}$，
+三级实体对齐的完整流程如图~\ref{fig:entity-align}~所示。
+在 PT6A 整机数据集上构建的最终图谱包含 7{,}333 节点与 8{,}752 边，
+9 类核心语义关系 + 2 类辅助关系（SAME\_AS 跨阶段对齐桥 / interchangesWith 互换件）全部覆盖，
+关系类型分布如图~\ref{fig:kg-relations}~所示。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/fig4_entity_align.pdf}
+  \caption{三级级联实体对齐流程}
+  \label{fig:entity-align}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\linewidth]{figures/fig11_kg_relations.pdf}
+  \caption{PT6A 知识图谱关系类型分布}
+  \label{fig:kg-relations}
+\end{figure}
+
+% ·············································································
+\subsubsection{人在回路审阅机制}
+\label{sec:hitl}
+
+自动化流水线在提升吞吐效率的同时，难以完全消除航空领域低频专业术语
+和跨源命名歧义引入的噪声三元组。
+为此，本文在知识图谱构建流水线中引入\textbf{人在回路（Human-in-the-Loop，HITL）}
+分阶段审阅机制\cite{amershi2014power}，
+在BOM解析阶段和手册抽取阶段各设置一个\textbf{审阅门控（Stage Gate）}：
+每阶段完成后，系统自动生成包含实体数量、三元组分布、
+置信度直方图及低置信度异常条目的阶段报告，并暂停流水线等待领域专家确认。
+
+审阅门控的状态机定义如下：
+\begin{equation}
+  s \in \{\texttt{idle},\ \texttt{running},\ \texttt{awaiting\_review},\ \texttt{approved}\}
+  \label{eq:hitl-state}
+\end{equation}
+流水线仅在当前阶段状态为~\texttt{approved}~后方可推进至下一阶段，
+从而保证每阶段的知识质量在传播至后续处理前得到确认。
+
+专家可通过审阅界面执行三类干预操作：
+\begin{enumerate}
+  \item \textbf{三元组编辑}：对自动抽取结果进行增、删、改操作，
+        直接纠正错误的实体标签或关系类型；
+  \item \textbf{领域知识注入}：以自由文本形式输入隐性知识
+        （如"T-205与T-206在高温工况下存在热膨胀配合约束"），
+        系统将其二次解析并追加为新三元组；
+  \item \textbf{置信度阈值调参}：调整自动丢弃低置信度三元组的阈值，
+        在查全率与准确率之间动态权衡，并触发局部重跑以即时预览修改效果。
+\end{enumerate}
+
+上述设计遵循"机器自动化处理结构化数据、专家聚焦高不确定性区域"的分工原则。
+相比于全量人工标注，分阶段门控机制将专家审阅工作量集中于自动抽取流水线产生的
+低置信度三元组与跨源命名歧义条目；
+相比于纯自动化方案，引入领域专家在关键节点的语义校验，
+有效控制了航空装配领域低频专业术语带来的累积错误。
+该机制的核心价值在于在自动化吞吐与领域知识注入之间提供可控的平衡接口，
+而非替代任何一方。
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{文档解析与文本向量化}
+\label{sec:index}
+
+\subsubsection{文档解析流水线}
+\label{sec:parse}
+
+航空发动机装配手册通常为结构复杂的PDF文件，本文采用双路解析策略：
+\begin{itemize}
+  \item \textbf{可复制PDF}：使用PyMuPDF直接提取文本层，保留原始字符坐标；
+  \item \textbf{扫描版/复杂版式PDF}：路由至DeepDoc AI解析引擎，
+        执行版面检测（Layout Analysis）和OCR，
+        并按ATA章节编号进行结构化分块。
+\end{itemize}
+
+文本按句子边界切块，目标块长度为500字符。
+表格内容以HTML形式保留并与相邻段落共同进入文本块，避免技术参数与上下文脱节。
+
+\subsubsection{文本向量化与索引构建}
+\label{sec:vectorize}
+
+每个文本块~$c_i$~经\textbf{BGE-M3}编码器
+（输出维度~$d_{\text{text}} = 1024$）得到密集向量：
+
+\begin{equation}
+  \mathbf{v}_i^{\text{text}} = \text{BGE-M3}(c_i) \in \mathbb{R}^{1024}
+  \label{eq:text-vec}
+\end{equation}
+
+全部文本向量存入Qdrant向量数据库，并保留章节号、页码、块类型、
+相邻块编号等元数据，供后续检索和答案溯源使用。
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{多维混合检索}
+\label{sec:retrieval}
+
+本节是本文的核心贡献。
+给定用户查询~$q$，系统并行执行三条检索路径并融合结果：
+密集向量检索负责语义等价召回，BM25负责零件号、数值和工具名等精确匹配，
+KG子图检索负责补充装配层级、工序依赖与技术规范关系。
+
+\subsubsection{多查询扩展}
+\label{sec:multi-query}
+
+为缓解词汇表不匹配问题、扩大召回覆盖面，
+首先用LLM将原始查询改写为两个不同表述角度，构成查询集：
+
+\begin{equation}
+  \mathcal{Q} = \{q,\ q_1,\ q_2\}
+              = \{q\} \cup \Phi_{\text{LLM}}^{\text{expand}}(q)
+  \label{eq:multi-query}
+\end{equation}
+
+后续三条检索路径均在~$\mathcal{Q}$~中的每个查询上独立执行，
+最终合并去重。
+
+\subsubsection{密集向量检索（路径一）}
+\label{sec:dense}
+
+对查询集中每个查询~$q' \in \mathcal{Q}$，
+用BGE-M3编码得到1024维查询向量~$\mathbf{q}^{\text{text}}$，
+在Qdrant的\texttt{text\_vec}命名向量空间中通过HNSW图近似最近邻搜索，
+按余弦相似度排序返回Top-$N$候选：
+
+\begin{equation}
+  \text{score}_{\text{dense}}(q', c_i)
+  = \frac{\mathbf{q}^{\text{text}} \cdot \mathbf{v}_i^{\text{text}}}
+         {\|\mathbf{q}^{\text{text}}\|\ \|\mathbf{v}_i^{\text{text}}\|}
+  \label{eq:dense-score}
+\end{equation}
+
+密集检索擅长捕捉语义相似性，适合处理表述与手册用词不同但语义等价的查询。
+
+\subsubsection{BM25稀疏检索（路径二）}
+\label{sec:bm25}
+
+装配领域中，零件编号（如"T-205"）、公差数值（如"0.05\textasciitilde0.12\,mm"）、
+扭矩规格等精确标识符对检索准确性至关重要，
+而密集向量检索往往因词汇平滑而弱化这类精确匹配能力。
+为此，本文引入BM25稀疏检索作为补充路径。
+
+考虑到手册中中英文混排的特点，本文设计\textbf{双轨分词}策略：
+中文词汇通过jieba进行语义分词；
+零件编号、测量数值等字母数字混合串通过正则表达式分词器处理，
+避免被切断。
+对查询~$q'$~和文档~$d$，BM25评分公式为：
+
+\begin{equation}
+  \text{score}_{\text{BM25}}(d, q')
+  = \sum_{i=1}^{M} \text{IDF}(q'_i)
+    \cdot \frac{f(q'_i,\, d) \cdot (k_1 + 1)}
+               {f(q'_i,\, d)
+                + k_1\!\left(1 - b + b\,\dfrac{|d|}{\text{avgdl}}\right)}
+  \label{eq:bm25}
+\end{equation}
+
+其中
+
+\begin{equation}
+  \text{IDF}(q'_i)
+  = \log\!\left(\frac{N - n(q'_i) + 0.5}{n(q'_i) + 0.5} + 1\right)
+  \label{eq:idf}
+\end{equation}
+
+$N$~为语料总文档数，$n(q'_i)$~为包含词项~$q'_i$~的文档数。
+超参数设置为~$k_1 = 1.5$，$b = 0.75$。
+BM25侧的召回数设为密集检索的2倍（$2N$），
+以充分利用其计算代价低廉的优势扩大候选池。
+
+\subsubsection{知识图谱检索（路径三）}
+\label{sec:kg-retrieval}
+
+对涉及零件组成关系、装配约束、工序依赖等结构化推理的查询，
+系统从Neo4j知识图谱~$\mathcal{G}$~中召回与查询语义相关的子图。
+形式化地，目标是找到最能支撑回答~$q$~的子图：
+
+\begin{equation}
+  \mathcal{G}^{*}
+  = \arg\max_{\mathcal{G}' \subseteq \mathcal{G}}\;
+    P\!\left(\mathcal{G}' \mid q,\; \mathcal{G}\right)
+  \label{eq:kg-retrieval}
+\end{equation}
+
+\textbf{锚节点定位：BGE-M3 语义 ANN。}
+传统 GraphRAG 依赖关键词字符串匹配（如 \texttt{kg\_name CONTAINS kw}）定位锚节点，
+但该方式对中英混合查询、近义术语缺乏鲁棒性。
+本文将锚节点定位改为基于 BGE-M3 的密集语义近邻搜索：
+后端启动时一次性将所有 KG 实体~$v_i \in \mathcal{V}$~的
+\texttt{kg\_name + description} 经 BGE-M3 编码后
+缓存为单位向量~$\mathbf{e}_i \in \mathbb{R}^{1024}$（$\|\mathbf{e}_i\|_2 = 1$），
+组成实体索引矩阵~$\mathbf{E}_{\text{KG}} = [\mathbf{e}_1, \dots, \mathbf{e}_{|\mathcal{V}|}]^{\top}$。
+查询时将~$q$~经同一编码器映射为单位向量~$\mathbf{e}_q \in \mathbb{R}^{1024}$，
+逐实体计算余弦相似度并选取 Top-$M$ 作为锚节点集合：
+
+\begin{equation}
+  \mathrm{sim}(q, v_i) = \mathbf{e}_q^{\top} \mathbf{e}_i, \qquad
+  \mathcal{V}_{\text{anchor}}
+    = \underset{v_i \in \mathcal{V}}{\arg\mathrm{TopM}}\;\mathrm{sim}(q, v_i)
+  \label{eq:kg-anchor-ann}
+\end{equation}
+
+\textbf{一跳邻域扩展。}
+对每个锚节点~$v \in \mathcal{V}_{\text{anchor}}$，向 Neo4j 发起一跳邻域查询：
+
+\begin{lstlisting}[language=SQL, caption={基于 ANN 锚节点的子图召回}]
+UNWIND $names AS nm
+MATCH (n {kg_name: nm})
+OPTIONAL MATCH (n)-[r]->(neighbor)
+RETURN n.kg_name AS name, labels(n)[0] AS lbl,
+       collect({rel: type(r), tail: neighbor.kg_name})[0..6] AS edges
+\end{lstlisting}
+
+返回结果按"\texttt{[KG entity: NAME (LABEL)] -[REL]→ TAIL}"格式
+序列化为结构化文本块，作为异质内容纳入后续 RRF 融合阶段。
+该设计相比关键词匹配更适合中英混合查询和专业别名查询，
+也能在检索上下文中显式提供装配层级、工序依赖和技术规范关系。
+
+\subsubsection{三路RRF融合}
+\label{sec:rrf}
+
+三条检索路径返回的候选集处于各自独立的评分空间，无法直接比较。
+本文通过互惠排名融合（Reciprocal Rank Fusion，RRF）将其统一到同一排名空间。
+设~$\mathcal{R} = \{\text{dense},\ \text{BM25},\ \text{KG}\}$~为三个检索器，
+对候选块~$d$~的RRF综合得分为：
+
+\begin{equation}
+  \text{RRF}(d)
+  = \sum_{r \in \mathcal{R}} \frac{1}{k + \text{rank}_r(d)}
+  \label{eq:rrf}
+\end{equation}
+
+其中~$k = 60$~为平滑常数，用于抑制任意单路高排名带来的过度支配；
+若候选~$d$~未出现在检索器~$r$~的结果中，则该项贡献为0。
+全部候选按RRF得分降序排列，取前~$L$~个传入精排阶段。
+
+RRF的核心优势在于：无需对各路分数进行归一化，
+对单路召回失败具有鲁棒性，
+且可自然地将文本块与图谱子图统一排序。
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{交叉编码器精排}
+\label{sec:rerank}
+
+RRF融合的粗排结果基于各路独立编码，
+未能充分利用查询与候选段落之间的细粒度交互信息。
+为此，本文引入交叉编码器（Cross-Encoder）对粗排结果进行精排，
+使用BGE-Reranker-Base作为精排模型。
+
+给定查询~$q$~和候选段落~$d$，将两者拼接为如下格式输入序列：
+
+\begin{equation}
+  \text{Input} = [\text{CLS}]\; q\; [\text{SEP}]\; d\; [\text{SEP}]
+  \label{eq:rerank-input}
+\end{equation}
+
+该序列经过多层Transformer编码：
+
+\begin{equation}
+  \mathbf{H} = \text{Transformer}(\text{Input})
+  \label{eq:rerank-transformer}
+\end{equation}
+
+取[CLS]位置的隐状态~$\mathbf{h}_{\text{CLS}} = \mathbf{H}[\text{CLS}]$~
+作为查询-段落对的联合语义表示，
+经前馈网络输出相关性得分：
+
+\begin{equation}
+  \text{Score}(q, d) = \text{FFN}(\mathbf{h}_{\text{CLS}})
+  \label{eq:rerank-score}
+\end{equation}
+
+与双编码器相比，交叉编码器在推理时对查询和文档进行全注意力交互，
+能更精准地捕捉语义对齐关系。
+按相关性得分降序取前~$K$（默认~$K=4$）个作为最终上下文。
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{答案生成}
+\label{sec:generation}
+
+将Top-$K$~上下文片段（含文本块与KG子图序列化结果）
+按相关性得分依次拼接，构成结构化提示词送入LLM。生成目标为：
+
+\begin{equation}
+  \hat{a} = \arg\max_{a}\;
+  \prod_{j=1}^{|a|}
+  P\!\left(a_j \mid a_{<j},\; q,\; \mathcal{C}\right)
+  \label{eq:generation}
+\end{equation}
+
+其中~$\mathcal{C} = \{d_1, \ldots, d_K\}$~为最终上下文集合，
+$a_{<j}$~为已生成的前序词元。
+
+\textbf{系统提示设计}方面，为支持交互式装配引导场景，
+本文采用结构化指令约束LLM的输出行为：
+助手必须首先确认当前装配状态，再给出下一步可操作指令，
+并等待用户反馈后方可继续。
+这一设计有效避免了未经核实直接给出多步操作的风险，
+契合航空发动机装配对操作安全性的高要求。
+
+答案以\textbf{服务器推送事件（SSE）}流式返回前端，由三类帧组成：
+\texttt{stage}帧（当前检索/生成阶段提示）、
+\texttt{delta}帧（LLM增量输出词元）、
+\texttt{done}帧（来源引用列表与相关图谱关系集合）。

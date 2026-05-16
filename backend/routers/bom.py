@@ -205,7 +205,7 @@ class _LlmBomConverter:
 
     def run(self):
         """生成器：逐段调用 LLM，每一步 yield 一条日志字符串。"""
-        chunks = _split_for_llm(self._raw_text)
+        chunks = _split_for_llm(self._raw_text, max_chars=30000)
         yield f"   文档分为 {len(chunks)} 段，开始 LLM 转换…"
 
         all_records = []
@@ -978,3 +978,293 @@ def _query_bom_entities(state: AppState, cfg: dict, question: str) -> dict:
                     })
 
     return {"entities": list(seen_entities.values()), "relations": relations}
+
+
+def _query_kg_context(state: AppState, cfg: dict, question: str) -> str:
+    """
+    强制全类型 KG 查询：不只走 CHILD_OF，而是覆盖所有 9 类关系和 7 类节点。
+
+    策略：
+      1. 从问题中提取航空领域关键词（词典优先 + N-gram 补充）
+      2. 以 Part/Assembly/Procedure 为锚点，沿所有 KG 关系做 1-2 跳扩展
+      3. 直接搜索 Procedure 节点，拉取其 Tool/Specification/参与零件
+      4. 汇总成结构化文本返回，供 LLM 生成装配方案
+    """
+    driver = _get_neo4j_driver(state, cfg)
+    if driver is None:
+        return ""
+
+    ASSEMBLY_KW = ["装配", "安装", "installation", "assemble", "install", "怎么装", "如何装"]
+    REPAIR_KW   = ["维修", "修理", "修复", "repair", "damage", "corrosion", "腐蚀", "裂纹"]
+    INSPECT_KW  = ["检查", "检验", "inspection", "check", "极限", "limit", "标准"]
+
+    def _detect_intent(q: str) -> str | None:
+        ql = q.lower()
+        if any(k in ql for k in ASSEMBLY_KW): return "installation"
+        if any(k in ql for k in REPAIR_KW):   return "repair"
+        if any(k in ql for k in INSPECT_KW):  return "inspection"
+        return None
+
+    intent = _detect_intent(question)
+
+    type_filter = ""
+    spec_filter = ""
+    if intent == "installation":
+        type_filter = "AND (p.procedure_type = 'installation' OR p.procedure_type IS NULL)"
+        spec_filter = "AND (s.spec_type = 'assembly_tolerance' OR s.spec_type IS NULL)"
+    elif intent == "inspection":
+        type_filter = "AND (p.procedure_type = 'inspection' OR p.procedure_type IS NULL)"
+        spec_filter = "AND (s.spec_type = 'service_limit' OR s.spec_type IS NULL)"
+    elif intent == "repair":
+        type_filter = "AND (p.procedure_type = 'repair' OR p.procedure_type IS NULL)"
+        spec_filter = ""
+
+    # ── 关键词提取：中文词典 + 对应英文翻译 ──────────────────────
+    # Neo4j BOM 节点的 part_name 全为英文（来自英文 IPC 手册），
+    # KG Procedure/Tool 节点 kg_name 可能为中/英文，均需双语匹配。
+    ZH_TO_EN = {
+        "压气机":    ["compressor", "COMPRESSOR"],
+        "高压压气机": ["high pressure compressor", "HPC", "HP COMPRESSOR"],
+        "低压压气机": ["low pressure compressor", "LPC"],
+        "风扇":      ["fan", "FAN"],
+        "涡轮":      ["turbine", "TURBINE"],
+        "燃烧室":    ["combustion", "COMBUSTION", "burner", "BURNER"],
+        "机匣":      ["case", "CASE", "housing", "HOUSING", "casing"],
+        "转子":      ["rotor", "ROTOR"],
+        "静子":      ["stator", "STATOR"],
+        "叶片":      ["blade", "BLADE", "vane", "VANE"],
+        "盘":        ["disk", "DISK", "disc"],
+        "轴":        ["shaft", "SHAFT"],
+        "轴承":      ["bearing", "BEARING"],
+        "密封":      ["seal", "SEAL", "sealing"],
+        "喷嘴":      ["nozzle", "NOZZLE"],
+        "火焰筒":    ["liner", "LINER"],
+        "叶轮":      ["impeller", "IMPELLER"],
+        "壳体":      ["housing", "HOUSING"],
+        "支撑":      ["support", "SUPPORT", "strut"],
+        "装配":      ["assembly", "ASSEMBLY", "installation", "INSTALLATION"],
+        "安装":      ["installation", "INSTALLATION", "install"],
+        "拆卸":      ["removal", "REMOVAL", "disassembly"],
+        "检查":      ["inspection", "INSPECTION", "check"],
+        "维修":      ["repair", "REPAIR", "maintenance"],
+        "螺栓":      ["bolt", "BOLT", "stud", "STUD"],
+        "螺母":      ["nut", "NUT"],
+        "销钉":      ["pin", "PIN"],
+    }
+
+    zh_keywords = [kw for kw in ZH_TO_EN if kw in question]
+    # 英文关键词：从中文词典翻译 + 直接从问题中提取英文单词
+    en_keywords = []
+    for zh in zh_keywords:
+        en_keywords.extend(ZH_TO_EN[zh])
+    # 去重，保留首选英文词（首字母大写 + 全小写各一个）
+    en_seen = set()
+    en_keywords_dedup = []
+    for kw in en_keywords:
+        low = kw.lower()
+        if low not in en_seen:
+            en_seen.add(low)
+            en_keywords_dedup.append(low)  # 统一用小写，Cypher 里 toLower() 匹配
+
+    # 无命中时 N-gram 补充（中文）
+    if not zh_keywords:
+        for n in (4, 3, 2):
+            for i in range(len(question) - n + 1):
+                zh_keywords.append(question[i:i + n])
+                if len(zh_keywords) >= 4:
+                    break
+            if len(zh_keywords) >= 4:
+                break
+    if not zh_keywords and not en_keywords_dedup:
+        zh_keywords = [question[:8]]
+
+    sections = []
+
+    with driver.session() as session:
+
+        # ── A. 零件 / 组件：英文关键词 + toLower 大小写不敏感匹配 ──
+        part_rows = []
+        seen_pids = set()
+        search_kws = en_keywords_dedup or [kw.lower() for kw in zh_keywords[:3]]
+        for kw in search_kws:
+            for r in session.run("""
+                MATCH (n) WHERE (n:Part OR n:Assembly OR n:Standard)
+                      AND toLower(n.part_name) CONTAINS toLower($kw)
+                OPTIONAL MATCH (child)-[:CHILD_OF|isPartOf]->(n)
+                RETURN n.part_id    AS pid,
+                       n.part_name  AS name,
+                       n.part_name_en AS name_en,
+                       labels(n)[0] AS lbl,
+                       n.material   AS material,
+                       n.qty        AS qty,
+                       n.unit       AS unit,
+                       n.spec       AS spec,
+                       n.note       AS note,
+                       n.level_code AS level_code,
+                       collect(DISTINCT
+                           child.part_name + ' (' + coalesce(child.part_id,'') + ')'
+                       ) AS children
+                LIMIT 25
+            """, kw=kw).data():
+                if r["pid"] and r["pid"] not in seen_pids:
+                    seen_pids.add(r["pid"])
+                    part_rows.append(r)
+
+        if part_rows:
+            lines = ["【零件 / 组件清单（料号 | 名称 | 规格）】"]
+            for r in part_rows:
+                # part_id 就是真实料号（如 3030349 / AS3209-267）
+                line = f"  · 料号：{r['pid']}  名称：{r['name']}"
+                if r.get("name_en") and r.get("name_en") != r.get("name"):
+                    line += f" / {r['name_en']}"
+                line += f"  [{r['lbl']}]"
+                if r.get("spec"):
+                    line += f"  规格：{r['spec']}"
+                if r.get("material"):
+                    line += f"  材料：{r['material']}"
+                if r.get("qty"):
+                    line += f"  数量：{r['qty']}{r.get('unit','')}"
+                if r.get("note"):
+                    line += f"  备注：{r['note']}"
+                if r.get("children"):
+                    ch = " | ".join(
+                        c for c in r["children"] if c and c != " ()"
+                    )[:200]
+                    if ch:
+                        line += f"\n    子件：{ch}"
+                lines.append(line)
+            sections.append("\n".join(lines))
+
+        # ── B. 装配工序 + 工具 + 规范 ────────────────────────────
+        proc_rows = []
+        seen_procs = set()
+
+        def _proc_query(cypher, **params):
+            for r in session.run(cypher, **params).data():
+                if r.get("pid") and r["pid"] not in seen_procs:
+                    seen_procs.add(r["pid"])
+                    proc_rows.append(r)
+
+        # B1. 通过已匹配零件 participatesIn 反向找工序
+        if seen_pids:
+            _proc_query("""
+                MATCH (part)-[:participatesIn]->(p:Procedure)
+                WHERE part.part_id IN $pids
+                """ + type_filter + """
+                OPTIONAL MATCH (p)-[:requires]->(t:Tool)
+                OPTIONAL MATCH (p)-[:specifiedBy]->(s:Specification)
+                WHERE s.spec_type IS NULL OR s.spec_type = $spec_type
+                OPTIONAL MATCH (p)-[:precedes]->(next:Procedure)
+                RETURN coalesce(p.kg_id, p.kg_name) AS pid,
+                       p.kg_name AS name,
+                       collect(DISTINCT t.kg_name) AS tools,
+                       collect(DISTINCT s.kg_name)  AS specs,
+                       collect(DISTINCT next.kg_name) AS next_steps
+                LIMIT 30
+            """, pids=list(seen_pids), spec_type=(
+                "assembly_tolerance" if intent == "installation"
+                else "service_limit" if intent == "inspection"
+                else ""
+            ))
+
+        # B2. 用中文关键词直接搜工序名（kg_name 可能为中文）
+        # 注：Neo4j KG 节点实际只存 kg_name / kg_id，无 seq_no/ata_section 等扩展字段
+        _PROC_CQL = (
+            "MATCH (p:Procedure) WHERE p.kg_name CONTAINS $kw\n"
+            + ("            " + type_filter + "\n" if type_filter else "")
+            + "            OPTIONAL MATCH (p)-[:requires]->(t:Tool)\n"
+            + "            OPTIONAL MATCH (p)-[:specifiedBy]->(s:Specification)\n"
+            + ("            WHERE s.spec_type IS NULL OR s.spec_type = $spec_type\n" if spec_filter else "")
+            + "            OPTIONAL MATCH (p)-[:precedes]->(next:Procedure)\n"
+            + "            RETURN coalesce(p.kg_id, p.kg_name) AS pid,\n"
+            + "                   p.kg_name AS name,\n"
+            + "                   collect(DISTINCT t.kg_name) AS tools,\n"
+            + "                   collect(DISTINCT s.kg_name)  AS specs,\n"
+            + "                   collect(DISTINCT next.kg_name) AS next_steps\n"
+            + "            LIMIT 20"
+        )
+        _b2_spec_type = (
+            "assembly_tolerance" if intent == "installation"
+            else "service_limit" if intent == "inspection"
+            else ""
+        )
+        for kw in zh_keywords[:4]:
+            _proc_query(_PROC_CQL, kw=kw, spec_type=_b2_spec_type)
+
+        # B3. 兜底：全量拉取所有 Procedure
+        if not proc_rows:
+            _b3_cql = (
+                "MATCH (p:Procedure)\n"
+                + ("            WHERE 1=1 " + type_filter + "\n" if type_filter else "")
+                + "            OPTIONAL MATCH (p)-[:requires]->(t:Tool)\n"
+                + "            OPTIONAL MATCH (p)-[:specifiedBy]->(s:Specification)\n"
+                + ("            WHERE s.spec_type IS NULL OR s.spec_type = $spec_type\n" if spec_filter else "")
+                + "            OPTIONAL MATCH (p)-[:precedes]->(next:Procedure)\n"
+                + "            RETURN coalesce(p.kg_id, p.kg_name) AS pid,\n"
+                + "                   p.kg_name AS name,\n"
+                + "                   collect(DISTINCT t.kg_name) AS tools,\n"
+                + "                   collect(DISTINCT s.kg_name)  AS specs,\n"
+                + "                   collect(DISTINCT next.kg_name) AS next_steps\n"
+                + "            LIMIT 40"
+            )
+            _b3_spec_type = (
+                "assembly_tolerance" if intent == "installation"
+                else "service_limit" if intent == "inspection"
+                else ""
+            )
+            for r in session.run(_b3_cql, spec_type=_b3_spec_type).data():
+                if r.get("pid") and r["pid"] not in seen_procs:
+                    seen_procs.add(r["pid"])
+                    proc_rows.append(r)
+
+        if proc_rows:
+            _proc_title = (
+                "【装配工序（仅 Installation 章节）/ 工具 / 规范】"
+                if intent == "installation"
+                else "【装配工序 / 工具 / 规范】"
+            )
+            lines = [_proc_title]
+            for r in proc_rows:
+                line = f"  · {r['name']}"
+                tools = [t for t in (r.get("tools") or []) if t]
+                if tools:
+                    line += f"\n    工具：{'、'.join(tools)}"
+                specs = [s for s in (r.get("specs") or []) if s]
+                if specs:
+                    line += f"\n    规范/参数：{'；'.join(specs)}"
+                nexts = [n for n in (r.get("next_steps") or []) if n]
+                if nexts:
+                    line += f"\n    后续工序：{'→'.join(nexts)}"
+                lines.append(line)
+            sections.append("\n".join(lines))
+
+        # ── C. 配合接口 + 几何约束（仅用 kg_name，无扩展字段）────────
+        if seen_pids:
+            iface_rows = session.run("""
+                MATCH (n)-[:hasInterface]->(iface:Interface)
+                WHERE n.part_id IN $pids
+                OPTIONAL MATCH (iface)-[:constrainedBy]->(gc:GeoConstraint)
+                OPTIONAL MATCH (n2)-[:matesWith]-(n)
+                RETURN iface.kg_name AS iname,
+                       collect(DISTINCT gc.kg_name)   AS constraints,
+                       collect(DISTINCT n2.part_name) AS mates
+                LIMIT 20
+            """, pids=list(seen_pids)).data()
+
+            if iface_rows:
+                lines = ["【配合接口 / 几何约束】"]
+                for r in iface_rows:
+                    line = f"  · {r['iname']}"
+                    cs = [c for c in (r.get("constraints") or []) if c]
+                    if cs:
+                        line += f"  约束：{'、'.join(cs)}"
+                    ms = [m for m in (r.get("mates") or []) if m]
+                    if ms:
+                        line += f"  配合件：{'、'.join(ms)}"
+                    lines.append(line)
+                sections.append("\n".join(lines))
+
+    if not sections:
+        return ""
+    return "\n\n".join(sections)
+

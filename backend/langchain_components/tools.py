@@ -54,11 +54,17 @@ def create_tools(state, neo4j_cfg: dict):
 
     @tool
     def bom_query(question: str) -> str:
-        """查询 BOM 零件清单。适用于查询零件编号、组装关系、材料规格等 BOM 结构化数据。输入关于零件或装配结构的问题（中文），返回 BOM 图谱查询结果。"""
-        from backend.routers.bom import _get_neo4j_driver, _query_bom_text
+        """查询零件清单与知识图谱。适用于查询零件编号、料号、组装关系、材料规格、装配接口等信息。输入关于零件或装配结构的问题（中文），返回包含真实料号的 BOM + KG 查询结果。"""
+        from backend.routers.bom import _query_kg_context, _query_bom_text
 
-        result = _query_bom_text(state, neo4j_cfg, question)
-        return result if result else "BOM 图谱中未找到相关零件信息。"
+        kg_result = _query_kg_context(state, neo4j_cfg, question)
+        bom_result = _query_bom_text(state, neo4j_cfg, question)
+        parts = []
+        if kg_result:
+            parts.append(kg_result)
+        if bom_result:
+            parts.append(f"【补充 BOM 信息】\n{bom_result}")
+        return "\n\n".join(parts) if parts else "图谱中未找到相关零件信息。"
 
     @tool
     def vision_describe(image_path: str) -> str:
@@ -112,16 +118,10 @@ def create_tools(state, neo4j_cfg: dict):
 
     @tool
     def procedure_chain_query(question: str) -> str:
-        """查询装配工序链。适用于询问装配步骤、操作顺序、工具需求、技术规范等问题。返回从知识图谱提取的有序装配步骤列表（包含工具和规范）。"""
-        from backend.routers.bom import _query_procedure_chain, _query_bom_text
+        """查询装配工序、工具和规范。适用于询问装配步骤、操作顺序、所需工具、技术参数等问题。返回从知识图谱提取的工序列表（含工具名称和规范参数）以及相关零件料号。"""
+        from backend.routers.bom import _query_kg_context
 
-        _, proc_text = _query_procedure_chain(state, neo4j_cfg, question)
-        bom_text = _query_bom_text(state, neo4j_cfg, question)
-        parts = []
-        if proc_text:
-            parts.append(proc_text)
-        if bom_text:
-            parts.append(f"【相关零件清单】\n{bom_text}")
-        return "\n\n".join(parts) if parts else "知识图谱中未找到相关装配工序。"
+        result = _query_kg_context(state, neo4j_cfg, question)
+        return result if result else "知识图谱中未找到相关装配工序信息。"
 
     return [rag_search, bom_query, procedure_chain_query, vision_describe, image_search, calculator]

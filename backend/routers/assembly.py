@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from backend.deps import get_state, get_neo4j_cfg
 from backend.state import AppState
 from backend.sse import chat_gen_to_sse, _SOURCES_JSON_SEP
-from backend.routers.bom import _get_neo4j_driver, _query_bom_text, _query_bom_entities, _query_procedure_chain
+from backend.routers.bom import _get_neo4j_driver, _query_bom_text, _query_bom_entities, _query_procedure_chain, _query_kg_context
 
 router = APIRouter(prefix="/assembly")
 
@@ -49,24 +49,37 @@ def _build_assembly_context_and_sources(
     bom_result: dict,
     rag_chunks: list,
     proc_text: str = "",
+    kg_text: str = "",
 ):
     """
-    将有序工序链、BOM 实体/关系列表和 RAG 文档块合并为统一编号的上下文字符串和 Citation 列表。
+    将 KG全量上下文、有序工序链、BOM 实体/关系列表和 RAG 文档块合并为统一编号的上下文字符串和 Citation 列表。
 
     来源优先级：
-      [1] 有序工序链（KG precedes 路径，如有）
-      [2..N] BOM 实体（bom_entity）
+      [1] KG 全量上下文（_query_kg_context，含零件/工序/工具/规范/接口）
+      [2] 有序工序链（KG precedes Kahn 排序，如有）
+      [3..N] BOM 实体（bom_entity）
       [N+1..M] BOM 关系（bom_relation）
       [M+1..] RAG 文档块
-
-    兼容 bom_result 为空（{"entities":[], "relations":[]}）的情况。
     """
     import json as _json
     sources = []
     context_parts = []
     idx = 1
 
-    # ── 有序工序链（最高优先级）────────────────────────────────
+    # ── KG 全量上下文（最高优先级）────────────────────────────
+    if kg_text:
+        context_parts.append(f"[{idx}] 来源：知识图谱全量查询（Neo4j KG — 零件/工序/工具/规范/接口）\n{kg_text}")
+        sources.append({
+            "id":         idx,
+            "source":     "知识图谱全量查询（Neo4j KG）",
+            "page":       0,
+            "chunk_type": "kg_full",
+            "text":       kg_text,
+            "image_url":  None,
+        })
+        idx += 1
+
+    # ── 有序工序链（次优先级）──────────────────────────────────
     if proc_text:
         context_parts.append(f"[{idx}] 来源：知识图谱工序链（Neo4j KG）\n{proc_text}")
         sources.append({
@@ -216,8 +229,9 @@ def _assembly_chat_gen_langchain(
     from backend.langchain_components.chains import build_assembly_chain
     from backend.langchain_components.memory import ChatMemoryManager
 
-    # 1. 三路数据：工序链（KG）+ BOM 实体/关系 + RAG 文档块
-    yield "__STAGE__:正在查询 BOM 图谱与工序链..."
+    # 1. 四路数据：KG全量 + 工序链 + BOM实体/关系 + RAG文档块
+    yield "__STAGE__:正在查询知识图谱（零件/工序/工具/规范）..."
+    kg_text = _query_kg_context(state, cfg, message)
     _, proc_text = _query_procedure_chain(state, cfg, message)
     bom_result = _query_bom_entities(state, cfg, message)
     yield "__STAGE__:正在检索知识库..."
@@ -239,9 +253,9 @@ def _assembly_chat_gen_langchain(
                 for h in hits
             ]
 
-    # 2. 构建统一编号的上下文 + 结构化来源列表（每实体/关系独立编号）
+    # 2. 构建统一编号的上下文 + 结构化来源列表
     import json as _json
-    context, sources = _build_assembly_context_and_sources(bom_result, rag_chunks, proc_text)
+    context, sources = _build_assembly_context_and_sources(bom_result, rag_chunks, proc_text, kg_text)
 
     # 3. 流式调用 Assembly Chain
     yield "__STAGE__:正在生成装配方案..."
@@ -269,8 +283,9 @@ def _assembly_chat_gen_langchain(
 def _assembly_chat_gen_native(
     state: AppState, cfg: dict, llm_model: str, message: str, history: List[MessageItem]
 ):
-    """原生路径（fallback）：三路数据融合（KG工序链 + BOM + RAG）。"""
-    yield "__STAGE__:正在查询 BOM 图谱与工序链..."
+    """原生路径（fallback）：四路数据融合（KG全量 + KG工序链 + BOM + RAG）。"""
+    yield "__STAGE__:正在查询知识图谱（零件/工序/工具/规范）..."
+    kg_text = _query_kg_context(state, cfg, message)
     _, proc_text = _query_procedure_chain(state, cfg, message)
     bom_result = _query_bom_entities(state, cfg, message)
     yield "__STAGE__:正在检索知识库..."
@@ -285,7 +300,7 @@ def _assembly_chat_gen_native(
         ]
 
     import json as _json
-    context, sources = _build_assembly_context_and_sources(bom_result, rag_chunks, proc_text)
+    context, sources = _build_assembly_context_and_sources(bom_result, rag_chunks, proc_text, kg_text)
     user_content = f"{context}\n\n【用户问题】\n{message}" if context else message
 
     yield "__STAGE__:正在生成装配方案..."

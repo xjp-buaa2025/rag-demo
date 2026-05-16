@@ -231,6 +231,29 @@ def _bom_df_to_entities_and_triples(df_json: str):
     entities = []
     triples = []
 
+    # ── 路径0：level_code 预处理 → 补填 parent_id ──────────────────────────
+    # llm_to_csv 输出 level_code (1/1.1/1.1.1)，需转换为 parent_id 供路径2使用
+    cols = list(df.columns)
+    if "level_code" in cols and "parent_id" not in cols:
+        df["parent_id"] = ""
+    if "level_code" in cols:
+        level_map: dict = {}  # level_code → part_id
+        for _, row in df.iterrows():
+            lc  = str(row.get("level_code", "")).strip()
+            pid = str(row.get("part_id", "")).strip()
+            if lc and pid:
+                level_map[lc] = pid
+        def _lc_to_parent(lc: str) -> str:
+            if "." not in lc:
+                return ""
+            return level_map.get(".".join(lc.split(".")[:-1]), "")
+        df["parent_id"] = df.apply(
+            lambda r: _lc_to_parent(str(r.get("level_code", "")).strip())
+                      if not str(r.get("parent_id", "")).strip()
+                      else str(r.get("parent_id", "")).strip(),
+            axis=1,
+        )
+
     # 构建 part_id → head_label 映射（用于 parent_id fallback 路径）
     id_to_head: dict = {}
     for _, row in df.iterrows():
@@ -594,6 +617,11 @@ def _stage1_bom_gen(tmp_path: str, ext: str, clear_first: bool,
             yield {"type": "log", "message": msg}
     else:
         yield {"type": "log", "message": "[Stage1] 跳过标准字段校验（BOM 格式兼容模式）"}
+        # llm_to_csv 只写 bom_records，需在此补转 bom_dataframe_json
+        if not pipeline_state.get("bom_dataframe_json") and pipeline_state.get("bom_records"):
+            import pandas as _pd
+            _df = _pd.DataFrame(pipeline_state["bom_records"])
+            pipeline_state["bom_dataframe_json"] = _df.to_json(orient="records", force_ascii=False)
 
     # 转换为三元组
     df_json = pipeline_state.get("bom_dataframe_json", "")
@@ -664,6 +692,35 @@ async def stage1_bom(
 
 
 # ─────────────────────────────────────────────
+# 内部辅助：MD → 文本 chunks（按 <!-- Page N --> 切分）
+# ─────────────────────────────────────────────
+
+def _extract_md_chunks(file_path: str):
+    """
+    从 Markdown 文件提取文本 chunks，按 <!-- Page N --> 注释切分页面。
+    与 PDF pdfplumber 的逐页 chunk 结构完全一致。
+
+    返回: (chunks: list[dict], method: str)
+      chunks 格式: [{"text": str, "chunk_id": str, "ata_section": str}]
+    """
+    import re
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    parts = re.split(r"<!--\s*Page\s+\d+\s*-->", content)
+    chunks = []
+    for i, part in enumerate(parts):
+        text = part.strip()
+        if text:
+            chunks.append({
+                "text": text,
+                "chunk_id": f"p{i}",
+                "ata_section": f"Page {i + 1}",
+            })
+    return chunks, "markdown"
+
+
+# ─────────────────────────────────────────────
 # 内部辅助：PDF → 文本 chunks
 # ─────────────────────────────────────────────
 
@@ -725,8 +782,11 @@ def _kg_chunks_to_flat_triples(kg_triples: list) -> list:
     """将 extract_kg_triples 返回的 chunk 格式三元组展开为平铺格式。"""
     flat = []
     for chunk in kg_triples:
-        ent_map = {e["id"]: e.get("text", "") for e in chunk.get("entities", [])}
-        ent_type_map = {e["id"]: e.get("type", "") for e in chunk.get("entities", [])}
+        ent_map      = {e["id"]: e.get("text", "")           for e in chunk.get("entities", [])}
+        ent_type_map = {e["id"]: e.get("type", "")           for e in chunk.get("entities", [])}
+        ent_pt_map   = {e["id"]: e.get("procedure_type", "") for e in chunk.get("entities", [])}
+        ent_st_map   = {e["id"]: e.get("spec_type", "")      for e in chunk.get("entities", [])}
+        ent_desc_map = {e["id"]: e.get("description", "")    for e in chunk.get("entities", [])}
         for rel in chunk.get("relations", []):
             head_id = rel.get("head") or rel.get("source_id", "")
             tail_id = rel.get("tail") or rel.get("target_id", "")
@@ -734,13 +794,19 @@ def _kg_chunks_to_flat_triples(kg_triples: list) -> list:
             tail_text = ent_map.get(tail_id, "")
             if head_text and tail_text:
                 flat.append({
-                    "head": head_text,
-                    "relation": rel["type"],
-                    "tail": tail_text,
-                    "confidence": round(rel.get("weight", 5) / 10.0, 2),
-                    "source": "Manual",
-                    "head_type": ent_type_map.get(head_id, ""),
-                    "tail_type": ent_type_map.get(tail_id, ""),
+                    "head":                head_text,
+                    "relation":            rel["type"],
+                    "tail":                tail_text,
+                    "confidence":          round(rel.get("weight", 5) / 10.0, 2),
+                    "source":              "Manual",
+                    "head_type":           ent_type_map.get(head_id, ""),
+                    "tail_type":           ent_type_map.get(tail_id, ""),
+                    "head_procedure_type": ent_pt_map.get(head_id, ""),
+                    "tail_procedure_type": ent_pt_map.get(tail_id, ""),
+                    "head_spec_type":      ent_st_map.get(head_id, ""),
+                    "tail_spec_type":      ent_st_map.get(tail_id, ""),
+                    "head_description":    ent_desc_map.get(head_id, ""),
+                    "tail_description":    ent_desc_map.get(tail_id, ""),
                 })
     return flat
 
@@ -817,17 +883,39 @@ def _write_manual_to_neo4j(flat_triples: list, neo4j_cfg: dict):
     except Exception as e:
         return False, f"连接失败: {e}"
 
-    # 收集所有实体（按 kg_name 去重）
+    # 收集所有实体（按 kg_name 去重），保留 procedure_type / spec_type / description
     entity_map: dict = {}
     for t in flat_triples:
-        for key, etype in ((t["head"], t["head_type"]), (t["tail"], t["tail_type"])):
-            if key and key not in entity_map:
-                entity_map[key] = etype or "Part"
+        for side in ("head", "tail"):
+            name  = t.get(side, "")
+            etype = t.get(f"{side}_type", "") or "Part"
+            if not name:
+                continue
+            if name not in entity_map:
+                entity_map[name] = {
+                    "label":          etype,
+                    "procedure_type": t.get(f"{side}_procedure_type", ""),
+                    "spec_type":      t.get(f"{side}_spec_type", ""),
+                    "description":    t.get(f"{side}_description", ""),
+                }
+            else:
+                if not entity_map[name]["procedure_type"]:
+                    entity_map[name]["procedure_type"] = t.get(f"{side}_procedure_type", "")
+                if not entity_map[name]["spec_type"]:
+                    entity_map[name]["spec_type"] = t.get(f"{side}_spec_type", "")
+                if not entity_map[name]["description"]:
+                    entity_map[name]["description"] = t.get(f"{side}_description", "")
 
     kg_entity_types = {"Procedure", "Tool", "Specification", "Interface", "Part", "Assembly"}
     nodes_to_write = [
-        {"kg_name": name, "label": etype if etype in kg_entity_types else "Part"}
-        for name, etype in entity_map.items()
+        {
+            "kg_name":        name,
+            "label":          info["label"] if info["label"] in kg_entity_types else "Part",
+            "procedure_type": info["procedure_type"] or "unknown",
+            "spec_type":      info["spec_type"] or "unknown",
+            "description":    info["description"],
+        }
+        for name, info in entity_map.items()
     ]
 
     try:
@@ -836,12 +924,23 @@ def _write_manual_to_neo4j(flat_triples: list, neo4j_cfg: dict):
             from collections import defaultdict
             by_label = defaultdict(list)
             for n in nodes_to_write:
-                by_label[n["label"]].append(n["kg_name"])
-            for label, names in by_label.items():
+                by_label[n["label"]].append(n)
+            for label, node_list in by_label.items():
                 try:
                     session.run(
-                        f"UNWIND $names AS name MERGE (n:{label} {{kg_name: name}})",
-                        names=names,
+                        f"""UNWIND $nodes AS n
+                            MERGE (x:{label} {{kg_name: n.kg_name}})
+                            SET x.procedure_type = CASE WHEN n.procedure_type IS NOT NULL AND n.procedure_type <> ''
+                                                        THEN n.procedure_type
+                                                        ELSE coalesce(x.procedure_type, 'unknown') END,
+                                x.spec_type      = CASE WHEN n.spec_type IS NOT NULL AND n.spec_type <> ''
+                                                        THEN n.spec_type
+                                                        ELSE coalesce(x.spec_type, 'unknown') END,
+                                x.description    = CASE WHEN n.description IS NOT NULL AND n.description <> ''
+                                                        THEN n.description
+                                                        ELSE coalesce(x.description, '') END
+                        """,
+                        nodes=node_list,
                     )
                 except Exception as e:
                     logger.warning(f"[Stage2] Neo4j 写节点({label})失败: {e}")
@@ -880,42 +979,88 @@ def _write_manual_to_neo4j(flat_triples: list, neo4j_cfg: dict):
 
 def _align_manual_to_bom(flat_triples: list, bom_entities: list) -> int:
     """
-    对所有 flat_triples 中的 Part/Assembly 实体做两级对齐：
-    1. 精确子串匹配（双向，min长度>=4）
+    对所有 flat_triples 中的 Part/Assembly 实体做四级对齐：
+    0. 从实体文本提取内嵌零件号，直接查 BOM part_number 索引
+    1a. 精确名称匹配（去除图号噪声后）
+    1b. 双向子串匹配（min长度>=4）
     2. SequenceMatcher 模糊匹配（阈值0.75）
+    3. Token 交集匹配（阈值0.60，min(A,B)作分母，防止泛化误匹配）
     写入 head_bom_id / tail_bom_id 字段。返回命中字段总数。
     """
+    import re as _re
     from difflib import SequenceMatcher
 
     PART_TYPES = {"Part", "Assembly"}
+    _STOP = {'the', 'a', 'an', 'and', 'or', 'for', 'of', 'to', 'in', 'at', 'on'}
 
-    # 构建 BOM 查找索引（小写名称 → (原名, id)）
-    bom_name_map: dict = {}
+    # ── BOM 双索引：名称 + 零件号 ─────────────────────────────────────
+    bom_name_map: dict = {}   # lower_name → (orig_name, id)
+    bom_pn_map:   dict = {}   # lower_part_number → id
     for e in bom_entities:
         name = e.get("name", "")
         bid  = e.get("id", "")
+        pn   = e.get("part_number", "")
         if name and bid:
             bom_name_map[name.lower()] = (name, bid)
+        if pn and bid:
+            bom_pn_map[pn.lower()] = bid
     bom_lower_names = list(bom_name_map.keys())
 
-    # 缓存避免重复计算
-    entity_cache: dict = {}  # lower_text -> bom_id or None
+    # ── 噪声清洗正则（图号/表号/see引用）───────────────────────────────
+    _FIG_RE   = _re.compile(r'\s*\((?:Figure|Fig\.?|Table)\s+[\d\-]+[^\)]*\)', _re.IGNORECASE)
+    _ITEMS_RE = _re.compile(r'\s*\(items?\s+[\d\s,and]+\)', _re.IGNORECASE)
+    _SEE_RE   = _re.compile(r'\s*\(see\s+[^\)]+\)', _re.IGNORECASE)
+    # 零件号模式：如 MS9556-07、AS3209-267、3034521
+    _PN_RE    = _re.compile(r'\b([A-Z]{1,4}\d[\w\-]+|\d{5,}[\w\-]*)\b', _re.IGNORECASE)
+
+    def _clean(text: str) -> str:
+        text = _FIG_RE.sub('', text)
+        text = _ITEMS_RE.sub('', text)
+        text = _SEE_RE.sub('', text)
+        return text.strip()
+
+    def _token_match(key: str):
+        tokens = set(_re.findall(r'[a-z]+', key)) - _STOP
+        if len(tokens) < 2:
+            return None
+        best_score, best_id = 0.0, None
+        for bn, (_, bid) in bom_name_map.items():
+            bn_tokens = set(_re.findall(r'[a-z]+', bn)) - _STOP
+            if not bn_tokens:
+                continue
+            overlap = len(tokens & bn_tokens) / min(len(tokens), len(bn_tokens))
+            if overlap > best_score:
+                best_score, best_id = overlap, bid
+        return best_id if best_score >= 0.60 else None
+
+    entity_cache: dict = {}
 
     def _lookup(text: str):
-        key = text.lower().strip()
-        if key in entity_cache:
-            return entity_cache[key]
+        raw_key = text.lower().strip()
+        if raw_key in entity_cache:
+            return entity_cache[raw_key]
+
+        # 级别0：从实体文本提取内嵌零件号，直接查 part_number 索引
+        for m in _PN_RE.finditer(text):
+            pn_candidate = m.group(1).lower()
+            if pn_candidate in bom_pn_map:
+                entity_cache[raw_key] = bom_pn_map[pn_candidate]
+                return entity_cache[raw_key]
+
+        # 预处理：去除图号噪声再做名称匹配
+        cleaned = _clean(text)
+        key = cleaned.lower().strip()
 
         # 级别1a：精确匹配
         if key in bom_name_map:
-            entity_cache[key] = bom_name_map[key][1]
-            return entity_cache[key]
+            entity_cache[raw_key] = bom_name_map[key][1]
+            return entity_cache[raw_key]
 
         # 级别1b：双向子串匹配（min长度>=4 防止误匹配）
         for bn, (_, bid) in bom_name_map.items():
             if bn and len(bn) >= 4 and len(key) >= 4:
                 if bn in key or key in bn:
-                    entity_cache[key] = bid
+                    entity_cache[raw_key] = bid
                     return bid
 
         # 级别2：SequenceMatcher 模糊匹配（阈值0.75）
@@ -925,10 +1070,16 @@ def _align_manual_to_bom(flat_triples: list, bom_entities: list) -> int:
             if r > best_r:
                 best_r, best_id = r, bom_name_map[bn][1]
         if best_r >= 0.75 and best_id:
-            entity_cache[key] = best_id
+            entity_cache[raw_key] = best_id
             return best_id
 
-        entity_cache[key] = None
+        # 级别3：Token 交集匹配（阈值0.60，min分母防止泛化）
+        result = _token_match(key)
+        if result:
+            entity_cache[raw_key] = result
+            return result
+
+        entity_cache[raw_key] = None
         return None
 
     matched = 0
@@ -953,16 +1104,20 @@ def _align_manual_to_bom(flat_triples: list, bom_entities: list) -> int:
 def _stage2_manual_gen(tmp_path: str, filename: str, state: AppState, neo4j_cfg: dict):
     yield {"type": "log", "message": "[Stage2] 开始处理手册"}
 
-    # 1. PDF 文本提取
+    # 1. 文本提取（按文件类型分发）
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     try:
-        chunks, method = _extract_pdf_chunks(tmp_path, state)
+        if ext == "md":
+            chunks, method = _extract_md_chunks(tmp_path)
+        else:
+            chunks, method = _extract_pdf_chunks(tmp_path, state)
     except Exception as e:
-        yield {"type": "error", "message": f"PDF 提取失败：{e}"}
+        yield {"type": "error", "message": f"文本提取失败：{e}"}
         return
     yield {"type": "log", "message": f"[Stage2] {method} 提取完成，共 {len(chunks)} 段"}
 
     if not chunks:
-        yield {"type": "error", "message": "[Stage2] PDF 无可提取文本，请检查是否为扫描件"}
+        yield {"type": "error", "message": "[Stage2] 无可提取文本，请检查文件内容"}
         return
 
     # 2. LLM KG 提取（直接循环，支持实时进度推送）
@@ -1152,29 +1307,29 @@ def _stage2_manual_gen(tmp_path: str, filename: str, state: AppState, neo4j_cfg:
 # POST /kg/stage2/manual
 # ─────────────────────────────────────────────
 
-@router.post("/stage2/manual", summary="阶段2：手册PDF → 知识三元组（SSE）")
+@router.post("/stage2/manual", summary="阶段2：手册PDF/MD → 知识三元组（SSE）")
 async def stage2_manual(
     request: Request,
     file: UploadFile = File(...),
     state: AppState = Depends(get_state),
 ):
     """
-    上传手册 PDF，使用 LLM 提取 KG 三元组并写 JSON。
+    上传手册 PDF 或 Markdown，使用 LLM 提取 KG 三元组并写 JSON。
     响应为 SSE 流。
     """
     neo4j_cfg = request.app.state.neo4j_cfg
 
     ext = (file.filename or "manual.pdf").rsplit(".", 1)[-1].lower()
-    if ext != "pdf":
+    if ext not in ("pdf", "md"):
         from fastapi.responses import JSONResponse as _JR
-        return _JR(status_code=400, content={"error": "仅支持 PDF 文件"})
+        return _JR(status_code=400, content={"error": "仅支持 PDF 或 Markdown 文件"})
 
     content = await file.read()
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
         tmp.write(content)
         tmp_path = tmp.name
 
-    filename = file.filename or "manual.pdf"
+    filename = file.filename or f"manual.{ext}"
 
     def cleanup_and_gen():
         try:
@@ -1882,35 +2037,51 @@ def _write_all_stages_to_neo4j(neo4j_cfg: dict) -> dict:
             postprocess_stats["bom"] = _pp
             _log.info(f"[PostProcess] BOM: {_pp}")
 
-            # 写 BOM 节点（统一用 kg_name = part_name）
+            # 写 BOM 节点：kg_name 必须与 triple 的 head/tail 一致（含 pid 前缀），
+            # 否则 _bom_df_to_entities_and_triples 生成的 head_label 在 MATCH 时找不到节点。
+            # head_label 格式：f"{pid} {name}" if pid else name
             for e in entities:
                 name = e.get("name", "")
+                pid = (e.get("id") or e.get("part_number") or "").strip()
                 if not name:
                     continue
+                # 与 _bom_df_to_entities_and_triples L275 head_label 完全一致
+                kg_name = f"{pid} {name}" if pid else name
                 lbl = e.get("type", "Part")
                 try:
                     session.run(
-                        f"MERGE (n:{lbl} {{kg_name: $name}}) "
-                        "SET n.part_id = $pid, n.source = 'BOM', n.quantity = $qty",
-                        name=name, pid=e.get("id", ""), qty=e.get("quantity", 1),
+                        f"MERGE (n:{lbl} {{kg_name: $kg_name}}) "
+                        "SET n.part_id = $pid, n.part_name = $name, "
+                        "n.source = 'BOM', n.quantity = $qty",
+                        kg_name=kg_name, pid=pid, name=name, qty=e.get("quantity", 1),
                     )
                     stats["bom_nodes"] += 1
                 except Exception:
                     pass
 
-            # 写 BOM 关系（isPartOf，替代旧的 CHILD_OF）
-            name_map = {e.get("id", ""): e.get("name", "") for e in entities}
+            # 创建 ROOT 节点（用于装配树最顶层）
+            try:
+                session.run("MERGE (r:Assembly {kg_name: 'ROOT'}) SET r.source = 'BOM-virtual'")
+            except Exception:
+                pass
+
+            # 写 BOM 关系：head/tail 直接是 head_label，节点 kg_name 已对齐
             for t in triples:
-                head_name = t.get("head", "")
-                tail_name = t.get("tail", "")
+                head_name = (t.get("head") or "").strip()
+                tail_name = (t.get("tail") or "").strip()
+                rel = t.get("relation", "isPartOf")
                 if not head_name or not tail_name:
+                    continue
+                # 仅允许已知 BOM 关系类型（避免注入）
+                if rel not in ("isPartOf", "interchangesWith"):
                     continue
                 try:
                     session.run(
-                        """
-                        MATCH (a {kg_name: $h})
-                        MATCH (b {kg_name: $t})
-                        MERGE (a)-[:isPartOf]->(b)
+                        f"""
+                        MATCH (a {{kg_name: $h}})
+                        MATCH (b {{kg_name: $t}})
+                        MERGE (a)-[r:{rel}]->(b)
+                        SET r.source = 'BOM'
                         """,
                         h=head_name, t=tail_name,
                     )

@@ -1,0 +1,2031 @@
+{
+  "stage": "manual",
+  "generated_at": "2026-04-23T02:40:55.735322+00:00",
+  "source_file": "压气机维修手册.md",
+  "triples": [
+    {
+      "head": "Remove nuts, washers and bolts securing ring halves and vane segment strips to gas generator case",
+      "relation": "precedes",
+      "tail": "Remove vane segment strips and note location for reinstallation",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Bolt (Figure 201 items 1 and 7)",
+      "relation": "participatesIn",
+      "tail": "Remove nuts, washers and bolts securing ring halves and vane segment strips to gas generator case",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Vane Segment Strip",
+      "relation": "participatesIn",
+      "tail": "Remove nuts, washers and bolts securing ring halves and vane segment strips to gas generator case",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Washer",
+      "relation": "participatesIn",
+      "tail": "Remove nuts, washers and bolts securing ring halves and vane segment strips to gas generator case",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure",
+      "head_bom_id": "MS9880-09",
+      "bom_part_id": "MS9880-09"
+    },
+    {
+      "head": "Nut, Self-locking",
+      "relation": "participatesIn",
+      "tail": "Remove nuts, washers and bolts securing ring halves and vane segment strips to gas generator case",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Fireseal Mount Ring, Top Half",
+      "relation": "participatesIn",
+      "tail": "Remove nuts, washers and bolts securing ring halves and vane segment strips to gas generator case",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Fireseal Mount Ring, Bottom Half",
+      "relation": "participatesIn",
+      "tail": "Remove nuts, washers and bolts securing ring halves and vane segment strips to gas generator case",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Vane Segment Strip",
+      "relation": "participatesIn",
+      "tail": "Remove vane segment strips and note location for reinstallation",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Center Fireseal Mount Ring Assembly",
+      "relation": "matesWith",
+      "tail": "Fireseal Mount Ring, Top Half",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Center Fireseal Mount Ring Assembly",
+      "relation": "matesWith",
+      "tail": "Fireseal Mount Ring, Bottom Half",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Bond packing material to center ring halves",
+      "relation": "precedes",
+      "tail": "Allow sealant to cure at room temperature",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Packing AS3209-267",
+      "relation": "participatesIn",
+      "tail": "Bond packing material to center ring halves",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure",
+      "head_bom_id": "AS3209-267",
+      "head_align_method": "regex"
+    },
+    {
+      "head": "Center Ring Half",
+      "relation": "participatesIn",
+      "tail": "Bond packing material to center ring halves",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure",
+      "head_bom_id": "3004904",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Bond packing material to center ring halves",
+      "relation": "requires",
+      "tail": "Adhesive Sealant PWC08-002",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Allow sealant to cure at room temperature",
+      "relation": "specifiedBy",
+      "tail": "72 hours",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Allow sealant to cure at room temperature",
+      "relation": "specifiedBy",
+      "tail": "2-4 hours",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Upper half of rear fireseal mount ring",
+      "relation": "matesWith",
+      "tail": "Bolting flanges of fireseal mount ring halves",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Interface"
+    },
+    {
+      "head": "Lower half of rear fireseal mount ring",
+      "relation": "matesWith",
+      "tail": "Bolting flanges of fireseal mount ring halves",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Interface"
+    },
+    {
+      "head": "Upper half of rear fireseal mount ring",
+      "relation": "matesWith",
+      "tail": "Lower half of rear fireseal mount ring",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Mounting brackets",
+      "relation": "participatesIn",
+      "tail": "Upper half of rear fireseal mount ring",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Mounting brackets",
+      "relation": "participatesIn",
+      "tail": "Lower half of rear fireseal mount ring",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Compressor inlet case",
+      "relation": "participatesIn",
+      "tail": "Mounting brackets",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3036211",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Air inlet screen",
+      "relation": "matesWith",
+      "tail": "Compressor wash ring",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3031697CL",
+      "head_align_method": "keyword_jaccard",
+      "tail_bom_id": "3036211",
+      "tail_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Spray ring",
+      "relation": "matesWith",
+      "tail": "Air inlet screen",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3004904",
+      "head_align_method": "keyword_jaccard",
+      "tail_bom_id": "3031697CL",
+      "tail_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Remove engine from airframe and install in stand",
+      "relation": "precedes",
+      "tail": "Remove power section from gas generator assembly",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Remove power section from gas generator assembly",
+      "relation": "precedes",
+      "tail": "Remove compressor turbine disk and blade assembly",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Remove compressor turbine disk and blade assembly",
+      "relation": "precedes",
+      "tail": "Remove combustion chamber liner",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Remove combustion chamber liner",
+      "relation": "precedes",
+      "tail": "Remove compressor turbine vane ring",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Remove compressor turbine vane ring",
+      "relation": "precedes",
+      "tail": "Remove shroud housing assembly",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Remove shroud housing assembly",
+      "relation": "precedes",
+      "tail": "Remove exit ducts",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Install compressor turbine vane ring",
+      "relation": "precedes",
+      "tail": "Install combustion chamber liner",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Install combustion chamber liner",
+      "relation": "precedes",
+      "tail": "Install compressor turbine disk and blade assembly",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Install compressor turbine disk and blade assembly",
+      "relation": "precedes",
+      "tail": "Install power section on gas generator assembly",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Install power section on gas generator assembly",
+      "relation": "precedes",
+      "tail": "Install engine in airframe",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Gas Generator Assembly",
+      "relation": "participatesIn",
+      "tail": "Remove engine from airframe and install in stand",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Gas Generator Assembly",
+      "relation": "participatesIn",
+      "tail": "Remove power section from gas generator assembly",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Gas Generator Assembly",
+      "relation": "participatesIn",
+      "tail": "Install power section on gas generator assembly",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Gas Generator Assembly",
+      "relation": "participatesIn",
+      "tail": "Install engine in airframe",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Power Section",
+      "relation": "participatesIn",
+      "tail": "Remove power section from gas generator assembly",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Power Section",
+      "relation": "participatesIn",
+      "tail": "Install power section on gas generator assembly",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Compressor Turbine Disk and Blade Assembly",
+      "relation": "participatesIn",
+      "tail": "Remove compressor turbine disk and blade assembly",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Procedure",
+      "head_bom_id": "3104821-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor Turbine Disk and Blade Assembly",
+      "relation": "participatesIn",
+      "tail": "Install compressor turbine disk and blade assembly",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Procedure",
+      "head_bom_id": "3104821-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Combustion Chamber Liner",
+      "relation": "participatesIn",
+      "tail": "Remove combustion chamber liner",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Combustion Chamber Liner",
+      "relation": "participatesIn",
+      "tail": "Install combustion chamber liner",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Compressor Turbine Vane Ring",
+      "relation": "participatesIn",
+      "tail": "Remove compressor turbine vane ring",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Compressor Turbine Vane Ring",
+      "relation": "participatesIn",
+      "tail": "Install compressor turbine vane ring",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Shroud Housing Assembly",
+      "relation": "participatesIn",
+      "tail": "Remove shroud housing assembly",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Shroud Housing Assembly",
+      "relation": "participatesIn",
+      "tail": "Install shroud housing assembly",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Exit Ducts",
+      "relation": "participatesIn",
+      "tail": "Remove exit ducts",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Examine gas generator case for general condition",
+      "relation": "precedes",
+      "tail": "Examine gas generator case for cracks",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Examine gas generator case for general condition",
+      "relation": "precedes",
+      "tail": "Examine gas generator case for distortion",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Examine gas generator case for general condition",
+      "relation": "precedes",
+      "tail": "Examine gas generator case for corrosion",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Examine gas generator case for general condition",
+      "relation": "precedes",
+      "tail": "Examine gas generator case for evidence of overheating",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Examine gas generator case for cracks",
+      "relation": "precedes",
+      "tail": "Remove minor corrosion from exposed surface",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Examine gas generator case for distortion",
+      "relation": "precedes",
+      "tail": "Remove minor corrosion from exposed surface",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Examine gas generator case for corrosion",
+      "relation": "precedes",
+      "tail": "Remove minor corrosion from exposed surface",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Examine gas generator case for evidence of overheating",
+      "relation": "precedes",
+      "tail": "Remove minor corrosion from exposed surface",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Gas generator case",
+      "relation": "participatesIn",
+      "tail": "Examine gas generator case for general condition",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Gas generator case",
+      "relation": "participatesIn",
+      "tail": "Examine gas generator case for cracks",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Gas generator case",
+      "relation": "participatesIn",
+      "tail": "Examine gas generator case for distortion",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Gas generator case",
+      "relation": "participatesIn",
+      "tail": "Examine gas generator case for corrosion",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Gas generator case",
+      "relation": "participatesIn",
+      "tail": "Examine gas generator case for evidence of overheating",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Gas generator case",
+      "relation": "participatesIn",
+      "tail": "Remove minor corrosion from exposed surface",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Inspect for minimum clearance",
+      "relation": "specifiedBy",
+      "tail": "0.020 inch",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Interface between adjacent diffuser exit ducts",
+      "relation": "specifiedBy",
+      "tail": "0.020 inch",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Interface",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Interface between diffuser exit ducts and straightening vanes",
+      "relation": "specifiedBy",
+      "tail": "0.020 inch",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Interface",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Interface between diffuser exit ducts and inner wall",
+      "relation": "specifiedBy",
+      "tail": "0.020 inch",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Interface",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Diffuser exit ducts",
+      "relation": "matesWith",
+      "tail": "Interface between adjacent diffuser exit ducts",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Interface"
+    },
+    {
+      "head": "Diffuser exit ducts",
+      "relation": "matesWith",
+      "tail": "Interface between diffuser exit ducts and straightening vanes",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Interface"
+    },
+    {
+      "head": "Diffuser exit ducts",
+      "relation": "matesWith",
+      "tail": "Interface between diffuser exit ducts and inner wall",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Interface"
+    },
+    {
+      "head": "Inspect for minimum clearance",
+      "relation": "participatesIn",
+      "tail": "Diffuser exit ducts",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Inspect for minimum clearance",
+      "relation": "participatesIn",
+      "tail": "Straightening vanes",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Inspect for minimum clearance",
+      "relation": "participatesIn",
+      "tail": "Inner wall",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Inspect for fretting wear",
+      "relation": "participatesIn",
+      "tail": "Outer face",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Inspect for fretting wear",
+      "relation": "participatesIn",
+      "tail": "Edge",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Blend repair sharp edges",
+      "relation": "participatesIn",
+      "tail": "Edge",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Stop drill cracks",
+      "relation": "participatesIn",
+      "tail": "Gas generator case",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Inspect material loss",
+      "relation": "specifiedBy",
+      "tail": "0.50 x 0.80 inches",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Inspect material loss",
+      "relation": "specifiedBy",
+      "tail": "0.30 x 0.30 inches",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Inspect material loss",
+      "relation": "participatesIn",
+      "tail": "Diffuser exit ducts",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Inspect gas generator case for corrosion",
+      "relation": "requires",
+      "tail": "Soft bristle brush",
+      "confidence": 0.7,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Tool"
+    },
+    {
+      "head": "Inspect gas generator case for corrosion",
+      "relation": "specifiedBy",
+      "tail": "0.010 inch",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Inspect gas generator case for corrosion",
+      "relation": "specifiedBy",
+      "tail": "75 percent",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Inspect gas generator case for corrosion",
+      "relation": "participatesIn",
+      "tail": "Gas generator case",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "Gas generator case",
+      "relation": "matesWith",
+      "tail": "Fuel manifold adapters",
+      "confidence": 0.7,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Gas generator case",
+      "relation": "matesWith",
+      "tail": "Spark igniters",
+      "confidence": 0.7,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Remove fuel manifold adapters",
+      "relation": "participatesIn",
+      "tail": "Fuel manifold adapters",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Remove spark igniters",
+      "relation": "participatesIn",
+      "tail": "Spark igniters",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Examine mounting pads, fuel nozzle bosses and machined surfaces for corrosion and wear",
+      "relation": "participatesIn",
+      "tail": "Mounting pads",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Examine mounting pads, fuel nozzle bosses and machined surfaces for corrosion and wear",
+      "relation": "participatesIn",
+      "tail": "Fuel nozzle bosses",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Examine mounting pads, fuel nozzle bosses and machined surfaces for corrosion and wear",
+      "relation": "participatesIn",
+      "tail": "Machined surfaces",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Diffuser Exit Ducts",
+      "relation": "participatesIn",
+      "tail": "Inspection of Diffuser Exit Ducts",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Clean touch-up areas with cleaner PWC11-033",
+      "relation": "precedes",
+      "tail": "Mask exposed holes in fuel or igniter pads",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Mask exposed holes in fuel or igniter pads",
+      "relation": "precedes",
+      "tail": "Feather touch-up area with abrasive cloth PWC05-101",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Feather touch-up area with abrasive cloth PWC05-101",
+      "relation": "precedes",
+      "tail": "Agitate coating material",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Agitate coating material",
+      "relation": "precedes",
+      "tail": "Apply coating material PWC07-023",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Apply coating material PWC07-023",
+      "relation": "precedes",
+      "tail": "Air dry coating between coats",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Clean touch-up areas with cleaner PWC11-033",
+      "relation": "requires",
+      "tail": "Soft non-metallic bristle brush",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Tool"
+    },
+    {
+      "head": "Feather touch-up area with abrasive cloth PWC05-101",
+      "relation": "requires",
+      "tail": "Suitable drill",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Tool"
+    },
+    {
+      "head": "Air dry coating between coats",
+      "relation": "specifiedBy",
+      "tail": "Four hours",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Partially remove flared end of shanknut",
+      "relation": "requires",
+      "tail": "Suitable drill",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Tool"
+    },
+    {
+      "head": "Remove shanknut from case",
+      "relation": "requires",
+      "tail": "Parallel pin punch",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Tool"
+    },
+    {
+      "head": "Remove shanknut from case",
+      "relation": "participatesIn",
+      "tail": "Shanknut 2",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Install new shanknut",
+      "relation": "specifiedBy",
+      "tail": "PWC30271-100",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Install new shanknut",
+      "relation": "matesWith",
+      "tail": "Shanknut 2",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Lubricate shanknut spreader",
+      "relation": "requires",
+      "tail": "PWC30271-100",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Partially remove flared end of shanknut",
+      "relation": "precedes",
+      "tail": "Remove shanknut from case",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Remove shanknut from case",
+      "relation": "precedes",
+      "tail": "Install new shanknut",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Install new shanknut",
+      "relation": "precedes",
+      "tail": "Lubricate shanknut spreader",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Apply corrosion inhibitor PWC15-013",
+      "relation": "specifiedBy",
+      "tail": "PWC15-013",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "打磨整平脱粘或去除区域",
+      "relation": "participatesIn",
+      "tail": "Gas Generator Case",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "打磨整平摩擦变薄区域",
+      "relation": "participatesIn",
+      "tail": "Gas Generator Case",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "遮蔽附近硬件",
+      "relation": "specifiedBy",
+      "tail": "Bearing areas",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Interface"
+    },
+    {
+      "head": "拆除扩散器出口涵道",
+      "relation": "requires",
+      "tail": "Appropriate tooling",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Tool"
+    },
+    {
+      "head": "拆除扩散器出口涵道",
+      "relation": "participatesIn",
+      "tail": "Gas Generator Case",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "更换扩散器出口涵道",
+      "relation": "precedes",
+      "tail": "拆除扩散器出口涵道",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "更换扩散器出口涵道",
+      "relation": "participatesIn",
+      "tail": "Diffuser Exit Duct",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "STOP-DRILL AND SMOOTH OUT HOLE",
+      "relation": "precedes",
+      "tail": "STOP-DRILL, REMOVE METAL AND BLEND OUT HOLE",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "STOP-DRILL, REMOVE METAL AND BLEND OUT HOLE",
+      "relation": "precedes",
+      "tail": "STOP-DRILL THROUGH WINDOW",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "STOP-DRILL AND SMOOTH OUT HOLE",
+      "relation": "specifiedBy",
+      "tail": "0.800 MAX.",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "STOP-DRILL, REMOVE METAL AND BLEND OUT HOLE",
+      "relation": "specifiedBy",
+      "tail": "0.400 MAX.",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "STOP-DRILL, REMOVE METAL AND BLEND OUT HOLE",
+      "relation": "specifiedBy",
+      "tail": "0.500 MAX.",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "STOP-DRILL, REMOVE METAL AND BLEND OUT HOLE",
+      "relation": "specifiedBy",
+      "tail": "0.250 MAX.",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Diffuser Exit Duct",
+      "relation": "participatesIn",
+      "tail": "STOP-DRILL AND SMOOTH OUT HOLE",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Diffuser Exit Duct",
+      "relation": "participatesIn",
+      "tail": "STOP-DRILL, REMOVE METAL AND BLEND OUT HOLE",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Diffuser Exit Duct",
+      "relation": "participatesIn",
+      "tail": "STOP-DRILL THROUGH WINDOW",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Align keys and insert fuel nozzle",
+      "relation": "specifiedBy",
+      "tail": "0.010 to 0.015 inch",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Align keys and insert bleed valve",
+      "relation": "specifiedBy",
+      "tail": "0.010 to 0.015 inch",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Drive keys down",
+      "relation": "requires",
+      "tail": "Locking tool",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Tool"
+    },
+    {
+      "head": "Drive keys down",
+      "relation": "requires",
+      "tail": "Hammer",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Tool"
+    },
+    {
+      "head": "Fuel nozzle inserts",
+      "relation": "matesWith",
+      "tail": "keys",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Interface"
+    },
+    {
+      "head": "Bleed valve",
+      "relation": "matesWith",
+      "tail": "keys",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Interface"
+    },
+    {
+      "head": "Replacement Diffuser Exit Duct Assembly",
+      "relation": "matesWith",
+      "tail": "Diffuser Exit Duct Assembly",
+      "confidence": 0.7,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "Clean inside gas generator case",
+      "relation": "requires",
+      "tail": "Suitable suction cleaner",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Tool"
+    },
+    {
+      "head": "Gas generator case",
+      "relation": "participatesIn",
+      "tail": "Clean inside gas generator case",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Install combustion chamber liner",
+      "relation": "participatesIn",
+      "tail": "Combustion chamber liner",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Install fuel manifold adapter(s)",
+      "relation": "participatesIn",
+      "tail": "Fuel manifold adapter",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part"
+    },
+    {
+      "head": "Install power section",
+      "relation": "participatesIn",
+      "tail": "Power section",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "First-Stage Rotor Blades",
+      "relation": "matesWith",
+      "tail": "Disk",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "tail_bom_id": "3018399",
+      "head_bom_id": "3102921-03",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Second-Stage Rotor Blades",
+      "relation": "matesWith",
+      "tail": "Disk",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "tail_bom_id": "3018399",
+      "head_bom_id": "3034312",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Third-Stage Rotor Blades",
+      "relation": "matesWith",
+      "tail": "Disk",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "tail_bom_id": "3018399",
+      "head_bom_id": "3034313",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Dovetail Groove Interface",
+      "relation": "specifiedBy",
+      "tail": "Limited clearance",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Interface",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "First-Stage Rotor Blades",
+      "relation": "matesWith",
+      "tail": "Dovetail Groove Interface",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Interface",
+      "head_bom_id": "3102921-03",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Second-Stage Rotor Blades",
+      "relation": "matesWith",
+      "tail": "Dovetail Groove Interface",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Interface",
+      "head_bom_id": "3034312",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Third-Stage Rotor Blades",
+      "relation": "matesWith",
+      "tail": "Dovetail Groove Interface",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Interface",
+      "head_bom_id": "3034313",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "3RD STAGE STATOR",
+      "relation": "matesWith",
+      "tail": "SHROUD 3RD STAGE STATOR",
+      "confidence": 0.4,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3102563-01",
+      "head_align_method": "keyword_jaccard",
+      "tail_bom_id": "3102463-01",
+      "tail_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "2ND STAGE 1ST STAGE BLADES",
+      "relation": "participatesIn",
+      "tail": "CENTRIFUGAL IMPELLER WIDE CHORD 1ST STAGE COMPRESSOR IMPELLER",
+      "confidence": 0.4,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Assembly",
+      "tail_bom_id": "3036793"
+    },
+    {
+      "head": "SHROUD BLEED VALVE SPACER",
+      "relation": "specifiedBy",
+      "tail": "INLET CASE",
+      "confidence": 0.4,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3112804-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "COMPRESSOR REAR HUB",
+      "relation": "constrainedBy",
+      "tail": "NO.2 BEARING",
+      "confidence": 0.4,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3114832-01",
+      "tail_bom_id": "3103070-01",
+      "tail_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Coupling shaft",
+      "relation": "participatesIn",
+      "tail": "Accessory gearbox",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Assembly",
+      "head_bom_id": "3102336-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Coupling shaft",
+      "relation": "matesWith",
+      "tail": "Ball-lock arrangement",
+      "confidence": 0.7,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3102336-01",
+      "head_align_method": "keyword_jaccard",
+      "tail_bom_id": "3113608-01",
+      "tail_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Gearbox drive shaft",
+      "relation": "matesWith",
+      "tail": "Accessory gearbox",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Assembly"
+    },
+    {
+      "head": "No. 1 bearing",
+      "relation": "participatesIn",
+      "tail": "Compressor assembly",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Assembly",
+      "head_bom_id": "3103070-01",
+      "head_align_method": "keyword_jaccard",
+      "tail_bom_id": "3104821-01",
+      "tail_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "No. 2 bearing",
+      "relation": "participatesIn",
+      "tail": "Compressor assembly",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Assembly",
+      "head_bom_id": "3103070-01",
+      "head_align_method": "keyword_jaccard",
+      "tail_bom_id": "3104821-01",
+      "tail_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "No. 1 bearing outer race",
+      "relation": "matesWith",
+      "tail": "Adapter",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3103070-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor assembly",
+      "relation": "matesWith",
+      "tail": "Gas generator case",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Assembly",
+      "head_bom_id": "3104821-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Outer housing",
+      "relation": "matesWith",
+      "tail": "Inlet case",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Assembly",
+      "head_bom_id": "3103070-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "No. 2 bearing outer race",
+      "relation": "matesWith",
+      "tail": "Gas generator case",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Assembly",
+      "head_bom_id": "3103070-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "No. 2 bearing inner race",
+      "relation": "matesWith",
+      "tail": "Compressor rotor air seal",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "tail_bom_id": "ASM-CPR-001",
+      "head_bom_id": "3014309",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "No. 2 bearing inner race",
+      "relation": "matesWith",
+      "tail": "Compressor turbine rotor air seal",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3014309",
+      "head_align_method": "keyword_jaccard",
+      "tail_bom_id": "3017967",
+      "tail_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor rotor air seal",
+      "relation": "matesWith",
+      "tail": "Stubshaft",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "ASM-CPR-001"
+    },
+    {
+      "head": "Compressor turbine disk",
+      "relation": "matesWith",
+      "tail": "No. 2 bearing inner race",
+      "confidence": 0.7,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3018399",
+      "head_align_method": "keyword_jaccard",
+      "tail_bom_id": "3014309",
+      "tail_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor turbine disk",
+      "relation": "matesWith",
+      "tail": "Compressor rotor air seal",
+      "confidence": 0.7,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "tail_bom_id": "ASM-CPR-001",
+      "head_bom_id": "3018399",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor turbine disk",
+      "relation": "matesWith",
+      "tail": "Compressor turbine rotor air seal",
+      "confidence": 0.7,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3018399",
+      "head_align_method": "keyword_jaccard",
+      "tail_bom_id": "3017967",
+      "tail_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor Rotor",
+      "relation": "participatesIn",
+      "tail": "Assess compressor FOD",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Procedure",
+      "head_bom_id": "ASM-CPR-001",
+      "bom_part_id": "ASM-CPR-001"
+    },
+    {
+      "head": "Assess compressor FOD",
+      "relation": "specifiedBy",
+      "tail": "Maximum acceptable limits",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Compressor Rotor",
+      "relation": "participatesIn",
+      "tail": "Continue operation with FOD",
+      "confidence": 0.7,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Procedure",
+      "head_bom_id": "ASM-CPR-001",
+      "bom_part_id": "ASM-CPR-001"
+    },
+    {
+      "head": "Blade root",
+      "relation": "specifiedBy",
+      "tail": "0.020 inch deep by 0.025 inch wide",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Specification",
+      "head_bom_id": "3030354",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Continue operation with FOD",
+      "relation": "specifiedBy",
+      "tail": "Maximum acceptable limits",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Perform leading edge cutback",
+      "relation": "precedes",
+      "tail": "Inspect area at 100 hours",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Blade root",
+      "relation": "participatesIn",
+      "tail": "Perform leading edge cutback",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure",
+      "head_bom_id": "3030354",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Blend damage",
+      "relation": "precedes",
+      "tail": "Perform leading edge cutback",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "PRATT & WHITNEY CANADA",
+      "relation": "hasInterface",
+      "tail": "MAINTENANCE MANUAL",
+      "confidence": 0.4,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "MAINTENANCE MANUAL",
+      "relation": "specifiedBy",
+      "tail": "MANUAL PART NO. 3013242",
+      "confidence": 0.4,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "any number of blades",
+      "relation": "constrainedBy",
+      "tail": "0.050INCH OF BLADE ROOT FILLET RADIUS",
+      "confidence": 0.4,
+      "source": "Manual",
+      "head_type": "Specification",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Mask entire first-stage compressor area",
+      "relation": "precedes",
+      "tail": "Repair first-stage blade leading edge",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Repair first-stage blade leading edge",
+      "relation": "precedes",
+      "tail": "Clean up titanium dust",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Repair first-stage blade leading edge",
+      "relation": "requires",
+      "tail": "Fine hand files and stones",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Tool"
+    },
+    {
+      "head": "First-stage compressor blade",
+      "relation": "participatesIn",
+      "tail": "Repair first-stage blade leading edge",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure",
+      "head_bom_id": "3102201-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Blade leading edge",
+      "relation": "participatesIn",
+      "tail": "Repair first-stage blade leading edge",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Repair first-stage blade leading edge",
+      "relation": "specifiedBy",
+      "tail": "0.200 in.",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Repair first-stage blade leading edge",
+      "relation": "specifiedBy",
+      "tail": "0.025 in. maximum",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Blade leading edge interface",
+      "relation": "specifiedBy",
+      "tail": "0.200 in.",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Interface",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Blade leading edge interface",
+      "relation": "specifiedBy",
+      "tail": "0.025 in. maximum",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Interface",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Inspect compressor first-stage blades",
+      "relation": "participatesIn",
+      "tail": "First-stage compressor blade",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Part",
+      "tail_bom_id": "3102201-01",
+      "tail_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "First-stage compressor blade",
+      "relation": "matesWith",
+      "tail": "Blade leading edge",
+      "confidence": 0.7,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3102201-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "First-stage compressor blade",
+      "relation": "matesWith",
+      "tail": "Blade trailing edge",
+      "confidence": 0.7,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3102201-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Blade leading edge",
+      "relation": "specifiedBy",
+      "tail": "0.250 in MAX ACCEPTABLE MATERIAL LOSS FROM EROSION",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Blade leading edge - trailing edge interface",
+      "relation": "specifiedBy",
+      "tail": "1.400-1.900 REF",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Interface",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "First-stage compressor blade",
+      "relation": "matesWith",
+      "tail": "Blade leading edge - trailing edge interface",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Interface",
+      "head_bom_id": "3102201-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor Rotor Blade",
+      "relation": "specifiedBy",
+      "tail": "0.025 in.",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Specification",
+      "head_bom_id": "3035701-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor Rotor Blade",
+      "relation": "specifiedBy",
+      "tail": "0.020 in.",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Specification",
+      "head_bom_id": "3035701-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor Rotor Blade",
+      "relation": "specifiedBy",
+      "tail": "0.050 in. MAXIMUM",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Specification",
+      "head_bom_id": "3035701-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor Rotor",
+      "relation": "matesWith",
+      "tail": "Compressor Rotor Blade",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Assembly",
+      "tail_type": "Part",
+      "head_bom_id": "ASM-CPR-001",
+      "tail_bom_id": "3035701-01",
+      "tail_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor rotor blade",
+      "relation": "participatesIn",
+      "tail": "Repair bent or torn leading edge tips",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure",
+      "head_bom_id": "3035701-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor rotor blade",
+      "relation": "participatesIn",
+      "tail": "Smooth sharp edge at blade leading edge root",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure",
+      "head_bom_id": "3035701-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Blade leading edge",
+      "relation": "participatesIn",
+      "tail": "Repair bent or torn leading edge tips",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Blade leading edge root",
+      "relation": "participatesIn",
+      "tail": "Smooth sharp edge at blade leading edge root",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Compressor rotor blade",
+      "relation": "matesWith",
+      "tail": "Blade-to-rotor interface",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Interface",
+      "head_bom_id": "3035701-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Repair bent or torn leading edge tips",
+      "relation": "specifiedBy",
+      "tail": "0.375 inch wide maximum",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Repair bent or torn leading edge tips",
+      "relation": "specifiedBy",
+      "tail": "0.280 inch deep maximum",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Smooth sharp edge at blade leading edge root",
+      "relation": "specifiedBy",
+      "tail": "0.250 inch",
+      "confidence": 1.0,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Repair bent or torn leading edge tips",
+      "relation": "precedes",
+      "tail": "Smooth opposite blade to same shape",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Smooth sharp edge at blade leading edge root",
+      "relation": "precedes",
+      "tail": "Check airfoil chord reduction",
+      "confidence": 0.9,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Procedure"
+    },
+    {
+      "head": "Compressor rotor blade",
+      "relation": "matesWith",
+      "tail": "Blade 180 degrees opposite",
+      "confidence": 0.8,
+      "source": "Manual",
+      "head_type": "Part",
+      "tail_type": "Part",
+      "head_bom_id": "3035701-01",
+      "head_align_method": "keyword_jaccard"
+    },
+    {
+      "head": "Compressor First-stage Repair Limits",
+      "relation": "specifiedBy",
+      "tail": "ORIGINAL CHORD LENGTH",
+      "confidence": 0.4,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Compressor First-stage Repair Limits",
+      "relation": "specifiedBy",
+      "tail": "LEADING EDGE RADIUS",
+      "confidence": 0.4,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Compressor First-stage Repair Limits",
+      "relation": "specifiedBy",
+      "tail": "MAXIMUM PERMITTED MATERIAL REMOVAL",
+      "confidence": 0.4,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Specification"
+    },
+    {
+      "head": "Compressor First-stage Repair Limits",
+      "relation": "participatesIn",
+      "tail": "ENLARGED SECTION F-F",
+      "confidence": 0.4,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Tool"
+    },
+    {
+      "head": "Compressor First-stage Repair Limits",
+      "relation": "participatesIn",
+      "tail": "DETAIL E",
+      "confidence": 0.4,
+      "source": "Manual",
+      "head_type": "Procedure",
+      "tail_type": "Tool"
+    }
+  ],
+  "stats": {
+    "total_triples": 210,
+    "entities_count": 213,
+    "relations_breakdown": {
+      "precedes": 37,
+      "participatesIn": 76,
+      "matesWith": 41,
+      "requires": 12,
+      "specifiedBy": 41,
+      "constrainedBy": 2,
+      "hasInterface": 1
+    }
+  }
+}

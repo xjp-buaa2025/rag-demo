@@ -1,0 +1,1294 @@
+{
+  "metadata": {
+    "engine_model": "Pratt & Whitney Canada PT6A series",
+    "manual_ref": "Maintenance Manual 3013242, Chapter 72-30",
+    "scope": "Gas Generator Assembly — Compressor Subsystem",
+    "schema_version": "v2 (7-entity / 9-relation)",
+    "generated_by": "Expert review (Manual 3013242 + BOM DOCX)",
+    "generated_at": "2026-04-22",
+    "entity_types": ["Part","Assembly","Procedure","Tool","Specification","Interface","GeoConstraint"],
+    "relation_types": ["isPartOf","precedes","participatesIn","requires","specifiedBy","matesWith","adjacentTo","hasInterface","constrainedBy"]
+  },
+
+  "entities": {
+    "parts": [
+      {
+        "id": "P001", "label": "Part",
+        "part_number": ["3030349","3103074-01","3107262-01","3112852-01"],
+        "name_zh": "压气机前支撑轴", "name_en": "Compressor Front Stubshaft",
+        "material": "合金钢（空心锻件）", "quantity": 1,
+        "note": "hollow steel forging; houses No.2 bearing and CPR turbine rotor seal"
+      },
+      {
+        "id": "P002", "label": "Part",
+        "part_number": [],
+        "name_zh": "离心压气机叶轮", "name_en": "Centrifugal Impeller",
+        "material": "铝合金", "quantity": 1,
+        "note": "bolted to 3 axial stages by 6 tie rods; single-stage centrifugal"
+      },
+      {
+        "id": "P003", "label": "Part",
+        "part_number": [],
+        "name_zh": "叶轮壳体", "name_en": "Impeller Housing",
+        "material": "铝合金", "quantity": 1,
+        "note": "secured to GGC by wedge-shaped retaining ring"
+      },
+      {
+        "id": "P004", "label": "Part",
+        "part_number": [],
+        "name_zh": "一级压气机盘（后轮毂）", "name_en": "1st Stage Compressor Disk / Compressor Rear Hub",
+        "material": "钛合金", "quantity": 1,
+        "note": "integral part of 1st stage rotor disk; hollow, houses No.1 bearing"
+      },
+      {
+        "id": "P005", "label": "Part",
+        "part_number": [],
+        "name_zh": "二级压气机盘", "name_en": "2nd Stage Compressor Disk",
+        "material": "不锈钢", "quantity": 1
+      },
+      {
+        "id": "P006", "label": "Part",
+        "part_number": [],
+        "name_zh": "三级压气机盘", "name_en": "3rd Stage Compressor Disk",
+        "material": "不锈钢", "quantity": 1
+      },
+      {
+        "id": "P007", "label": "Part",
+        "part_number": ["3014309","3101615-01","3015599","3103070-01","3105693-01","3108836-01"],
+        "name_zh": "一级转子叶片", "name_en": "1st Stage Rotor Blade",
+        "material": "钛合金 Ti-6Al-4V", "quantity": 16,
+        "note": "wide chord blade; fits dovetail groove in Stage1 disk"
+      },
+      {
+        "id": "P008", "label": "Part",
+        "part_number": ["3102201-01","3104501-01","3106901-01"],
+        "name_zh": "二级转子叶片", "name_en": "2nd Stage Rotor Blade",
+        "material": "镀镉不锈钢", "quantity": 32
+      },
+      {
+        "id": "P009", "label": "Part",
+        "part_number": [],
+        "name_zh": "三级转子叶片", "name_en": "3rd Stage Rotor Blade",
+        "material": "镀镉不锈钢", "quantity": 32
+      },
+      {
+        "id": "P010", "label": "Part",
+        "part_number": [],
+        "name_zh": "短间隔环（一级）", "name_en": "1st Stage Short Spacer",
+        "material": "合金钢", "quantity": 1,
+        "note": "limits axial blade movement between disks"
+      },
+      {
+        "id": "P011", "label": "Part",
+        "part_number": [],
+        "name_zh": "长间隔环（二三级）", "name_en": "2nd-3rd Stage Long Spacer",
+        "material": "合金钢", "quantity": 1
+      },
+      {
+        "id": "P012", "label": "Part",
+        "part_number": [],
+        "name_zh": "拉杆", "name_en": "Tie Rod",
+        "material": "合金钢", "quantity": 6,
+        "note": "numbered; connects impeller to 3 axial stages as integral unit"
+      },
+      {
+        "id": "P013", "label": "Part",
+        "part_number": [],
+        "name_zh": "一级静子导叶", "name_en": "1st Stage Stator Vane",
+        "material": "不锈钢", "quantity": 44,
+        "note": "brazed to stator assembly; outer ends protrude through stator ring"
+      },
+      {
+        "id": "P014", "label": "Part",
+        "part_number": [],
+        "name_zh": "二级静子导叶", "name_en": "2nd Stage Stator Vane",
+        "material": "不锈钢", "quantity": 44
+      },
+      {
+        "id": "P015", "label": "Part",
+        "part_number": [],
+        "name_zh": "三级静子导叶", "name_en": "3rd Stage Stator Vane",
+        "material": "不锈钢", "quantity": 40
+      },
+      {
+        "id": "P016", "label": "Part",
+        "part_number": [],
+        "name_zh": "1号轴承（球轴承）", "name_en": "No.1 Bearing (Ball-type)",
+        "material": "轴承钢", "quantity": 1,
+        "note": "supports rear hub; located in compressor inlet case"
+      },
+      {
+        "id": "P017", "label": "Part",
+        "part_number": [],
+        "name_zh": "2号轴承（滚柱轴承）", "name_en": "No.2 Bearing (Roller-type)",
+        "material": "轴承钢", "quantity": 1,
+        "note": "supports front stubshaft; located in gas generator case; 4-bolt outer race"
+      },
+      {
+        "id": "P018", "label": "Part",
+        "part_number": [],
+        "name_zh": "压气机后联轴节", "name_en": "Compressor Rear Coupling",
+        "material": "合金钢（空心件，外端花键）", "quantity": 1,
+        "note": "externally splined rear; secured in rear hub by transverse pin"
+      },
+      {
+        "id": "P019", "label": "Part",
+        "part_number": [],
+        "name_zh": "空心传动轴", "name_en": "Hollow Steel Coupling Shaft",
+        "material": "合金钢", "quantity": 1,
+        "note": "internally splined both ends; ball-lock front, splined rear to gearbox"
+      },
+      {
+        "id": "P020", "label": "Part",
+        "part_number": [],
+        "name_zh": "横销", "name_en": "Transverse Pin",
+        "material": "合金钢", "quantity": 1,
+        "note": "passes through rear hub and coupling to retain coupling"
+      },
+      {
+        "id": "P021", "label": "Part",
+        "part_number": [],
+        "name_zh": "楔形锁环", "name_en": "Wedge-shaped Retaining Ring",
+        "material": "合金钢", "quantity": 1,
+        "note": "secures impeller housing to GGC inner casing"
+      },
+      {
+        "id": "P022", "label": "Part",
+        "part_number": ["AS3209-267","AS3209-154"],
+        "name_zh": "预成形密封圈", "name_en": "Preformed Packing (O-ring)",
+        "material": "氟硅橡胶", "quantity": 2,
+        "note": "seals stator assembly to inlet case interface"
+      },
+      {
+        "id": "P023", "label": "Part",
+        "part_number": ["3016598","3103069-01"],
+        "name_zh": "锁圈（1号轴承）", "name_en": "No.1 Bearing Keywasher",
+        "material": "合金钢", "quantity": 1
+      },
+      {
+        "id": "P024", "label": "Part",
+        "part_number": ["MS9356-09"],
+        "name_zh": "扳手螺母（1号轴承）", "name_en": "No.1 Bearing Spanner Nut",
+        "material": "合金钢", "quantity": 1
+      },
+      {
+        "id": "P025", "label": "Part",
+        "part_number": ["MS9489-07","3015113"],
+        "name_zh": "锁片垫圈（2号轴承）", "name_en": "No.2 Bearing Tabwasher",
+        "material": "合金钢", "quantity": 4
+      },
+      {
+        "id": "P026", "label": "Part",
+        "part_number": ["3031697CL","3031697CL1","3031697CL2","3031697CL3",
+                        "3031697CL4","3031697CL5","3031697CL6","3031697CL7"],
+        "name_zh": "转子平衡重块", "name_en": "Rotor Balance Weight",
+        "material": "合金钢", "quantity": "按需",
+        "note": "multiple weight grades for dynamic balance"
+      },
+      {
+        "id": "P027", "label": "Part",
+        "part_number": ["3006194","AN123154","AN123153","AN123155"],
+        "name_zh": "通圆头铆钉（平衡块固定）", "name_en": "Universal Head Rivet (Balance Weight)",
+        "material": "合金", "quantity": "按需"
+      },
+      {
+        "id": "P028", "label": "Part",
+        "part_number": ["3006246","3112804-01"],
+        "name_zh": "叶片锁片/键形垫片", "name_en": "Blade Root Retainer / Key Washer",
+        "material": "合金钢", "quantity": 16,
+        "note": "prevents axial escape of stage-1 blades from dovetail"
+      },
+      {
+        "id": "P029", "label": "Part",
+        "part_number": ["MS9556-06","MS9556-07"],
+        "name_zh": "双头机械螺栓", "name_en": "Machine Bolt, Double-head",
+        "material": "合金钢", "quantity": 12
+      },
+      {
+        "id": "P030", "label": "Part",
+        "part_number": ["MS9676-11"],
+        "name_zh": "双头机械螺母", "name_en": "Machine Nut, Double-head",
+        "material": "合金钢", "quantity": 4
+      },
+      {
+        "id": "P031", "label": "Part",
+        "part_number": ["MS9880-09"],
+        "name_zh": "弹性挡圈", "name_en": "Spring Retaining Ring",
+        "material": "弹簧钢", "quantity": 4
+      },
+      {
+        "id": "P032", "label": "Part",
+        "part_number": [],
+        "name_zh": "压气机转子气封", "name_en": "Compressor Rotor Air Seal",
+        "material": "耐热合金", "quantity": 1
+      },
+      {
+        "id": "P033", "label": "Part",
+        "part_number": [],
+        "name_zh": "2号轴承气封", "name_en": "No.2 Bearing Air Seal",
+        "material": "耐热合金", "quantity": 1,
+        "note": "fitted on stubshaft forward of No.2 bearing; retained by CPR turbine disk"
+      },
+      {
+        "id": "P034", "label": "Part",
+        "part_number": [],
+        "name_zh": "叶轮壳体锁环（调整间隔环）", "name_en": "No.1 Bearing Adjusting Spacer",
+        "material": "合金钢", "quantity": 1
+      },
+      {
+        "id": "P035", "label": "Part",
+        "part_number": [],
+        "name_zh": "导流罩（进气口筛网）", "name_en": "Air Inlet Screen / Fairing",
+        "material": "不锈钢丝网", "quantity": 1,
+        "note": "prevents foreign object ingestion; removal triggers Stage1 blade inspection"
+      }
+    ],
+
+    "assemblies": [
+      {
+        "id": "A001", "label": "Assembly",
+        "name_zh": "燃气发生器组件", "name_en": "Gas Generator Assembly",
+        "level": 1, "ata": "72-30-00",
+        "function": "压气-燃烧-做功一体式核心机；为动力涡轮和附件齿轮箱提供驱动力"
+      },
+      {
+        "id": "A002", "label": "Assembly",
+        "name_zh": "压气机转子装配", "name_en": "Compressor Rotor Assembly",
+        "level": 2, "ata": "72-30-05",
+        "part_numbers": ["ASM-CPR"],
+        "function": "三轴向级+单级离心叶轮，将进气压缩后送入燃烧室"
+      },
+      {
+        "id": "A003", "label": "Assembly",
+        "name_zh": "压气机转子平衡组件", "name_en": "Compressor Rotor Balance Assembly",
+        "level": 3, "ata": "72-30-05",
+        "part_numbers": ["ASM-RBA","3102464-01","3102464-03"],
+        "function": "转子动平衡补偿，消除转子不平衡量"
+      },
+      {
+        "id": "A004", "label": "Assembly",
+        "name_zh": "一级静子组件", "name_en": "1st Stage Stator Assembly",
+        "level": 3, "ata": "72-30-05",
+        "function": "导流：将一级压缩后的气流整流引导入二级转子"
+      },
+      {
+        "id": "A005", "label": "Assembly",
+        "name_zh": "二级静子组件", "name_en": "2nd Stage Stator Assembly",
+        "level": 3, "ata": "72-30-05",
+        "function": "导流：将二级压缩后气流整流引导入三级转子"
+      },
+      {
+        "id": "A006", "label": "Assembly",
+        "name_zh": "三级静子组件", "name_en": "3rd Stage Stator Assembly",
+        "level": 3, "ata": "72-30-05",
+        "function": "导流+引气：整流并通过槽孔向引气阀腔室引出级间压力P2.5"
+      },
+      {
+        "id": "A007", "label": "Assembly",
+        "name_zh": "1号轴承组件", "name_en": "No.1 Bearing Assembly",
+        "level": 3, "ata": "72-30-05",
+        "part_numbers": ["3102464-01","3102464-03"],
+        "function": "支撑压气机后轮毂（后端），承受轴向推力（球轴承）"
+      },
+      {
+        "id": "A008", "label": "Assembly",
+        "name_zh": "燃气发生器机匣", "name_en": "Gas Generator Case",
+        "level": 2, "ata": "72-30-04",
+        "function": "主承力结构；容纳压气机、燃烧室、涡轮；承载附件安装面"
+      },
+      {
+        "id": "A009", "label": "Assembly",
+        "name_zh": "压气机进气机匣", "name_en": "Compressor Inlet Case",
+        "level": 2, "ata": "72-30-00",
+        "function": "引导进气；承载1号轴承和一级静子后端；支撑附件齿轮箱"
+      },
+      {
+        "id": "A010", "label": "Assembly",
+        "name_zh": "中央防火隔框（中心隔热环）", "name_en": "Center Fireseal Mount Ring Assembly",
+        "level": 2, "ata": "72-30-01",
+        "function": "在压气机进气区与发动机前端之间形成防火隔断"
+      },
+      {
+        "id": "A011", "label": "Assembly",
+        "name_zh": "后防火隔框（后隔热环）", "name_en": "Rear Fireseal Mount Ring Assembly",
+        "level": 2, "ata": "72-30-02",
+        "function": "在压气机进气区与附件齿轮箱之间形成防火隔断"
+      },
+      {
+        "id": "A012", "label": "Assembly",
+        "name_zh": "压气机引气阀组件", "name_en": "Compressor Bleed Valve Assembly",
+        "level": 2, "ata": "72-30-00",
+        "function": "防止压气机喘振：在设定转速以下将级间压力P2.5排向大气"
+      },
+      {
+        "id": "A013", "label": "Assembly",
+        "name_zh": "1,3级静子组件（整体）", "name_en": "1st & 3rd Stage Stator Combined Assembly",
+        "level": 3, "ata": "72-30-05",
+        "function": "一级和三级静子通过螺栓连为一体；二级静子夹持在其间"
+      }
+    ],
+
+    "procedures": [
+      {
+        "id": "PR001", "label": "Procedure",
+        "step_id": "72-30-01-PR-001", "sequence_no": 1,
+        "name_zh": "拆卸中央防火隔框（Pre-SB1445型）",
+        "name_en": "Removal of Pre-SB1445 Center Fireseal Mount Ring",
+        "description": "Remove external lines through ring; remove nuts/bolts at flanges; remove nuts/washers/bolts securing ring halves to GGC brackets; remove ring halves.",
+        "source": "Manual 72-30-01 §5.A"
+      },
+      {
+        "id": "PR002", "label": "Procedure",
+        "step_id": "72-30-01-PR-002", "sequence_no": 2,
+        "name_zh": "拆卸中央防火隔框（Post-SB1445型）",
+        "name_en": "Removal of Post-SB1445 Center Fireseal Mount Ring",
+        "description": "(1)Remove power section. (2)Remove external lines. (3)Remove combustion chamber liner. (4)Remove joining nuts(9) and bolts(7). (5)Remove mounting nuts(6)/washers(5)/bolts(1) and vane segment strips(2). (6)Remove ring halves(4,10).",
+        "source": "Manual 72-30-01 §5.B"
+      },
+      {
+        "id": "PR003", "label": "Procedure",
+        "step_id": "72-30-01-PR-003", "sequence_no": 1,
+        "name_zh": "安装中央防火隔框（Pre-SB1445型）",
+        "name_en": "Installation of Pre-SB1445 Center Fireseal Mount Ring",
+        "description": "Position ring halves on GGC and secure to brackets; torque 32-36 lb.in. Join at flanges with bolts and self-locking nuts (bottom-left, top-right); torque 32-36 lb.in. Reinstall external lines.",
+        "source": "Manual 72-30-01 §5.C"
+      },
+      {
+        "id": "PR004", "label": "Procedure",
+        "step_id": "72-30-01-PR-004", "sequence_no": 2,
+        "name_zh": "安装中央防火隔框（Post-SB1445型）",
+        "name_en": "Installation of Post-SB1445 Center Fireseal Mount Ring",
+        "description": "(1)Apply silicone adhesive PWC08-002 to GGC mating surfaces and bolt shanks. (2)Position top half(4). (3)Install vane strips(2) inside GGC; finger-tighten washers(5)/nuts(6). (4)Position bottom half(10). (5)Install vane strips. (6)Join halves at flanges with bolts(7)/nuts(9). (7)Torque all 21 mounting positions 45-55 lb.in. (8)Torque flange nuts(9) 32-36 lb.in. (9)Install combustion chamber liner. (10)Install power section. (11)Install external lines.",
+        "source": "Manual 72-30-01 §5.D"
+      },
+      {
+        "id": "PR005", "label": "Procedure",
+        "step_id": "72-30-04-PR-001", "sequence_no": 1,
+        "name_zh": "燃气发生器组件拆卸（大修级）",
+        "name_en": "Removal of Gas Generator Assembly (Heavy Maintenance)",
+        "description": "(a)Remove engine from airframe; install in stand. (b)Remove power section from GGA. (c)Remove CPR turbine disk and blade assembly. (d)Remove combustion chamber liner. (e)Remove CPR turbine vane ring/shroud housing/exit ducts.",
+        "source": "Manual 72-30-04 §5.A"
+      },
+      {
+        "id": "PR006", "label": "Procedure",
+        "step_id": "72-30-04-PR-002", "sequence_no": 2,
+        "name_zh": "燃气发生器组件安装（大修级）",
+        "name_en": "Installation of Gas Generator Assembly",
+        "description": "(a)Install vane ring/shroud/exit ducts. (b)Install combustion chamber liner. (c)Install CPR turbine disk and blade assembly. (d)Install power section on GGA. (e)Install engine in airframe.",
+        "source": "Manual 72-30-04 §5.B"
+      },
+      {
+        "id": "PR007", "label": "Procedure",
+        "step_id": "72-30-04-PR-003", "sequence_no": 1,
+        "name_zh": "燃气发生器机匣外部检查",
+        "name_en": "Inspection of Gas Generator Case (External)",
+        "description": "Examine for cracks, distortion, corrosion, overheating evidence. Machined surfaces: corrosion pitting <0.010 in deep and <75% surface area acceptable. Examine engine mounts (installed) or mounting pads/threaded holes (uninstalled). Inspect shanknuts in No.2 bearing flange area.",
+        "source": "Manual 72-30-04 §7.A"
+      },
+      {
+        "id": "PR008", "label": "Procedure",
+        "step_id": "72-30-05-PR-001", "sequence_no": 1,
+        "name_zh": "一级压气机转子叶片检查（目视）",
+        "name_en": "1st Stage Compressor Rotor Blade Inspection",
+        "description": "Triggered by each removal of air inlet screen. Use mirror due to limited access. Assess FOD, nicks, tears, cracks, erosion against limits in §5.C and §5.D. Document damage per §5.B.",
+        "source": "Manual 72-30-05 §5.A"
+      },
+      {
+        "id": "PR009", "label": "Procedure",
+        "step_id": "72-30-05-PR-002", "sequence_no": 2,
+        "name_zh": "一级叶片损伤记录",
+        "name_en": "1st Stage Blade Damage Documentation",
+        "description": "Record: engine module TSN/TSO, cycles, component description, damage location and dimensions. If blade repaired, record material removed (cutback amount).",
+        "source": "Manual 72-30-05 §5.B"
+      },
+      {
+        "id": "PR010", "label": "Procedure",
+        "step_id": "72-30-05-PR-003", "sequence_no": 3,
+        "name_zh": "一级叶片前缘修锉修理",
+        "name_en": "1st Stage Blade Leading Edge Repair",
+        "description": "(1)Mask entire 1st stage area to contain titanium filings. (2)Blend/cutback using fine hand files and stones within limits: LE cutback max 0.025 in (extendable to 0.050 in). Blend limit: 0.300 in wide x 0.165 in deep, ≥0.220 in from tip. Tip bend: 0.375 in wide x 0.280 in deep. (3)If any blade at max limit, blend blade 180° opposite identically to prevent imbalance. (4)Clean inlet area with suction cleaner; remove all masking and filing residue. (5)Verify engine performance.",
+        "source": "Manual 72-30-05 §6.A"
+      },
+      {
+        "id": "PR011", "label": "Procedure",
+        "step_id": "72-30-05-PR-004", "sequence_no": 4,
+        "name_zh": "一级叶片后缘修理",
+        "name_en": "1st Stage Blade Trailing Edge Repair",
+        "description": "Dents/nicks ≤0.050 in deep/wide, ≥0.200 in apart, ≥0.250 in from tip (max 4/blade): smooth sharp corners to ≈0.050 in radius, max 0.050 in deep/wide. Tip corner radius ≤0.100 in. Clean inlet area completely.",
+        "source": "Manual 72-30-05 §6.B"
+      },
+      {
+        "id": "PR012", "label": "Procedure",
+        "step_id": "72-30-02-PR-001", "sequence_no": 1,
+        "name_zh": "压气机清洗环拆卸",
+        "name_en": "Removal of Compressor Wash Ring",
+        "description": "(1)Remove air inlet screen. (2)Loosen coupling nut; remove right-hand spray tube from tee. (3)Remove cover; remove tee from left-hand spray tube by loosening coupling nut.",
+        "source": "Manual 72-30-02 §5.A"
+      }
+    ],
+
+    "tools": [
+      {
+        "id": "TL001", "label": "Tool",
+        "tool_id": "PWC31771",
+        "name_zh": "扩张工具（嵌入螺母）", "name_en": "Spreader, Shanknuts",
+        "type": "专用工具", "spec": "Replaced PWC30271-100",
+        "source": "Manual 72-30-04 §3"
+      },
+      {
+        "id": "TL002", "label": "Tool",
+        "tool_id": "PWC32483",
+        "name_zh": "切割器", "name_en": "Cutter",
+        "type": "专用工具", "spec": "",
+        "source": "Manual 72-30-04 §3"
+      },
+      {
+        "id": "TL003", "label": "Tool",
+        "tool_id": "PWC32484",
+        "name_zh": "量规", "name_en": "Gage",
+        "type": "量具", "spec": "",
+        "source": "Manual 72-30-04 §3"
+      },
+      {
+        "id": "TL004", "label": "Tool",
+        "tool_id": "KEENSERT_LOCK",
+        "name_zh": "键塞螺套锁紧工具", "name_en": "Locking Tool (Keensert)",
+        "type": "专用工具", "spec": "",
+        "source": "Manual 72-30-04 §4"
+      },
+      {
+        "id": "TL005", "label": "Tool",
+        "tool_id": "HAND_FILE_FINE",
+        "name_zh": "细手锉刀", "name_en": "Fine Hand File",
+        "type": "手工工具", "spec": "细齿，用于钛合金叶片修整",
+        "source": "Manual 72-30-05 §6.A"
+      },
+      {
+        "id": "TL006", "label": "Tool",
+        "tool_id": "OIL_STONE",
+        "name_zh": "油石", "name_en": "Stone (Oil Stone)",
+        "type": "手工工具", "spec": "配合手锉使用，精修叶片前缘",
+        "source": "Manual 72-30-05 §6.A"
+      },
+      {
+        "id": "TL007", "label": "Tool",
+        "tool_id": "SUCTION_CLEANER",
+        "name_zh": "吸尘清洁器", "name_en": "Suction Cleaner",
+        "type": "清洁设备", "spec": "用于清除钛粉末和铿削屑",
+        "source": "Manual 72-30-05 §6.A(7)"
+      },
+      {
+        "id": "TL008", "label": "Tool",
+        "tool_id": "INSPECTION_MIRROR",
+        "name_zh": "检查用镜子", "name_en": "Inspection Mirror",
+        "type": "检查辅助工具", "spec": "因进气口空间受限，借助反射检查",
+        "source": "Manual 72-30-05 §5.A NOTE"
+      },
+      {
+        "id": "TL009", "label": "Tool",
+        "tool_id": "PWC30271-100",
+        "name_zh": "扩张工具（嵌入螺母，旧型）", "name_en": "Spreader, Shanknuts (Obsolete)",
+        "type": "专用工具（已停用）", "spec": "Replaced by PWC31771",
+        "source": "Manual 72-30-04 §3"
+      }
+    ],
+
+    "specifications": [
+      {
+        "id": "SP001", "label": "Specification",
+        "type": "torque", "value": "32-36", "unit": "lb.in",
+        "name_zh": "中央防火隔框法兰连接螺母扭矩",
+        "name_en": "Fireseal Ring Flange Joining Nut Torque",
+        "source": "Manual 72-30-01 §5.C(2) and §5.D(8)"
+      },
+      {
+        "id": "SP002", "label": "Specification",
+        "type": "torque", "value": "45-55", "unit": "lb.in",
+        "name_zh": "中央防火隔框安装螺母扭矩（21处）",
+        "name_en": "Fireseal Ring Mounting Nut Torque (21 locations)",
+        "source": "Manual 72-30-01 §5.D(7)"
+      },
+      {
+        "id": "SP003", "label": "Specification",
+        "type": "lockwire_spec", "value": "AMS 5687 / MS9226-03", "unit": "dia 0.025 in",
+        "name_zh": "锁线规格（耐热耐腐蚀钢丝）",
+        "name_en": "Lockwire Specification",
+        "source": "Manual 72-30-05 §1.D and 72-30-04 §1.C"
+      },
+      {
+        "id": "SP004", "label": "Specification",
+        "type": "damage_limit", "value": "0.050", "unit": "inch",
+        "name_zh": "一级叶片前缘多处刻痕可接受深度",
+        "name_en": "1st Stage Blade LE Multiple Nick Acceptable Depth",
+        "source": "Manual 72-30-05 §5.C(1)"
+      },
+      {
+        "id": "SP005", "label": "Specification",
+        "type": "damage_limit", "value": "0.100", "unit": "inch",
+        "name_zh": "一级叶片前/后缘单处刻痕或凹坑极限深度（每片最多2处）",
+        "name_en": "1st Stage Blade Single Nick/Dent Limit (2 per blade max)",
+        "source": "Manual 72-30-05 §5.C(2)(3)"
+      },
+      {
+        "id": "SP006", "label": "Specification",
+        "type": "damage_limit", "value": "0.100 in deformation, max 4 blades", "unit": "inch",
+        "name_zh": "一级叶片叶尖卷边变形极限",
+        "name_en": "1st Stage Blade Tip Curl Limit",
+        "source": "Manual 72-30-05 §5.C(4)"
+      },
+      {
+        "id": "SP007", "label": "Specification",
+        "type": "erosion_limit", "value": "0.250", "unit": "inch",
+        "name_zh": "一级叶片前缘腐蚀最大弦长减少量",
+        "name_en": "1st Stage Blade LE Erosion Max Chord Loss",
+        "source": "Manual 72-30-05 §5.D(2)(3)"
+      },
+      {
+        "id": "SP008", "label": "Specification",
+        "type": "repair_limit", "value": "0.025 (max 0.050)", "unit": "inch",
+        "name_zh": "一级叶片前缘最大回切量",
+        "name_en": "1st Stage Blade LE Max Cutback",
+        "source": "Manual 72-30-05 §6.A(3)"
+      },
+      {
+        "id": "SP009", "label": "Specification",
+        "type": "repair_limit", "value": "0.300W x 0.165D, ≥0.220 from tip", "unit": "inch",
+        "name_zh": "一级叶片磨削修整区尺寸极限",
+        "name_en": "1st Stage Blade Blend Zone Limits",
+        "source": "Manual 72-30-05 §6.A(4)"
+      },
+      {
+        "id": "SP010", "label": "Specification",
+        "type": "repair_limit", "value": "0.375W x 0.280D", "unit": "inch",
+        "name_zh": "一级叶片叶尖弯折修整极限",
+        "name_en": "1st Stage Blade Tip Bend Repair Limit",
+        "source": "Manual 72-30-05 §6.A(5)"
+      },
+      {
+        "id": "SP011", "label": "Specification",
+        "type": "exclusion_zone", "value": "0.050", "unit": "inch from fillet radius",
+        "name_zh": "一级叶片叶根禁止损伤区（距倒角0.050英寸内）",
+        "name_en": "1st Stage Blade Root Protection Zone",
+        "source": "Manual 72-30-05 §5.C CAUTION"
+      },
+      {
+        "id": "SP012", "label": "Specification",
+        "type": "inspection_interval", "value": "100", "unit": "flight hours (initial reinspection)",
+        "name_zh": "一级叶片接受损伤后初次复检间隔",
+        "name_en": "1st Stage Blade Damage Reinspection Interval (Initial)",
+        "source": "Manual 72-30-05 §5.A(4)"
+      },
+      {
+        "id": "SP013", "label": "Specification",
+        "type": "inspection_interval", "value": "400", "unit": "flight hours (max subsequent)",
+        "name_zh": "一级叶片后续最大复检间隔",
+        "name_en": "1st Stage Blade Max Subsequent Inspection Interval",
+        "source": "Manual 72-30-05 §5.A(4)"
+      },
+      {
+        "id": "SP014", "label": "Specification",
+        "type": "corrosion_limit", "value": "<0.010 deep, <75% surface area", "unit": "inch",
+        "name_zh": "GGC机加工面腐蚀坑可接受极限",
+        "name_en": "GGC Machined Surface Corrosion Pitting Limit",
+        "source": "Manual 72-30-04 §7.A(1)(b)1"
+      },
+      {
+        "id": "SP015", "label": "Specification",
+        "type": "cure_time", "value": "72", "unit": "hours (min return 2-4 hr)",
+        "name_zh": "硅橡胶粘结剂固化时间（中央防火隔框绝热条）",
+        "name_en": "Silicone Adhesive Cure Time (Fireseal Insulating Strip)",
+        "source": "Manual 72-30-01 §7.A(1)(d)"
+      },
+      {
+        "id": "SP016", "label": "Specification",
+        "type": "blade_quantity", "value": "16", "unit": "blades",
+        "name_zh": "一级转子叶片数量",
+        "name_en": "1st Stage Rotor Blade Count",
+        "source": "Manual 72-30-05 §2"
+      },
+      {
+        "id": "SP017", "label": "Specification",
+        "type": "blade_quantity", "value": "32", "unit": "blades",
+        "name_zh": "二/三级转子叶片数量（各级）",
+        "name_en": "2nd/3rd Stage Rotor Blade Count (each)",
+        "source": "Manual 72-30-05 §2"
+      },
+      {
+        "id": "SP018", "label": "Specification",
+        "type": "vane_quantity", "value": "44", "unit": "vanes",
+        "name_zh": "一/二级静子导叶数量",
+        "name_en": "1st/2nd Stage Stator Vane Count",
+        "source": "Manual 72-30-05 §2"
+      },
+      {
+        "id": "SP019", "label": "Specification",
+        "type": "vane_quantity", "value": "40", "unit": "vanes",
+        "name_zh": "三级静子导叶数量",
+        "name_en": "3rd Stage Stator Vane Count",
+        "source": "Manual 72-30-05 §2"
+      },
+      {
+        "id": "SP020", "label": "Specification",
+        "type": "fastener_count", "value": "6", "unit": "tie rods",
+        "name_zh": "离心叶轮连接拉杆数量",
+        "name_en": "Centrifugal Impeller Tie Rod Count",
+        "source": "Manual 72-30-05 §2"
+      },
+      {
+        "id": "SP021", "label": "Specification",
+        "type": "fastener_count", "value": "4", "unit": "bolts",
+        "name_zh": "2号轴承外圈固定螺栓数量",
+        "name_en": "No.2 Bearing Outer Race Retaining Bolt Count",
+        "source": "Manual 72-30-05 §2"
+      }
+    ],
+
+    "interfaces": [
+      {
+        "id": "IF001", "label": "Interface",
+        "interface_type": "dovetail_slot",
+        "name_zh": "叶片燕尾槽-转子盘接口（一级）",
+        "name_en": "Stage-1 Blade Dovetail Root – Disk Groove Interface",
+        "note": "limited clearance produces characteristic click during run-down"
+      },
+      {
+        "id": "IF002", "label": "Interface",
+        "interface_type": "dovetail_slot",
+        "name_zh": "叶片燕尾槽-转子盘接口（二级）",
+        "name_en": "Stage-2 Blade Dovetail Root – Disk Groove Interface"
+      },
+      {
+        "id": "IF003", "label": "Interface",
+        "interface_type": "dovetail_slot",
+        "name_zh": "叶片燕尾槽-转子盘接口（三级）",
+        "name_en": "Stage-3 Blade Dovetail Root – Disk Groove Interface"
+      },
+      {
+        "id": "IF004", "label": "Interface",
+        "interface_type": "wedge_retaining_ring",
+        "name_zh": "叶轮壳体-燃气发生器机匣楔形锁环接口",
+        "name_en": "Impeller Housing – GGC Wedge Retaining Ring Interface"
+      },
+      {
+        "id": "IF005", "label": "Interface",
+        "interface_type": "bolted_flange",
+        "name_zh": "中央防火隔框法兰拼合接口",
+        "name_en": "Center Fireseal Ring Half-Joining Bolted Flange Interface"
+      },
+      {
+        "id": "IF006", "label": "Interface",
+        "interface_type": "bolted_flange",
+        "name_zh": "中央防火隔框-GGC安装接口（Post-SB1445）",
+        "name_en": "Center Fireseal Ring – GGC Mounting Interface (Post-SB1445)"
+      },
+      {
+        "id": "IF007", "label": "Interface",
+        "interface_type": "preformed_packing_seal",
+        "name_zh": "一级静子-进气机匣密封接口",
+        "name_en": "1st Stage Stator – Inlet Case Seal Interface (Preformed Packing)"
+      },
+      {
+        "id": "IF008", "label": "Interface",
+        "interface_type": "external_spline",
+        "name_zh": "联轴节外花键-传动轴内花键接口",
+        "name_en": "Coupling Ext. Spline – Coupling Shaft Int. Spline Interface"
+      },
+      {
+        "id": "IF009", "label": "Interface",
+        "interface_type": "transverse_pin",
+        "name_zh": "联轴节-后轮毂横销固定接口",
+        "name_en": "Coupling – Rear Hub Transverse Pin Interface"
+      },
+      {
+        "id": "IF010", "label": "Interface",
+        "interface_type": "rolling_bearing",
+        "name_zh": "2号轴承-前支撑轴轴颈接口（滚柱）",
+        "name_en": "No.2 Roller Bearing – Front Stubshaft Journal Interface"
+      },
+      {
+        "id": "IF011", "label": "Interface",
+        "interface_type": "rolling_bearing",
+        "name_zh": "1号轴承-后轮毂轴颈接口（球）",
+        "name_en": "No.1 Ball Bearing – Rear Hub Journal Interface"
+      },
+      {
+        "id": "IF012", "label": "Interface",
+        "interface_type": "bolted_tie_rod",
+        "name_zh": "离心叶轮-三级盘拉杆连接接口",
+        "name_en": "Centrifugal Impeller – 3rd Stage Disk Tie-Rod Interface"
+      }
+    ],
+
+    "geo_constraints": [
+      {
+        "id": "GC001", "label": "GeoConstraint",
+        "constraint_type": "coaxial",
+        "name_zh": "压气机转子轴线同轴约束",
+        "name_en": "Compressor Rotor Assembly Coaxial Constraint",
+        "note": "1st/2nd/3rd stage disks, impeller, stubshaft all coaxial with engine centerline"
+      },
+      {
+        "id": "GC002", "label": "GeoConstraint",
+        "constraint_type": "axial_clearance",
+        "name_zh": "叶片轴向间隙约束（间隔环控制）",
+        "name_en": "Blade Axial Clearance Constraint (Spacer-controlled)"
+      },
+      {
+        "id": "GC003", "label": "GeoConstraint",
+        "constraint_type": "planar_contact",
+        "name_zh": "防火隔框-GGC法兰面贴合约束",
+        "name_en": "Fireseal Ring – GGC Flange Planar Contact Constraint"
+      },
+      {
+        "id": "GC004", "label": "GeoConstraint",
+        "constraint_type": "interference_fit",
+        "name_zh": "2号轴承外圈-GGC中心孔过盈配合约束",
+        "name_en": "No.2 Bearing Outer Race – GGC Centerbore Interference Fit"
+      },
+      {
+        "id": "GC005", "label": "GeoConstraint",
+        "constraint_type": "annular_recess_engagement",
+        "name_zh": "一级静子凸缘-进气机匣环形凹槽啮合约束",
+        "name_en": "1st Stage Stator Lip – Inlet Case Annular Recess Engagement"
+      },
+      {
+        "id": "GC006", "label": "GeoConstraint",
+        "constraint_type": "slot_lug_anti_rotation",
+        "name_zh": "静子组件防转槽-凸耳约束",
+        "name_en": "Stator Assembly Slot-Lug Anti-rotation Constraint",
+        "note": "slots and lugs in mating flanges prevent stator rotation"
+      }
+    ]
+  },
+
+  "triples": [
+
+    {"id": "T001", "relation": "isPartOf",
+     "head": "A002", "head_label": "压气机转子装配",
+     "tail": "A001", "tail_label": "燃气发生器组件",
+     "confidence": 1.0, "source": "Manual 72-30-00 §1"},
+
+    {"id": "T002", "relation": "isPartOf",
+     "head": "P001", "head_label": "压气机前支撑轴",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T003", "relation": "isPartOf",
+     "head": "P002", "head_label": "离心压气机叶轮",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T004", "relation": "isPartOf",
+     "head": "P003", "head_label": "叶轮壳体",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T005", "relation": "isPartOf",
+     "head": "P004", "head_label": "一级压气机盘（后轮毂）",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T006", "relation": "isPartOf",
+     "head": "P005", "head_label": "二级压气机盘",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T007", "relation": "isPartOf",
+     "head": "P006", "head_label": "三级压气机盘",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T008", "relation": "isPartOf",
+     "head": "P007", "head_label": "一级转子叶片",
+     "tail": "P004", "tail_label": "一级压气机盘（后轮毂）",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T009", "relation": "isPartOf",
+     "head": "P008", "head_label": "二级转子叶片",
+     "tail": "P005", "tail_label": "二级压气机盘",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T010", "relation": "isPartOf",
+     "head": "P009", "head_label": "三级转子叶片",
+     "tail": "P006", "tail_label": "三级压气机盘",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T011", "relation": "isPartOf",
+     "head": "A004", "head_label": "一级静子组件",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T012", "relation": "isPartOf",
+     "head": "A005", "head_label": "二级静子组件",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T013", "relation": "isPartOf",
+     "head": "A006", "head_label": "三级静子组件",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T014", "relation": "isPartOf",
+     "head": "P013", "head_label": "一级静子导叶",
+     "tail": "A004", "tail_label": "一级静子组件",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T015", "relation": "isPartOf",
+     "head": "P014", "head_label": "二级静子导叶",
+     "tail": "A005", "tail_label": "二级静子组件",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T016", "relation": "isPartOf",
+     "head": "P015", "head_label": "三级静子导叶",
+     "tail": "A006", "tail_label": "三级静子组件",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T017", "relation": "isPartOf",
+     "head": "A007", "head_label": "1号轴承组件",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T018", "relation": "isPartOf",
+     "head": "P016", "head_label": "1号轴承（球轴承）",
+     "tail": "A007", "tail_label": "1号轴承组件",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T019", "relation": "isPartOf",
+     "head": "P023", "head_label": "锁圈（1号轴承）",
+     "tail": "A007", "tail_label": "1号轴承组件",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T020", "relation": "isPartOf",
+     "head": "P024", "head_label": "扳手螺母（1号轴承）",
+     "tail": "A007", "tail_label": "1号轴承组件",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T021", "relation": "isPartOf",
+     "head": "P017", "head_label": "2号轴承（滚柱轴承）",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T022", "relation": "isPartOf",
+     "head": "P012", "head_label": "拉杆",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T023", "relation": "isPartOf",
+     "head": "P010", "head_label": "短间隔环（一级）",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T024", "relation": "isPartOf",
+     "head": "P011", "head_label": "长间隔环（二三级）",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T025", "relation": "isPartOf",
+     "head": "P018", "head_label": "压气机后联轴节",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T026", "relation": "isPartOf",
+     "head": "P022", "head_label": "预成形密封圈",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T027", "relation": "isPartOf",
+     "head": "P028", "head_label": "叶片锁片/键形垫片",
+     "tail": "P004", "tail_label": "一级压气机盘（后轮毂）",
+     "confidence": 1.0, "source": "BOM DOCX"},
+
+    {"id": "T028", "relation": "isPartOf",
+     "head": "A003", "head_label": "压气机转子平衡组件",
+     "tail": "A002", "tail_label": "压气机转子装配",
+     "confidence": 1.0, "source": "BOM DOCX"},
+
+    {"id": "T029", "relation": "isPartOf",
+     "head": "P026", "head_label": "转子平衡重块",
+     "tail": "A003", "tail_label": "压气机转子平衡组件",
+     "confidence": 1.0, "source": "BOM DOCX"},
+
+    {"id": "T030", "relation": "isPartOf",
+     "head": "P027", "head_label": "通圆头铆钉（平衡块固定）",
+     "tail": "A003", "tail_label": "压气机转子平衡组件",
+     "confidence": 1.0, "source": "BOM DOCX"},
+
+    {"id": "T031", "relation": "isPartOf",
+     "head": "A008", "head_label": "燃气发生器机匣",
+     "tail": "A001", "tail_label": "燃气发生器组件",
+     "confidence": 1.0, "source": "Manual 72-30-00 §1"},
+
+    {"id": "T032", "relation": "isPartOf",
+     "head": "A010", "head_label": "中央防火隔框",
+     "tail": "A001", "tail_label": "燃气发生器组件",
+     "confidence": 1.0, "source": "Manual 72-30-01 §1"},
+
+    {"id": "T033", "relation": "isPartOf",
+     "head": "A011", "head_label": "后防火隔框",
+     "tail": "A001", "tail_label": "燃气发生器组件",
+     "confidence": 1.0, "source": "Manual 72-30-02 §1"},
+
+    {"id": "T034", "relation": "isPartOf",
+     "head": "A012", "head_label": "压气机引气阀组件",
+     "tail": "A008", "tail_label": "燃气发生器机匣",
+     "confidence": 1.0, "source": "Manual 72-30-00 §1 (7 o'clock position on GGC)"},
+
+    {"id": "T035", "relation": "precedes",
+     "head": "PR002", "head_label": "拆卸中央防火隔框（Post-SB1445）",
+     "tail": "PR004", "tail_label": "安装中央防火隔框（Post-SB1445）",
+     "confidence": 1.0, "source": "Manual 72-30-01 §5 (removal precedes installation)"},
+
+    {"id": "T036", "relation": "precedes",
+     "head": "PR005", "head_label": "燃气发生器组件拆卸（大修级）",
+     "tail": "PR006", "tail_label": "燃气发生器组件安装（大修级）",
+     "confidence": 1.0, "source": "Manual 72-30-04 §5"},
+
+    {"id": "T037", "relation": "precedes",
+     "head": "PR008", "head_label": "一级压气机转子叶片检查",
+     "tail": "PR009", "tail_label": "一级叶片损伤记录",
+     "confidence": 1.0, "source": "Manual 72-30-05 §5 (inspect then document)"},
+
+    {"id": "T038", "relation": "precedes",
+     "head": "PR009", "head_label": "一级叶片损伤记录",
+     "tail": "PR010", "tail_label": "一级叶片前缘修锉修理",
+     "confidence": 1.0, "source": "Manual 72-30-05 (document before repair)"},
+
+    {"id": "T039", "relation": "precedes",
+     "head": "PR010", "head_label": "一级叶片前缘修锉修理",
+     "tail": "PR011", "tail_label": "一级叶片后缘修理",
+     "confidence": 0.8, "source": "Manual 72-30-05 §6 (LE repair §6.A precedes TE repair §6.B)"},
+
+    {"id": "T040", "relation": "participatesIn",
+     "head": "P007", "head_label": "一级转子叶片",
+     "tail": "PR008", "tail_label": "一级压气机转子叶片检查",
+     "confidence": 1.0, "source": "Manual 72-30-05 §5"},
+
+    {"id": "T041", "relation": "participatesIn",
+     "head": "P007", "head_label": "一级转子叶片",
+     "tail": "PR010", "tail_label": "一级叶片前缘修锉修理",
+     "confidence": 1.0, "source": "Manual 72-30-05 §6.A"},
+
+    {"id": "T042", "relation": "participatesIn",
+     "head": "P007", "head_label": "一级转子叶片",
+     "tail": "PR011", "tail_label": "一级叶片后缘修理",
+     "confidence": 1.0, "source": "Manual 72-30-05 §6.B"},
+
+    {"id": "T043", "relation": "participatesIn",
+     "head": "A010", "head_label": "中央防火隔框",
+     "tail": "PR002", "tail_label": "拆卸中央防火隔框（Post-SB1445型）",
+     "confidence": 1.0, "source": "Manual 72-30-01 §5.B"},
+
+    {"id": "T044", "relation": "participatesIn",
+     "head": "A010", "head_label": "中央防火隔框",
+     "tail": "PR004", "tail_label": "安装中央防火隔框（Post-SB1445型）",
+     "confidence": 1.0, "source": "Manual 72-30-01 §5.D"},
+
+    {"id": "T045", "relation": "participatesIn",
+     "head": "A008", "head_label": "燃气发生器机匣",
+     "tail": "PR007", "tail_label": "燃气发生器机匣外部检查",
+     "confidence": 1.0, "source": "Manual 72-30-04 §7.A"},
+
+    {"id": "T046", "relation": "participatesIn",
+     "head": "P017", "head_label": "2号轴承（滚柱轴承）",
+     "tail": "PR007", "tail_label": "燃气发生器机匣外部检查",
+     "confidence": 1.0, "source": "Manual 72-30-04 §7.A(2)(a) (inspect shanknuts in No.2 bearing area)"},
+
+    {"id": "T047", "relation": "participatesIn",
+     "head": "P035", "head_label": "导流罩（进气口筛网）",
+     "tail": "PR008", "tail_label": "一级压气机转子叶片检查",
+     "confidence": 1.0, "source": "Manual 72-30-05 §5.A NOTE (inspection triggered by screen removal)"},
+
+    {"id": "T048", "relation": "requires",
+     "head": "PR010", "head_label": "一级叶片前缘修锉修理",
+     "tail": "TL005", "tail_label": "细手锉刀",
+     "confidence": 1.0, "source": "Manual 72-30-05 §6.A: 'using fine hand files and stones'"},
+
+    {"id": "T049", "relation": "requires",
+     "head": "PR010", "head_label": "一级叶片前缘修锉修理",
+     "tail": "TL006", "tail_label": "油石",
+     "confidence": 1.0, "source": "Manual 72-30-05 §6.A"},
+
+    {"id": "T050", "relation": "requires",
+     "head": "PR010", "head_label": "一级叶片前缘修锉修理",
+     "tail": "TL007", "tail_label": "吸尘清洁器",
+     "confidence": 1.0, "source": "Manual 72-30-05 §6.A(7): 'suction cleaner to clean inlet area'"},
+
+    {"id": "T051", "relation": "requires",
+     "head": "PR011", "head_label": "一级叶片后缘修理",
+     "tail": "TL007", "tail_label": "吸尘清洁器",
+     "confidence": 1.0, "source": "Manual 72-30-05 §6.B"},
+
+    {"id": "T052", "relation": "requires",
+     "head": "PR008", "head_label": "一级压气机转子叶片检查",
+     "tail": "TL008", "tail_label": "检查用镜子",
+     "confidence": 1.0, "source": "Manual 72-30-05 §5.A NOTE: 'use of a mirror is recommended'"},
+
+    {"id": "T053", "relation": "requires",
+     "head": "PR005", "head_label": "燃气发生器组件拆卸（大修级）",
+     "tail": "TL001", "tail_label": "扩张工具（嵌入螺母）",
+     "confidence": 0.9, "source": "Manual 72-30-04 §3 (shanknut spreader used in GGC repairs)"},
+
+    {"id": "T054", "relation": "requires",
+     "head": "PR007", "head_label": "燃气发生器机匣外部检查",
+     "tail": "TL003", "tail_label": "量规",
+     "confidence": 0.9, "source": "Manual 72-30-04 §3 (gage listed for GGC maintenance)"},
+
+    {"id": "T055", "relation": "specifiedBy",
+     "head": "PR003", "head_label": "安装中央防火隔框（Pre-SB1445型）",
+     "tail": "SP001", "tail_label": "扭矩 32-36 lb.in（法兰螺母）",
+     "confidence": 1.0, "source": "Manual 72-30-01 §5.C(1)(2)"},
+
+    {"id": "T056", "relation": "specifiedBy",
+     "head": "PR004", "head_label": "安装中央防火隔框（Post-SB1445型）",
+     "tail": "SP002", "tail_label": "扭矩 45-55 lb.in（21处安装位）",
+     "confidence": 1.0, "source": "Manual 72-30-01 §5.D(7)"},
+
+    {"id": "T057", "relation": "specifiedBy",
+     "head": "PR004", "head_label": "安装中央防火隔框（Post-SB1445型）",
+     "tail": "SP001", "tail_label": "扭矩 32-36 lb.in（法兰螺母）",
+     "confidence": 1.0, "source": "Manual 72-30-01 §5.D(8)"},
+
+    {"id": "T058", "relation": "specifiedBy",
+     "head": "PR010", "head_label": "一级叶片前缘修锉修理",
+     "tail": "SP008", "tail_label": "前缘最大回切量 0.025~0.050 in",
+     "confidence": 1.0, "source": "Manual 72-30-05 §6.A(3)"},
+
+    {"id": "T059", "relation": "specifiedBy",
+     "head": "PR010", "head_label": "一级叶片前缘修锉修理",
+     "tail": "SP009", "tail_label": "磨削修整区尺寸极限",
+     "confidence": 1.0, "source": "Manual 72-30-05 §6.A(4)"},
+
+    {"id": "T060", "relation": "specifiedBy",
+     "head": "PR010", "head_label": "一级叶片前缘修锉修理",
+     "tail": "SP010", "tail_label": "叶尖弯折修整极限",
+     "confidence": 1.0, "source": "Manual 72-30-05 §6.A(5)"},
+
+    {"id": "T061", "relation": "specifiedBy",
+     "head": "PR008", "head_label": "一级压气机转子叶片检查",
+     "tail": "SP004", "tail_label": "前缘多处刻痕极限 0.050 in",
+     "confidence": 1.0, "source": "Manual 72-30-05 §5.C(1)"},
+
+    {"id": "T062", "relation": "specifiedBy",
+     "head": "PR008", "head_label": "一级压气机转子叶片检查",
+     "tail": "SP005", "tail_label": "单处刻痕/凹坑极限 0.100 in",
+     "confidence": 1.0, "source": "Manual 72-30-05 §5.C(2)"},
+
+    {"id": "T063", "relation": "specifiedBy",
+     "head": "PR008", "head_label": "一级压气机转子叶片检查",
+     "tail": "SP007", "tail_label": "腐蚀最大弦长减少量 0.250 in",
+     "confidence": 1.0, "source": "Manual 72-30-05 §5.D(2)"},
+
+    {"id": "T064", "relation": "specifiedBy",
+     "head": "PR008", "head_label": "一级压气机转子叶片检查",
+     "tail": "SP012", "tail_label": "初次复检间隔 100 hr",
+     "confidence": 1.0, "source": "Manual 72-30-05 §5.A(4)"},
+
+    {"id": "T065", "relation": "specifiedBy",
+     "head": "PR008", "head_label": "一级压气机转子叶片检查",
+     "tail": "SP013", "tail_label": "最大复检间隔 400 hr",
+     "confidence": 1.0, "source": "Manual 72-30-05 §5.A(4)"},
+
+    {"id": "T066", "relation": "specifiedBy",
+     "head": "PR007", "head_label": "燃气发生器机匣外部检查",
+     "tail": "SP014", "tail_label": "GGC腐蚀坑极限",
+     "confidence": 1.0, "source": "Manual 72-30-04 §7.A(1)(b)1"},
+
+    {"id": "T067", "relation": "specifiedBy",
+     "head": "IF005", "head_label": "中央防火隔框法兰拼合接口",
+     "tail": "SP001", "tail_label": "扭矩 32-36 lb.in",
+     "confidence": 1.0, "source": "Manual 72-30-01 §5.C"},
+
+    {"id": "T068", "relation": "specifiedBy",
+     "head": "IF006", "head_label": "中央防火隔框-GGC安装接口",
+     "tail": "SP002", "tail_label": "扭矩 45-55 lb.in（21处）",
+     "confidence": 1.0, "source": "Manual 72-30-01 §5.D(7)"},
+
+    {"id": "T069", "relation": "matesWith",
+     "head": "P007", "head_label": "一级转子叶片",
+     "tail": "P004", "tail_label": "一级压气机盘（后轮毂）",
+     "interface": "IF001",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: dovetail groove"},
+
+    {"id": "T070", "relation": "matesWith",
+     "head": "P008", "head_label": "二级转子叶片",
+     "tail": "P005", "tail_label": "二级压气机盘",
+     "interface": "IF002",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: dovetail groove"},
+
+    {"id": "T071", "relation": "matesWith",
+     "head": "P009", "head_label": "三级转子叶片",
+     "tail": "P006", "tail_label": "三级压气机盘",
+     "interface": "IF003",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: dovetail groove"},
+
+    {"id": "T072", "relation": "matesWith",
+     "head": "P003", "head_label": "叶轮壳体",
+     "tail": "A008", "tail_label": "燃气发生器机匣",
+     "interface": "IF004",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: wedge retaining ring"},
+
+    {"id": "T073", "relation": "matesWith",
+     "head": "P002", "head_label": "离心压气机叶轮",
+     "tail": "P006", "tail_label": "三级压气机盘",
+     "interface": "IF012",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: 6 numbered tie rods"},
+
+    {"id": "T074", "relation": "matesWith",
+     "head": "P016", "head_label": "1号轴承（球轴承）",
+     "tail": "P004", "tail_label": "一级压气机盘（后轮毂）",
+     "interface": "IF011",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T075", "relation": "matesWith",
+     "head": "P017", "head_label": "2号轴承（滚柱轴承）",
+     "tail": "P001", "tail_label": "压气机前支撑轴",
+     "interface": "IF010",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T076", "relation": "matesWith",
+     "head": "P018", "head_label": "压气机后联轴节",
+     "tail": "P004", "tail_label": "一级压气机盘（后轮毂）",
+     "interface": "IF009",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: transverse pin through hub and coupling"},
+
+    {"id": "T077", "relation": "matesWith",
+     "head": "P022", "head_label": "预成形密封圈",
+     "tail": "A009", "tail_label": "压气机进气机匣",
+     "interface": "IF007",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: preformed packing at stator-inlet case interface"},
+
+    {"id": "T078", "relation": "adjacentTo",
+     "head": "P010", "head_label": "短间隔环（一级）",
+     "tail": "P004", "tail_label": "一级压气机盘（后轮毂）",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: installed between rotor disks"},
+
+    {"id": "T079", "relation": "adjacentTo",
+     "head": "P010", "head_label": "短间隔环（一级）",
+     "tail": "P005", "tail_label": "二级压气机盘",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T080", "relation": "adjacentTo",
+     "head": "P011", "head_label": "长间隔环（二三级）",
+     "tail": "P005", "tail_label": "二级压气机盘",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2 Fig.1"},
+
+    {"id": "T081", "relation": "adjacentTo",
+     "head": "P011", "head_label": "长间隔环（二三级）",
+     "tail": "P006", "tail_label": "三级压气机盘",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2 Fig.1"},
+
+    {"id": "T082", "relation": "adjacentTo",
+     "head": "P032", "head_label": "压气机转子气封",
+     "tail": "P017", "tail_label": "2号轴承（滚柱轴承）",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: air seal interposed, bearing against shoulder on stubshaft"},
+
+    {"id": "T083", "relation": "adjacentTo",
+     "head": "P033", "head_label": "2号轴承气封",
+     "tail": "P017", "tail_label": "2号轴承（滚柱轴承）",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: fitted on stubshaft forward of No.2 bearing"},
+
+    {"id": "T084", "relation": "adjacentTo",
+     "head": "A010", "head_label": "中央防火隔框",
+     "tail": "A008", "tail_label": "燃气发生器机匣",
+     "confidence": 1.0, "source": "Manual 72-30-01 §1: ring fastened to GGC"},
+
+    {"id": "T085", "relation": "hasInterface",
+     "head": "P007", "head_label": "一级转子叶片",
+     "tail": "IF001", "tail_label": "叶片燕尾槽-转子盘接口（一级）",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T086", "relation": "hasInterface",
+     "head": "P008", "head_label": "二级转子叶片",
+     "tail": "IF002", "tail_label": "叶片燕尾槽-转子盘接口（二级）",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T087", "relation": "hasInterface",
+     "head": "P009", "head_label": "三级转子叶片",
+     "tail": "IF003", "tail_label": "叶片燕尾槽-转子盘接口（三级）",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T088", "relation": "hasInterface",
+     "head": "P003", "head_label": "叶轮壳体",
+     "tail": "IF004", "tail_label": "叶轮壳体-GGC楔形锁环接口",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T089", "relation": "hasInterface",
+     "head": "A010", "head_label": "中央防火隔框",
+     "tail": "IF005", "tail_label": "中央防火隔框法兰拼合接口",
+     "confidence": 1.0, "source": "Manual 72-30-01 §1"},
+
+    {"id": "T090", "relation": "hasInterface",
+     "head": "A010", "head_label": "中央防火隔框",
+     "tail": "IF006", "tail_label": "中央防火隔框-GGC安装接口",
+     "confidence": 1.0, "source": "Manual 72-30-01 §5.D"},
+
+    {"id": "T091", "relation": "hasInterface",
+     "head": "A004", "head_label": "一级静子组件",
+     "tail": "IF007", "tail_label": "一级静子-进气机匣密封接口",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T092", "relation": "hasInterface",
+     "head": "P018", "head_label": "压气机后联轴节",
+     "tail": "IF008", "tail_label": "联轴节外花键-传动轴内花键接口",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: externally splined rear end"},
+
+    {"id": "T093", "relation": "hasInterface",
+     "head": "P002", "head_label": "离心压气机叶轮",
+     "tail": "IF012", "tail_label": "离心叶轮-三级盘拉杆连接接口",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2"},
+
+    {"id": "T094", "relation": "constrainedBy",
+     "head": "IF001", "head_label": "叶片燕尾槽-转子盘接口（一级）",
+     "tail": "GC002", "tail_label": "叶片轴向间隙约束（间隔环控制）",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: axial movement limited by interstage spacers"},
+
+    {"id": "T095", "relation": "constrainedBy",
+     "head": "IF004", "head_label": "叶轮壳体-GGC楔形锁环接口",
+     "tail": "GC001", "tail_label": "压气机转子轴线同轴约束",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: located in inner casing"},
+
+    {"id": "T096", "relation": "constrainedBy",
+     "head": "IF006", "head_label": "中央防火隔框-GGC安装接口",
+     "tail": "GC003", "tail_label": "防火隔框-GGC法兰面贴合约束",
+     "confidence": 1.0, "source": "Manual 72-30-01 §5.D: mounting holes aligned"},
+
+    {"id": "T097", "relation": "constrainedBy",
+     "head": "IF010", "head_label": "2号轴承-前支撑轴轴颈接口",
+     "tail": "GC004", "tail_label": "2号轴承外圈-GGC中心孔过盈配合约束",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: outer race flange secured to GGC centerbore"},
+
+    {"id": "T098", "relation": "constrainedBy",
+     "head": "IF007", "head_label": "一级静子-进气机匣密封接口",
+     "tail": "GC005", "tail_label": "一级静子凸缘-进气机匣环形凹槽啮合约束",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: lip engages in annular recess in air inlet case"},
+
+    {"id": "T099", "relation": "constrainedBy",
+     "head": "IF007", "head_label": "一级静子-进气机匣密封接口",
+     "tail": "GC006", "tail_label": "静子组件防转槽-凸耳约束",
+     "confidence": 1.0, "source": "Manual 72-30-05 §2: slots and lugs prevent rotation"}
+  ],
+
+  "statistics": {
+    "entity_counts": {
+      "Part": 35,
+      "Assembly": 13,
+      "Procedure": 12,
+      "Tool": 9,
+      "Specification": 21,
+      "Interface": 12,
+      "GeoConstraint": 6
+    },
+    "triple_count": 99,
+    "relation_distribution": {
+      "isPartOf": 34,
+      "precedes": 5,
+      "participatesIn": 8,
+      "requires": 7,
+      "specifiedBy": 15,
+      "matesWith": 9,
+      "adjacentTo": 7,
+      "hasInterface": 9,
+      "constrainedBy": 6
+    }
+  }
+}

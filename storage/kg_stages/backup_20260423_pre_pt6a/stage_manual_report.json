@@ -1,0 +1,38 @@
+{
+  "stage": "manual",
+  "generated_at": "2026-04-23T02:40:57.142274+00:00",
+  "stats": {
+    "entities_count": 0,
+    "triples_count": 210,
+    "relation_breakdown": {
+      "precedes": 37,
+      "participatesIn": 76,
+      "matesWith": 41,
+      "requires": 12,
+      "specifiedBy": 41,
+      "constrainedBy": 2,
+      "hasInterface": 1
+    },
+    "confidence_histogram": [
+      0.0,
+      0.0,
+      0.0571,
+      0.0524,
+      0.8905
+    ],
+    "bom_coverage_ratio": 0.1304,
+    "isolated_entities_count": 0,
+    "low_confidence_count": 12
+  },
+  "issues": [
+    {
+      "severity": "critical",
+      "title": "Low BOM coverage in manual stage",
+      "title_zh": "手册对 BOM 覆盖率过低",
+      "description": "手册三元组仅覆盖了 13% 的 BOM 实体（预期 > 40%）",
+      "suggestion": "建议提供更完整的手册章节，或通过「输入领域知识」补充关键零件的装配关系",
+      "affected_triple_ids": []
+    }
+  ],
+  "diff": null
+}

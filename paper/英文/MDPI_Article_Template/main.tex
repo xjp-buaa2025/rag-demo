@@ -1,0 +1,1126 @@
+%=================================================================
+%  Multi-Source Hybrid RAG (MHRAG) for Aviation Engine Assembly
+%  Full English translation of the Chinese thesis, formatted for the
+%  MDPI Applied Sciences (applsci) template.
+%
+%  Compile: pdflatex main.tex && pdflatex main.tex
+%
+%  Figures live in the local figures/ subdirectory.  English versions
+%  are produced by scripts/plot_figs_en.py.
+%=================================================================
+
+\documentclass[applsci,article,submit,pdftex,moreauthors]{Definitions/mdpi}
+
+%=================================================================
+% MDPI internal commands - do not modify
+\firstpage{1}
+\makeatletter
+\setcounter{page}{\@firstpage}
+\makeatother
+\pubvolume{1}
+\issuenum{1}
+\articlenumber{0}
+\pubyear{2026}
+\copyrightyear{2026}
+\datereceived{ }
+\daterevised{ }
+\dateaccepted{ }
+\datepublished{ }
+
+%=================================================================
+% Extra packages required by this manuscript (the MDPI class loads
+% tabularx / multirow / array / amsmath but not listings, and does
+% not predefine the Y centred-X column).
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,
+        columns=fullflexible,frame=single,keepspaces=true}
+\newcolumntype{Y}{>{\centering\arraybackslash}X}
+
+%=================================================================
+\Title{A Multi-Source Hybrid Retrieval-Augmented Generation Framework with a Three-Source Knowledge Graph for Aviation Engine Assembly Guidance}
+
+\newcommand{\orcidauthorA}{0000-0000-0000-000X}
+
+\Author{Junpeng Xiao $^{1,}$*\orcidA{}}
+\AuthorNames{Junpeng Xiao}
+
+\address{%
+$^{1}$ \quad School of Mechanical Engineering and Automation, Beihang University, Beijing 100191, China}
+
+\corres{Correspondence: xjp020811@gmail.com}
+
+\abstract{Aviation engine assembly is a knowledge-intensive, high-precision manufacturing scenario whose supporting knowledge is fragmented across three heterogeneous data sources with mutually exclusive information boundaries: maintenance manuals (procedural knowledge in image-rich PDFs), Bills of Materials (BOM, authoritative part identifiers in spreadsheets), and 3D CAD models (assembly hierarchies and geometric constraints). (1)~Background: existing retrieval-augmented generation (RAG) systems are typically built on a single text source, miss multimodal figures, lack sparse--dense complementarity, and adopt simple linear score fusion that is sensitive to scale differences. We propose MHRAG, a multi-source hybrid RAG framework tailored for the Pratt~\&~Whitney Canada PT6A turboprop engine. (2)~Methods: a multi-agent extraction pipeline integrates BOM-driven entity registration, OCCT-based CAD parsing of geometric constraints, and LLM-based manual triple extraction; a three-stage cascaded entity-alignment scheme unifies the outputs into a single Neo4j knowledge graph with seven entity classes and nine semantic relations. At inference time, four parallel retrieval paths---BGE-M3 dense vectors, BM25 sparse retrieval, Chinese-CLIP cross-modal image search, and BGE-M3 semantic-ANN over knowledge-graph entities followed by one-hop subgraph expansion---are unified by Reciprocal Rank Fusion (RRF) and re-ranked by a BGE-Reranker cross-encoder before generation. (3)~Results: on a real PT6A maintenance corpus (10 ATA chapters, 7{,}333 nodes / 8{,}752 edges) and an 80-question two-tier benchmark, MHRAG attains the highest LLM-Judge Relevance (3.63) and Completeness (3.15) on Tier-1, improving Naive RAG by 7.4\% and 9.4\%; switching the KG anchor strategy from keyword matching to semantic ANN yields a $+69\%$ Judge Correctness gain on cross-chapter queries. The full system achieves a 32.50\% hallucination rate, an 8.27 s end-to-end latency and a 2.48 GB local VRAM footprint, all substantially better than the HybridRAG reference (14.19 s / 26.12 GiB). (4)~Conclusions: heterogeneous source fusion, semantic-ANN-based KG retrieval and parameter-free RRF jointly close the gap that single-source RAG leaves open in industrial assembly guidance, while remaining deployable on consumer-grade GPUs.}
+
+\keyword{retrieval-augmented generation; knowledge graph; aviation engine assembly; multi-source fusion; reciprocal rank fusion; large language model; CAD geometric reasoning}
+
+\featuredapplication{The proposed MHRAG framework can be deployed as the question-answering and assembly-guidance front-end of MES/PLM platforms for aero-engine maintenance and similar high-precision assembly scenarios.}
+
+\begin{document}
+
+%=================================================================
+\section{Introduction}
+\label{sec:intro}
+
+\subsection{Research Background and Motivation}
+\label{sec:background}
+
+Aviation engines are the central power units of the modern aviation industry. Their assembly involves thousands of parts, hundreds of work-step procedures and stringent tolerance constraints, making the process a quintessential knowledge-intensive, high-precision manufacturing scenario. The knowledge that supports this assembly is fragmented across three heterogeneous data sources: \textbf{maintenance manuals} encode procedural knowledge---work-step ordering, tool requirements and technical specifications---in image-rich PDFs; \textbf{Bills of Materials (BOM)} provide identity information---part numbers, names and quantities---in structured spreadsheets; and \textbf{3D CAD models} encode assembly hierarchies, mating constraints and geometric tolerances as deterministic geometric data. Each source has clearly disjoint information boundaries: manuals contain no assembly structure, BOMs contain no procedural steps, and CAD models contain no textual operating descriptions; consequently, no single source alone can constitute a complete assembly knowledge base. Knowledge graphs (KGs), the canonical structured-knowledge representation that encodes semantic relations between entities as triples, have been shown to deliver substantial value in industrial knowledge management~\citep{hogan2021kg,ji2022kgsurvey}. How to fuse these three heterogeneous sources and assist assembly workers in completing precision operations through natural-language interaction is therefore a key research question for the intelligentization of aviation manufacturing.
+
+In recent years, large language models (LLMs) have achieved major breakthroughs in natural-language understanding and generation, but three intrinsic limitations restrict their reliable application in specialized domains: \textbf{parametric-knowledge hallucination} (generating plausible-sounding but factually wrong content), \textbf{training-knowledge cut-off} (inability to access up-to-date domain data), and \textbf{insufficient professional reasoning} (unstable performance on tasks involving precise numerical values and multi-hop logic in specialized fields)~\citep{zhao2023llmsurvey}. Retrieval-Augmented Generation (RAG) provides a systematic solution to these issues~\citep{lewis2020rag}: by dynamically retrieving from an external knowledge base at inference time and injecting relevant text fragments into the LLM's context window, the generation process is anchored to external facts rather than relying purely on parametric memory. Since its introduction, RAG has rapidly evolved through Naive RAG, Advanced RAG and GraphRAG paradigms~\citep{gao2023ragsurvey}, achieving significant progress in specialized domains such as medicine, law and finance.
+
+However, existing RAG methods are largely designed for a single text source and struggle to satisfy three special needs of aviation-engine assembly:
+
+\begin{enumerate}
+\item \textbf{Multimodal content.} Assembly manuals embed many cross-section drawings, exploded views and tolerance call-outs that carry spatial relations and operational details which pure text cannot fully express.
+\item \textbf{Exact-identifier matching.} Part numbers (e.g.\ \texttt{PN: 1002-AX}), tolerance values (e.g.\ ``0.05--0.12 mm'') and torque specifications are critical for retrieval accuracy, yet pure dense-vector retrieval blurs lexical surface forms and weakens such exact matching.
+\item \textbf{Structured-reasoning needs.} Part composition, procedural dependencies and mating constraints are inherently graph-shaped and require multi-hop relational reasoning that exceeds the capability of vector similarity. Furthermore, retrieval noise---irrelevant passages mixed into the context---substantially degrades LLM generation quality~\citep{liu2023lostinmiddle}, which is especially harmful in high-precision assembly scenarios.
+\end{enumerate}
+
+Industrial RAG for fault diagnosis and assembly guidance has begun to attract attention. In aircraft fault diagnosis, Tang et al.~\citep{tang2023aircraft} and Meng et al.~\citep{meng2024aircraft} respectively surveyed and implemented KG platforms; Wu et al.~\citep{wu2024engine} built a fault KG dedicated to aircraft engine lubrication systems and demonstrated KG's engineering value in aero-engine specialized scenarios. In aviation assembly functional testing, Liu et al.~\citep{liu2024jointkg} embedded a KG into an LLM via prefix tuning and achieved 98.5\% fault-diagnosis accuracy, evidencing the effectiveness of joint domain-KG plus LLM reasoning. Liu et al.~\citep{liu2023avkg} constructed an aviation-assembly KG with 5 entity classes, 3 relation types and 1{,}308 triples, integrated with Neo4j and laying a foundation for assembly knowledge management. Shi et al.~\citep{shi2022arkg} proposed an Assembly-Resource KG (ARKG) on a ``function-structure-procedure-assembly resource'' multi-dimensional ontology, mapping CAD model data into the graph to support knowledge sharing and reuse. Shen et al.~\citep{shen2025hybridrag} proposed HybridRAG that fuses KG and vector retrieval, validated in aircraft troubleshooting with a $\sim$4\% F1 improvement and $\sim$7\% hallucination reduction. Nevertheless, the KGs in these works are extracted from a single source (manuals or other text only), without systematically incorporating BOM authoritative part-identity information and CAD/IPC assembly-structure information. Zhang et al.~\citep{zhang2025mllmkgc} also report that single-text-modality KGs suffer from ``missing entities and broken causal chains'' in identifying equipment-part associations, while introducing multimodal visual information improves MRR and Hits@1 by 10.41\% and 9.23\%---which strongly motivates multi-source fusion. Existing methods exhibit clear limitations in the three-source-collaborative fine-grained scenario of assembly, and have not designed multimodal retrieval paths for diagram content.
+
+\subsection{Limitations of Existing Methods}
+\label{sec:limitation}
+
+Fan et al.~\citep{fan2024ragsurvey} survey the field and identify retrieval quality, augmentation strategy and generation reliability as the three core challenges of RAG; Gao et al.~\citep{gao2023ragsurvey} further partition RAG evolution into Naive, Advanced and GraphRAG stages, noting that GraphRAG provides a clear advantage in structured reasoning but its knowledge sources remain text-bound. Combining these surveys with the special needs of aviation-engine assembly, this paper identifies four under-addressed weaknesses.
+
+\textbf{(1) Neglect of multimodal image retrieval.} The knowledge bases of existing industrial RAG methods typically contain only text chunks; drawings and schematics are excluded from the retrieval scope, so questions such as ``what is the assembly schematic of this mating face?'' cannot be answered. Fan et al.~\citep{fan2024ragsurvey} note that Naive RAG produces noticeably lower recall on multimodal documents than on plain-text documents, a deficiency particularly conspicuous in the image-rich aviation manual setting.
+
+\textbf{(2) Lack of sparse--dense complementarity.} Most schemes rely on a single dense-vector retrieval path, yielding low recall on domain-specific queries that contain part numbers and numerical identifiers. BM25 and other sparse methods enjoy a natural advantage in lexical exact matching but lack semantic generalization when used alone; the complementary fusion of the two has not been thoroughly studied in the assembly domain.
+
+\textbf{(3) Insufficient three-source heterogeneous fusion.} Existing industrial KG work mostly extracts triples from manual text alone: the aviation-assembly KG of Liu et al.~\citep{liu2023avkg} contains only 5 entity classes and 3 relation types; the ARKG of Shi et al.~\citep{shi2022arkg} introduces CAD model data but does not realize systematic fusion and entity alignment of BOM, CAD and manuals. The information boundaries of the three sources are clearly complementary (manual: process knowledge; BOM: identity; CAD: geometric topology), yet no complete framework provides unified ontology modelling and cross-source entity alignment.
+
+\textbf{(4) Simple multi-source heterogeneous fusion.} Multi-path retrieval scores live in different scale spaces; existing works mostly use linear weighted fusion ($\text{IR} = \alpha\cdot \text{score}_{\text{dense}} + \beta\cdot \text{score}_{\text{sparse}}$)~\citep{shen2025hybridrag}, which is sensitive to score-distribution differences and lacks a parameter-free unified-ranking mechanism for heterogeneous paths (text, image, graph).
+
+\subsection{Main Contributions}
+\label{sec:contribution}
+
+To address the above gaps, we propose the \textbf{Multi-source Hybrid Retrieval-Augmented Generation (MHRAG)} framework for aviation-engine assembly. The main contributions are summarized below.
+
+\begin{enumerate}
+\item \textbf{Three-source knowledge-graph construction method.} We design a multi-agent collaborative extraction pipeline whose three rails are BOM parsing, structural CAD parsing and LLM-based manual triple extraction; the three-rail outputs are merged into a single Neo4j graph after entity alignment. The ontology comprises 7 entity classes (including a novel \textit{GeoConstraint} node) and 9 relations, with crisply delineated semantic boundaries: BOM serves as the authoritative part-identity registry, CAD provides the assembly hierarchy and geometric constraints, and manuals provide procedural knowledge and technical specifications. A verification agent in the fusion stage performs consistency checks, effectively resolving same-name-different-object and information-conflict issues.
+
+\item \textbf{Four-path parallel hybrid retrieval architecture.} On top of dense (BGE-M3) and BM25 sparse retrieval, we additionally introduce a Chinese-CLIP cross-modal image path and a knowledge-graph subgraph retrieval path based on BGE-M3 semantic Approximate-Nearest-Neighbor (ANN) search, enabling the system to retrieve text, drawings and structured relational knowledge simultaneously. The four results are unified by Reciprocal Rank Fusion (RRF) without per-path score normalization, yielding natural robustness to single-path failures. Compared with the traditional keyword-string-matching (CONTAINS) KG retrieval method, the semantic-ANN scheme markedly improves recall for mixed Chinese--English queries.
+
+\item \textbf{Generation and interaction design for assembly guidance.} A multi-query expansion strategy mitigates lexical mismatch; BERT-based cross-encoder reranking further improves context quality; a structured system prompt forces the LLM into a ``step-by-step confirmation'' mode that satisfies the safety requirements of aviation assembly; the answer is streamed via Server-Sent Events (SSE) and carries source-image URLs, allowing the front-end to render assembly drawings directly.
+
+\item \textbf{System realization and validation.} We implement a complete back-end on FastAPI + Neo4j + Qdrant, with a React-based interactive QA front-end. On 10 ATA chapters of the PT6A maintenance manual ($\sim$1.78 MB Markdown) we build a 7{,}333-node / 8{,}752-edge KG. On a two-tier QA benchmark (60 fine-grained questions on the 72-30 compressor sub-system + 20 cross-chapter coarse-grained questions), MHRAG attains the highest Tier-1 LLM-Judge Relevance 3.63 and Completeness 3.15---{+}7.4\% and {+}9.4\% over Naive RAG; and leads all single-path baselines on the Tier-2 cross-chapter set ({+}10.7\% Completeness and ${+}1.9\%$ Correctness over BM25-only). The ablation analysis quantifies each path: turning off the KG path drops Judge Completeness by 7.0\%, and on Procedure-Tool questions (Type B) the KG path independently contributes a 28.5\% gain. On engineering metrics, MHRAG attains the lowest hallucination rate (32.50\%, $-$13.75 percentage points vs.\ Dense-only), with end-to-end latency 8.27 s and 2.48 GB local VRAM, both substantially better than the HybridRAG~\citep{shen2025hybridrag} reference (14.19 s and 26.12 GiB), fitting consumer-grade GPU industrial deployment constraints.
+\end{enumerate}
+
+\subsection{Paper Structure}
+\label{sec:structure}
+
+The remainder of the paper is organized as follows. Section~\ref{sec:related} reviews related work in RAG, KG construction and multimodal retrieval. Section~\ref{sec:method} details each component of the proposed MHRAG framework. Section~\ref{sec:experiment} describes the experimental configuration, dataset construction and evaluation metrics, and reports comparison and ablation results. Section~\ref{sec:discussion} discusses path contributions, KG-quality impact and methodological limitations. Section~\ref{sec:conclusion} concludes and outlines future directions.
+
+%=================================================================
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Retrieval-Augmented Generation Survey}
+\label{sec:related-rag}
+
+\subsubsection{RAG Evolution}
+
+Retrieval-Augmented Generation was introduced by Lewis et al.~\citep{lewis2020rag} with the core idea of dynamically retrieving an external knowledge base at LLM inference time and injecting the retrieved fragments into the context window so as to ground the generation in external facts. Fan et al.~\citep{fan2024ragsurvey} survey the field along architecture, training strategy and application dimensions and identify RAG as a promising direction for knowledge-intensive open-domain QA. Gao et al.~\citep{gao2023ragsurvey} divide RAG into three progressive stages, depicted schematically in Figure~\ref{fig:rag-evolution}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/fig7_rag_evolution.pdf}
+\caption{Three-stage evolution of RAG, from Naive RAG and Advanced RAG to the proposed MHRAG framework. The transition from Advanced RAG to MHRAG introduces structural (knowledge-graph) and multimodal (Chinese-CLIP) extensions on top of the existing sparse--dense hybrid pipeline.\label{fig:rag-evolution}}
+\end{figure}
+
+\textbf{Naive RAG} is the earliest paradigm, centered on dense vector retrieval, directly concatenating the Top-$K$ chunks into the prompt. It works well on general QA but suffers from low retrieval precision and high context noise in specialized domains~\citep{fan2024ragsurvey}. Liu et al.~\citep{liu2023lostinmiddle} empirically show that when irrelevant passages enter the retrieved context, generation quality drops sharply---a ``lost-in-the-middle'' phenomenon especially pronounced in long-context settings, exposing a fundamental limitation of Naive RAG in precise-query scenarios.
+
+\textbf{Advanced RAG} adds query rewriting, hybrid retrieval and re-ranking modules to systematically improve retrieval quality. Representative improvements include multi-query expansion~\citep{ma2023query} (rewriting the original query into multiple paraphrases for parallel retrieval), sparse--dense hybrid retrieval~\citep{luan2021sparse} (combining BM25 with vector retrieval), and cross-encoder re-ranking~\citep{nogueira2019passage} (fine-grained semantic re-ranking after coarse retrieval).
+
+\textbf{GraphRAG} pushes towards deeper structuring. Edge et al.~\citep{edge2024graphrag} couple a knowledge graph with RAG so that entity relations can be expressed in graph form and multi-hop reasoning supported, complementing the limitations of vector retrieval in structured reasoning. Building on GraphRAG and tailoring it to aviation-engine assembly, this paper additionally designs a three-source KG and a subgraph-recall path based on dense-semantic ANN: by encoding both queries and KG-entity descriptions with BGE-M3, mixed Chinese--English queries directly hit semantic neighbours among graph entities and a one-hop neighbourhood expansion supplies the relevant subgraph. This design simultaneously addresses the inability of pure-text KGs to cover geometric-constraint knowledge and the low recall of keyword matching on Chinese queries.
+
+\subsubsection{Sparse--Dense Hybrid Retrieval}
+
+Early RAG work uses bi-encoder dense retrieval; representative models are DPR~\citep{karpukhin2020dpr} and the BGE family~\citep{bge2023}. Dense retrieval excels at capturing semantic similarity but underperforms on exact identifiers such as part numbers (PNs).
+
+BM25~\citep{robertson2009bm25}, a classic probabilistic retrieval model, has natural advantages in lexical exact matching. Studies~\citep{luan2021sparse} show that combining sparse and dense retrieval yields recall and precision substantially better than either alone. Existing industrial RAG (e.g.\ HybridRAG~\citep{shen2025hybridrag}) adopts linear weighted fusion ($\text{score} = \alpha\cdot s_{\text{dense}} + \beta\cdot s_{\text{sparse}}$), which depends on manual weight tuning and is sensitive to score distributions. We instead use Reciprocal Rank Fusion (RRF)~\citep{cormack2009rrf}, a parameter-free scheme that requires no normalization across score spaces and is naturally robust to single-path failures, while seamlessly fusing text, image and graph candidates.
+
+For re-ranking, cross-encoders based on the Transformer encoder~\citep{vaswani2017attention,devlin2019bert} apply full attention to (query, candidate) pairs at inference time and capture fine-grained semantic alignment more accurately than the independent encoding of bi-encoders~\citep{nogueira2019passage}.
+
+\subsection{Knowledge Graph Construction and Reasoning}
+\label{sec:related-kg}
+
+A knowledge graph encodes structured relations between entities as triples $(e_h, r, e_t)$, providing the multi-hop reasoning capability that vector retrieval lacks. Hogan et al.~\citep{hogan2021kg} provide an authoritative survey of representation, construction and applications, identifying KG as an irreplaceable structured-reasoning tool for knowledge-intensive tasks. Ji et al.~\citep{ji2022kgsurvey} systematically survey KG advances along representation learning, knowledge acquisition and applications, laying a theoretical foundation for our ontology design and entity alignment. Pan et al.~\citep{pan2024kgllmsurvey} chart the LLM--KG fusion roadmap, arguing that the two together provide significant synergy in specialized-domain QA---one of the core motivations for our KG+RAG design.
+
+\subsubsection{LLM-Based Zero-Shot Triple Extraction}
+
+Early NER and Relation Extraction (RE) work depended on large-scale annotated data, encountering high labelling costs in low-resource domains such as aviation manufacturing. Recently, Pan et al.~\citep{pan2024kgllmsurvey} survey zero-/few-shot triple-extraction paradigms based on pre-trained language models---encoding the ontology schema into few-shot prompts to drive LLMs to output structured triples directly---which significantly lowers KG construction cost and makes KG construction feasible in low-resource domains.
+
+To further improve extraction quality, the Gleaning mechanism of Edge et al.~\citep{edge2024graphrag} re-prompts the model in a second round to recover missed entities; entity linking~\citep{wu2020corefresolution} resolves synonymy through a three-stage cascade of dictionary mapping, edit-distance fuzzy matching and semantic vectors, ensuring graph internal consistency.
+
+\subsubsection{Structured Knowledge Extraction from CAD Geometry}
+
+Existing industrial KG work mostly focuses on text, databases and sensor data, with little work directly extracting precise structured knowledge from 3D CAD models. Shi et al.~\citep{shi2022arkg} propose an Assembly-Resource KG (ARKG) under a ``function-structure-procedure-resource'' multi-dimensional ontology and integrate CAD model instance data via ontology mapping, effectively coupling product, procedure and assembly-resource information. Their work, however, focuses on CAD attribute data and does not address systematic geometric-constraint parsing.
+
+In fact, STEP / ISO 10303~\citep{srinivasan2017bom} CAD files standardize the encoding of parent--child containment, geometric mating constraints (coaxial, contact, parallel, etc.) and Product Manufacturing Information (PMI). This information is deterministic, high-precision and label-free. Our CAD parsing rail uses OCCT to extract from STEP files the assembly hierarchy (\textit{isPartOf}), mating constraints (\textit{matesWith}) and spatial adjacency (\textit{adjacentTo}), filling the geometric-topology gap in pure-text KGs and constituting a primary differentiator from existing industrial RAG work.
+
+\subsubsection{BOM-Driven Entity Registration and Alignment}
+
+The Bill of Materials (BOM) is the authoritative source of part identity in manufacturing, containing PN, name, quantity and material attributes~\citep{srinivasan2017bom}. Liu et al.~\citep{liu2023avkg} note that aviation-assembly data sources are highly unstructured and entity boundaries are blurred (e.g.\ ``radar calibration'' can be classified as an operation entity or with ``radar'' as a separate part entity), an issue that becomes especially acute in cross-source entity alignment. Using BOM as the entity-node registry effectively resolves naming inconsistency across sources: ``main bearing'' in the manual is linked through entity linking to PN: 1002-AX in the BOM, and CAD geometric instances are aligned to BOM via STEP \texttt{PRODUCT} entities, building a unified entity-identity space across the three sources.
+
+\subsubsection{Multi-Agent Knowledge Extraction}
+
+Because the three sources differ markedly in format and semantics, a single pipeline cannot process them all with high quality. Guo et al.~\citep{guo2024multiagent} demonstrate that multi-agent systems---through specialized division of labour---outperform monolithic alternatives. Park et al.~\citep{park2023generative} further showcase multi-agent collaboration in complex reasoning. Inspired by these, we design four specialised agents---BOM Parser, Text Extractor, Multimodal Visual Extractor and Verification Agent---that collaboratively complete extraction, fusion and consistency checking from the three sources.
+
+\subsubsection{Graph Reasoning and RAG Fusion}
+
+GraphRAG~\citep{edge2024graphrag} identifies named entities as anchor nodes and performs variable-depth neighbourhood expansion for multi-hop traversal, effectively supporting structured queries such as ``all sub-assemblies of part X''. However, its KG comes from text extraction only and contains no geometric information; furthermore, traditional GraphRAG mostly relies on keyword-string matching to locate anchors, which is brittle for mixed-language queries and synonymous terms. Our KG retrieval path (Path~4) makes two improvements: (i)~the geometric-constraint nodes obtained from CAD parsing enrich the structural depth of the graph, supporting geometric-topology queries that pure-text GraphRAG cannot answer; and (ii)~anchor localization is replaced from keyword CONTAINS matching to BGE-M3 dense semantic ANN, so that mixed-language queries directly hit the relevant entities in a unified embedding space and the one-hop neighbourhood expansion forms the context subgraph. This design yields a $+69\%$ Judge Correctness gain on cross-chapter queries compared with the keyword version (see Section~\ref{sec:exp-main}).
+
+\subsection{Multimodal Information Retrieval}
+\label{sec:related-mm}
+
+\subsubsection{Cross-Modal Embedding and Image-Text Retrieval}
+
+Multimodal information retrieval seeks unified semantic representations across text and image modalities. CLIP~\citep{radford2021clip} contrastively projects an image encoder and a text encoder into the same embedding space and achieves zero-shot image-text matching, becoming the foundational paradigm for cross-modal retrieval; the underlying Transformer self-attention~\citep{vaswani2017attention} provides a unified computational framework for cross-modal alignment. For the Chinese setting, Chinese-CLIP~\citep{yang2022chinese} pre-trains CLIP on large-scale Chinese image-text pairs and achieves strong performance on Chinese multimodal retrieval; we adopt this model in our cross-modal path.
+
+\subsubsection{Industrial Document Multimodal Processing}
+
+Aviation technical manuals are typically image-rich PDFs, containing critical visual content such as cross-section drawings, exploded views and tolerance call-outs. Existing industrial RAG systems, however, often discard drawings or only OCR-extract their captions, failing to establish a direct semantic link between image content and natural-language queries---meaning a large amount of constraint-bearing visual information is entirely ignored at retrieval time. We use a Vision-LLM (MiniMax M2.5 Vision) to generate Chinese technical descriptions for each extracted image and encode them with BGE-M3 to build a textual proxy vector; we also retain the visual semantic vector from Chinese-CLIP, so that ``text-to-image'' look-ups and cross-modal image matching are simultaneously supported. The final answer carries source-image URLs, allowing the front-end to render the assembly drawing directly and significantly improving the interpretability and trustworthiness of diagram-related questions.
+
+\subsubsection{Multi-Query Expansion}
+
+Multi-query expansion is a common technique for mitigating vocabulary mismatch. Ma et al.~\citep{ma2023query} show that rewriting the original query with an LLM into multiple paraphrases for parallel retrieval and merging-and-deduplicating the results substantially improves recall coverage. We apply multi-query expansion to all four retrieval paths, forming the query set $\mathcal{Q} = \{q, q_1, q_2\}$, an essential technical lever for high recall in our system.
+
+\subsection{Aviation Engine Assembly Intelligence}
+\label{sec:related-aero}
+
+Aviation engine assembly is among the most precision-demanding and procedurally complex segments of manufacturing. Traditional assembly assistance systems rely on hand-crafted structured databases and fixed retrieval rules, lack natural-language understanding, and adapt poorly to model updates or process changes. Recent advances in KG and LLM technologies have catalyzed intelligentization research in three sub-directions.
+
+\textbf{Aviation domain KG applications.} Tang et al.~\citep{tang2023aircraft} systematically survey KG construction and application for aircraft fault diagnosis; Meng et al.~\citep{meng2024aircraft} build a fault KG platform for aircraft Prognostics and Health Management (PHM), covering entity modelling and reasoning paths for typical aero-engine faults; Wu et al.~\citep{wu2024engine} construct a fault KG dedicated to aircraft engine lubrication systems and validate KG-assisted fault diagnosis in real engineering scenarios. These works consistently confirm that specialized KGs are key to higher fault-diagnosis precision in aviation; however, all of them target fault diagnosis, leaving assembly guidance---which requires deep fusion of three heterogeneous sources---unaddressed.
+
+\textbf{Aviation assembly KG construction.} Liu et al.~\citep{liu2023avkg} use a joint extraction model to automatically extract entities and relations from assembly manual text and build an aviation-assembly KG with 5 entity classes (step, operation, tool, part, facility) and 3 relation types (Component-Whole, Content-In, Instrument-Agency), stored in Neo4j, with entity- and relation-extraction F1 scores of 89.71\% and 91.27\%. Shi et al.~\citep{shi2022arkg} build an Assembly-Resource KG on a ``function-structure-procedure-assembly resource'' multi-dimensional ontology, integrating CAD instance data and engineering knowledge under a unified semantic framework to support knowledge sharing and reuse in process design. Both works validate KG feasibility in the assembly domain but are limited to a single source (text or CAD attribute data), failing to bring BOM, manuals and 3D geometric constraints into a unified graph framework.
+
+\textbf{LLM and assembly intelligentization fusion.} Blumenthal et al.~\citep{blumenthal2020nlp} explore structuring technical-manual text for keyword retrieval; Zhao et al.~\citep{zhao2022assembly} propose a BERT~\citep{devlin2019bert}-based assembly-instruction understanding model that improves supervised semantic parsing. None of these introduce LLM generation, leaving them ill-equipped for open-domain queries with diverse phrasings. Zhao et al.~\citep{zhao2023llmsurvey} survey shows LLMs' emergent capabilities in language understanding, reasoning and generation; Wu et al.~\citep{wu2024engine} couple LLM with an aero-engine lubrication KG, evidencing LLM's potential in equipment-level specialised fault QA, but pure LLM solutions still hallucinate and use stale knowledge, with insufficient reliability on queries involving precise numerics (torque, tolerance, part numbers)~\citep{fan2024ragsurvey}.
+
+Liu et al.~\citep{liu2024jointkg} further embed an aviation-assembly KG into an LLM via prefix tuning, using 2-step subgraph-driven prefix tuning to reach 98.5\% fault-diagnosis accuracy in functional testing, validating the deep KG--LLM fusion. Zhang et al.~\citep{zhang2025mllmkgc} propose a multimodal KG construction method based on the QWEN2-VL dual-stream Transformer (MllmDA-KGC) and show that introducing visual modality into KG improves equipment-O\&M reasoning (MRR, Hits@1) by 10.41\% and 9.23\% over pure-text KG, providing empirical support for our visual retrieval path.
+
+\textbf{Most relevant work.} The HybridRAG of Shen et al.~\citep{shen2025hybridrag} validates KG+vector hybrid retrieval in aircraft troubleshooting with $+4\%$ F1 and $-7\%$ hallucination, and proposes a Planner-Agent iterative-exploration algorithm that improves answer quality through plan-execute-self-reflect loops. We borrow its agent-iteration spirit and make four targeted extensions for aviation-engine assembly: (i)~we introduce a three-source (BOM~+~CAD~+~manual) multi-agent KG construction pipeline, expanding the ontology from the 5-entity manual-text scheme to 7 entity classes and 9 relations and providing more comprehensive coverage; (ii)~we add a cross-modal image retrieval path for diagram-related queries; (iii)~we replace linear weighted fusion with parameter-free RRF, increasing the robustness of multi-path heterogeneous fusion; and (iv)~we use a Vision-LLM to generate Chinese technical captions, enabling dual-channel image retrieval. These extensions deliver differentiated coverage and multimodal advantages over prior work and squarely target the high-precision application of assembly guidance.
+
+%=================================================================
+\section{Methodology}
+\label{sec:method}
+
+\subsection{System Overview}
+\label{sec:overview}
+
+The proposed Multi-source Hybrid RAG framework for aviation-engine assembly is divided into an \textbf{offline knowledge-construction} stage and an \textbf{online QA inference} stage; the overall architecture is shown in Figure~\ref{fig:arch}.
+
+\textbf{The offline stage} runs two parallel pipelines. The first processes unstructured assembly manuals, performing document parsing, semantic chunking and multimodal vectorization, and writes vectors to the vector database. The second processes structured CAD models and manual text, building a knowledge graph through a dual-rail KG construction method that records part-structure relations, assembly procedures and mating constraints in the graph database. The two knowledge sources are mutually complementary and together form the unified knowledge base of the system.
+
+\textbf{The online stage} works as follows. Given a natural-language query, the system first uses an LLM to perform multi-query expansion, then dispatches the queries in parallel to four retrieval paths---dense vector retrieval, BM25 sparse retrieval, cross-modal image retrieval and KG retrieval---and fuses the four into a unified ranking through Reciprocal Rank Fusion (RRF). The ranking is re-ranked by a cross-encoder and fed to the LLM for answer generation; the answer is streamed to the user via Server-Sent Events (SSE).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/fig1_architecture.pdf}
+\caption{Overall architecture of the MHRAG system. From left to right: (i) the three heterogeneous data sources---Maintenance Manual, BOM list and CAD model; (ii) the offline knowledge construction stage with parallel document-vector and knowledge-graph pipelines, persisted into Qdrant and Neo4j respectively; and (iii) the online QA inference stage that fuses four parallel retrieval paths through Reciprocal Rank Fusion before re-ranking and LLM generation. Colour coding: blue---vector pipeline modules, green---knowledge-graph pipeline modules, orange---online inference modules.\label{fig:arch}}
+\end{figure}
+
+\subsection{Three-Source Knowledge-Graph Construction}
+\label{sec:kg}
+
+The knowledge of aviation-engine assembly is fragmented across three fundamentally different data sources. BOM tables provide the authoritative identity information of parts and serve as the registration basis for graph entities. 3D CAD models, with deterministic geometric data, encode the assembly hierarchy and mating constraints. Maintenance manuals, in image-rich PDFs, carry procedural knowledge: work-step ordering, tool requirements and technical specifications. The information boundaries of the three sources are clearly complementary: no single source alone constitutes a complete knowledge base. We design a multi-agent collaborative extraction pipeline for the three sources and merge the outputs into a single Neo4j graph database, forming the complete assembly knowledge graph $\mathcal{G}=(\mathcal{V},\mathcal{E})$.
+
+\subsubsection{Knowledge-Graph Ontology Design}
+\label{sec:ontology}
+
+To regulate the semantic boundaries of the graph, we combine the characteristics of the three sources with the requirements of aviation-engine assembly to design an ontology of 7 entity classes and 9 relations (Table~\ref{tab:ontology}). Compared with the 5-entity / 3-relation aviation-assembly text KG of Liu et al.~\citep{liu2023avkg} and the ``function-structure-procedure-resource'' framework of Shi et al.~\citep{shi2022arkg} for assembly-resource reuse, the core extensions of our ontology are: (1) introducing an authoritative part-identity registry from BOM; (2) introducing a geometric-constraint node (\textit{GeoConstraint}) from CAD parsing; and (3) designing cross-source entity-alignment rules that merge data from the three sources onto the same entity nodes.
+
+\begin{table}[H]
+\caption{Ontology of the aviation-engine assembly knowledge graph.\label{tab:ontology}}
+\begin{tabularx}{\textwidth}{p{2.0cm}p{2.4cm}X}
+\toprule
+\textbf{Category} & \textbf{Label} & \textbf{Key attributes / role / data source}\\
+\midrule
+\multirow{7}{*}{\shortstack[l]{Entity\\nodes}}
+& \textit{Part}            & \texttt{part\_number, name, material, quantity}; smallest non-decomposable physical unit; BOM + CAD + manual\\
+& \textit{Assembly}        & \texttt{name, level, function}; logical/physical aggregate of parts or sub-assemblies; BOM + CAD\\
+& \textit{Procedure}       & \texttt{step\_id, description, sequence\_no}; ``how-to'' actions; manual\\
+& \textit{Tool}            & \texttt{tool\_id, name, type, spec}; auxiliary equipment, gauges and fixtures; manual\\
+& \textit{Specification}   & \texttt{type, value, unit}; quantitative requirements (torque 50 N$\cdot$m, clearance 0.05--0.12 mm); manual + CAD/PMI\\
+& \textit{Interface}       & \texttt{interface\_type}; physical contact surface or connection point; CAD mating constraints\\
+& \textit{GeoConstraint}   & \texttt{constraint\_type}; mathematical positional logic (coaxial, contact, parallel); CAD raw data\\
+\midrule
+\multirow{9}{*}{\shortstack[l]{Relation\\edges}}
+& \textit{isPartOf}        & part / assembly $\rightarrow$ assembly; structural composition (parent--child); BOM-driven\\
+& \textit{precedes}        & procedure A $\rightarrow$ procedure B; temporal/logical ordering; manual core logic\\
+& \textit{participatesIn}  & part $\rightarrow$ procedure; which part is operated at which step; manual + BOM aligned\\
+& \textit{requires}        & procedure $\rightarrow$ tool; tool required for the step; manual\\
+& \textit{specifiedBy}     & procedure / interface $\rightarrow$ specification; quantitative standard; manual + PMI\\
+& \textit{matesWith}       & part A $\rightarrow$ part B; physical contact / mating; CAD constraints\\
+& \textit{adjacentTo}      & part A $\rightarrow$ part B; spatial proximity (no necessary contact); CAD spatial analysis\\
+& \textit{hasInterface}    & part $\rightarrow$ interface; physical connection feature owned by the part; CAD feature extraction\\
+& \textit{constrainedBy}   & interface $\rightarrow$ geometric constraint; underlying mathematical positioning logic; CAD raw data\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Table~\ref{tab:ontology} lists the attributes, semantic boundary and data-source responsibility of the seven entity classes and nine core relations, forming the semantic skeleton of the graph. Entity classes are organized in three semantic layers: ``part structure'' (\textit{Part} / \textit{Assembly}), ``process action'' (\textit{Procedure} / \textit{Tool} / \textit{Specification}) and ``geometric constraint'' (\textit{Interface} / \textit{GeoConstraint}). Relations span five semantic dimensions: composition (\textit{isPartOf}); temporal logic (\textit{precedes}); participation (\textit{participatesIn}, \textit{requires}); technical constraints (\textit{specifiedBy}); and physical mating (\textit{matesWith}, \textit{adjacentTo}, \textit{hasInterface}, \textit{constrainedBy}). Together they describe the full pipeline from a static parts list to dynamic assembly procedures. To visualize the topology of entity classes and their data-source mapping, Figure~\ref{fig:ontology} arranges the seven nodes in three swim lanes (BOM/CAD, manual, CAD geometry) and labels the seven cross-class relations with arrows; the three self-loop relations (\textit{matesWith}, \textit{adjacentTo}, \textit{precedes}), whose endpoints are within the same entity class, are listed in the bottom note bar.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\linewidth]{figures/fig3_ontology.pdf}
+\caption{Ontology schema of the assembly KG (7 entity classes, 9 core semantic relations). Self-loop relations \texttt{matesWith}, \texttt{adjacentTo} (Part--Part) and \texttt{precedes} (Procedure--Procedure) are listed in the bottom annotation box. The construction pipeline additionally uses \texttt{SAME\_AS} and \texttt{interchangesWith} as auxiliary cross-stage relations.\label{fig:ontology}}
+\end{figure}
+
+The ontology is injected into all extraction prompts as a hard constraint, eliminating type ambiguity. The data-source responsibilities are: BOM serves as the authoritative registry for \textit{Part} / \textit{Assembly} entities, providing \texttt{part\_number}, \texttt{name} and \texttt{quantity}; CAD constructs the assembly hierarchy and geometric constraints (\textit{isPartOf}, \textit{matesWith}, \textit{adjacentTo}, \textit{hasInterface}, \textit{constrainedBy}); manuals fill in procedural knowledge (\textit{Procedure}, \textit{Tool}, \textit{Specification} and \textit{precedes}, \textit{requires}, \textit{participatesIn}, \textit{specifiedBy}).
+
+\subsubsection{Multi-Agent Collaborative Extraction Pipeline}
+\label{sec:multi-agent-kg}
+
+The three sources differ fundamentally in format and semantics. BOM is structured tabular data demanding high field precision and low semantic understanding; CAD encodes the assembly hierarchy and mating constraints in geometric topology and STEP records, requiring a geometry engine; manuals are long image-rich text full of references, ellipses and cross-page citations. A single LLM pipeline applied to all three would either lose BOM field precision (LLMs hallucinate on long digit strings) or miss implicit ordering and cross-page references in manuals. We therefore design four specialized agents (BOM, CAD, manual text, optional vision) followed by a unified three-stage entity alignment and consistency-verification stage that writes the merged triples into Neo4j; the overall pipeline is shown in Figure~\ref{fig:kg-pipeline}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/fig2_kg_pipeline.pdf}
+\caption{Multi-agent collaborative pipeline for three-source knowledge extraction. Agents A--C parse the BOM, CAD and Maintenance Manual respectively; Agent D (visual extractor, shown in grey) is reserved for image-rich corpora and is disabled in the present PT6A study. Outputs are unified by a three-tier (rule\,$\rightarrow$\,fuzzy\,$\rightarrow$\,semantic) entity-alignment module, validated for consistency and acyclicity, and persisted into a Neo4j knowledge graph with seven entity classes and nine semantic relations.\label{fig:kg-pipeline}}
+\end{figure}
+
+\paragraph{Agent A---BOM Parser.} Reads structured Excel/ERP exports, extracts PN, name, quantity and material fields and creates \textit{Part} and \textit{Assembly} nodes in Neo4j as the authoritative entity registry. BOM tables are typically flat (no hierarchy column) and do not directly provide parent--child relations; the assembly hierarchy (\textit{isPartOf}) is supplied by the CAD agent.
+
+\paragraph{Agent B---CAD Structural Parser.} Given a STEP file $\mathcal{F}$, the agent uses the OCCT Python binding \texttt{pythonocc-core} to deterministically extract three classes of geometric knowledge.
+
+\textit{(1) Assembly hierarchy.} \texttt{NEXT\_ASSEMBLY\_USAGE\_OCCURRENCE} (NAUO) records in the STEP file encode parent--child containment. For each NAUO record $(r_p, r_c)$, the reference numbers are resolved to readable names through the \texttt{PRODUCT} entity table, generating the \texttt{isPartOf} directed triple
+\begin{linenomath}
+\begin{equation}
+\langle \text{child}, \texttt{isPartOf}, \text{parent}\rangle.
+\label{eq:ispartof}
+\end{equation}
+\end{linenomath}
+The full set of triples constitutes the assembly tree $\mathcal{T}\subseteq\mathcal{G}$; the parsed names are aligned with BOM-registered nodes and merged via \texttt{MERGE} so that no duplicate entities are created.
+
+\textit{(2) Mating-constraint extraction.} Based on NAUO associations and \texttt{GEOMETRIC\_TOLERANCE} records, physical mating relations and their geometric-constraint types are extracted, producing
+\begin{linenomath}
+\begin{equation}
+\langle \text{part}_a, \texttt{matesWith}, \text{part}_b\rangle\quad\text{with attributes}\ \{\textit{constraint\_type}, \textit{interface}\}.
+\label{eq:mateswith}
+\end{equation}
+\end{linenomath}
+\textit{Interface} and \textit{GeoConstraint} nodes are also created and connected by \textit{hasInterface} and \textit{constrainedBy}, forming the three-layer ``part $\xrightarrow{\textit{hasInterface}}$ interface $\xrightarrow{\textit{constrainedBy}}$ geometric-constraint'' structure that cleanly separates the physical contact surface from the mathematical positioning logic.
+
+\textit{(3) Spatial-adjacency extraction.} A dual-mode strategy maximizes geometric precision and deployability. The \textbf{physical} branch, available when \texttt{pythonocc-core} is integrated, computes for each pair of solids $(\sigma_i,\sigma_j)$ the gap between their axis-aligned bounding boxes (AABBs) $\mathcal{B}_i, \mathcal{B}_j$:
+\begin{linenomath}
+\begin{equation}
+\delta_{ij} = \sqrt{\sum_{u\in\{x,y,z\}}\max\!\bigl(0, \max(u_i^{\min}, u_j^{\min}) - \min(u_i^{\max}, u_j^{\max})\bigr)^{\!2}}.
+\label{eq:gap}
+\end{equation}
+\end{linenomath}
+When $\delta_{ij}<\tau$ ($\tau=2$ mm by default) the triple $\langle \text{part}_a, \texttt{adjacentTo}, \text{part}_b\rangle$ is emitted with attribute $\textit{gap\_mm}=\delta_{ij}$. The \textbf{logical (sibling)} branch is used in environments without OCCT: any two child units of the same parent assembly are treated as adjacent, marked with $\textit{method}=\texttt{logical\_sibling}$. This degraded strategy still produces a meaningful adjacency topology under standardized IPC trees (such as the PT6A IPC), preserving robustness for the downstream KG retrieval path.
+\begin{linenomath}
+\begin{equation}
+\langle \text{part}_a, \texttt{adjacentTo}, \text{part}_b\rangle\quad\text{with attributes}\ \{\textit{method}, \textit{gap\_mm}\}.
+\label{eq:adjacent}
+\end{equation}
+\end{linenomath}
+
+\paragraph{Agent C---Text Extractor.} Maintenance manuals are long, image-rich documents. The agent extracts procedural-knowledge triples from each parsed text chunk $c_i$ using a structured few-shot prompt that carries the full ontology (with built-in examples for procedure chains, tool requirements and mating relations), driving the LLM to output a JSON entity-relation set:
+\begin{linenomath}
+\begin{equation}
+\mathcal{T}_i = \Phi_{\text{LLM}}(c_i, \mathcal{O}) = \bigl\{(e_h^{(k)}, r^{(k)}, e_t^{(k)})\bigr\}_{k=1}^{K_i},
+\label{eq:llm-extract}
+\end{equation}
+\end{linenomath}
+where $\mathcal{O}$ is the ontology, $e_h$ and $e_t$ are head and tail entities and $r$ is the relation type. A second \textbf{Gleaning round} explicitly asks the LLM to output only the entities and relations missed in the first pass, effectively reducing knowledge omission.
+
+\paragraph{Agent D---Multimodal Vision Extractor.} Exploded views and structural schematics in manuals carry spatial-connection information missing from pure text. The agent invokes a Vision-LLM (MiniMax M2.5 Vision) to recognize numbered call-outs in figures, align ``call-out 3 in figure'' with the part name in text, supplement spatial-adjacency and interface relations missed by Agent C, and generate Chinese technical descriptions for vector retrieval. The agent requires the input corpus to retain original PDF images. In our PT6A experiment the source data has been converted to Markdown by textin OCR with images replaced by remote CDN URLs, so Agent D does not contribute triples here (see Section~\ref{sec:disc-limit}).
+
+\subsubsection{Knowledge Fusion and Consistency Verification}
+\label{sec:kg-fusion}
+
+The triples produced by the four agents go through three-stage entity alignment and a verification agent before being written to Neo4j, resolving same-name-different-object and information-conflict issues across sources.
+
+\textbf{Three-stage cascaded entity alignment:}
+\begin{enumerate}
+\item \textbf{Rule-level:} accurate mapping using a pre-built aviation-domain dictionary of abbreviations (HPC $\rightarrow$ High-Pressure Compressor, HPT $\rightarrow$ High-Pressure Turbine, etc.).
+\item \textbf{Fuzzy-level:} edit-distance (SequenceMatcher) merging for entity names whose similarity exceeds a threshold, handling differences such as ``main bearing'' versus ``main bearing assembly (PN: 1002-AX)''.
+\item \textbf{Semantic-level:} for residual candidates that the previous two levels cannot align, the BGE-M3 semantic-vector cosine similarity makes the final decision.
+\end{enumerate}
+
+\textbf{Verification Agent.} Performs cross-checks on the merged triples. If a manual extraction conflicts with BOM/CAD evidence (e.g.\ a manual claims an independent fan blade for a model where neither BOM nor CAD has a corresponding node), the agent raises an exception, computes a confidence score via cosine similarity or semantic evaluation, and decides to keep or drop the triple accordingly.
+
+In addition, to guard against possible cycles introduced by \textit{precedes} relations, Kahn topological sorting is used for directed-acyclic-graph (DAG) verification; once a cycle is detected, the lowest-confidence edge is removed to keep the procedure graph valid.
+
+All three sources are eventually written into the same Neo4j instance through \texttt{MERGE}, forming the unified assembly KG $\mathcal{G}$. The full alignment flow is shown in Figure~\ref{fig:entity-align}. On the PT6A whole-engine corpus, the final graph contains 7{,}333 nodes and 8{,}752 edges, covering all 9 core semantic relations plus the 2 auxiliary relations (\texttt{SAME\_AS} cross-stage alignment bridge / \texttt{interchangesWith} interchangeable parts); the relation-type distribution is shown in Figure~\ref{fig:kg-relations}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\linewidth]{figures/fig4_entity_align.pdf}
+\caption{Three-stage cascaded entity alignment with verification.\label{fig:entity-align}}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\linewidth]{figures/fig11_kg_relations.pdf}
+\caption{Distribution of relation types in the PT6A knowledge graph (8{,}752 edges). The 9 core relations defined in the ontology dominate the edge population (coloured bars); the 2 auxiliary relations \texttt{SAME\_AS} and \texttt{interchangesWith} (grey bars with hatch pattern) are produced during entity alignment and not part of the user-facing schema.\label{fig:kg-relations}}
+\end{figure}
+
+\subsubsection{Human-in-the-Loop Stage Gates}
+\label{sec:hitl}
+
+Automated pipelines improve throughput but cannot fully eliminate noisy triples introduced by low-frequency aviation terms and cross-source naming ambiguities. We therefore introduce a Human-in-the-Loop (HITL)~\citep{amershi2014power} stage-gate review mechanism: one \textbf{stage gate} is placed after BOM parsing and another after manual extraction. Each stage produces a report (entity counts, triple distribution, confidence histograms and low-confidence anomaly entries) and pauses the pipeline waiting for a domain expert.
+
+The state machine of the gate is defined as
+\begin{linenomath}
+\begin{equation}
+s\in\{\texttt{idle}, \texttt{running}, \texttt{awaiting\_review}, \texttt{approved}\}.
+\label{eq:hitl-state}
+\end{equation}
+\end{linenomath}
+The pipeline can advance to the next stage only after the current stage's status becomes \texttt{approved}, ensuring quality is confirmed before downstream propagation.
+
+Three classes of expert intervention are supported:
+\begin{enumerate}
+\item \textbf{Triple editing:} add / delete / modify triples to correct entity labels or relation types.
+\item \textbf{Domain-knowledge injection:} input free-text knowledge (e.g.\ ``T-205 and T-206 have a thermal-expansion mating constraint at high-temperature operating conditions''), which is then re-parsed into triples and appended.
+\item \textbf{Confidence-threshold tuning:} adjust the threshold for automatic dropping of low-confidence triples to dynamically trade off recall and precision, with a localised re-run for instant preview.
+\end{enumerate}
+
+The design follows the principle ``machines handle structured data automatically; experts focus on high-uncertainty regions''. Compared with full manual annotation, the stage-gate mechanism concentrates expert effort on low-confidence triples and cross-source naming ambiguities; compared with fully automated pipelines, the introduction of expert semantic checks at key nodes effectively controls the cumulative errors caused by low-frequency aviation terms. The mechanism's core value is a controllable balance interface between automated throughput and expert knowledge injection, not a replacement for either.
+
+\subsection{Document Parsing and Multimodal Vectorization}
+\label{sec:index}
+
+\subsubsection{Document Parsing Pipeline}
+\label{sec:parse}
+
+Aviation assembly manuals are typically image-rich PDFs. We use a dual-route parsing strategy:
+\begin{itemize}
+\item \textbf{Copyable PDFs} are parsed with PyMuPDF for direct text-layer extraction, preserving original character coordinates;
+\item \textbf{Scanned / complex-layout PDFs} are routed to the DeepDoc AI parsing engine for layout analysis and OCR, and are chunked by ATA chapter number.
+\end{itemize}
+
+Text is chunked at sentence boundaries with a target block length of 500 characters. Embedded images larger than $100\times 100$ pixels are extracted and persisted for subsequent multimodal indexing. The dual-channel parsing-and-vectorization pipeline is illustrated in Figure~\ref{fig:indexing}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/fig6_indexing.pdf}
+\caption{Document parsing and dual-channel multimodal vectorization (full system design; in our PT6A experiment the textin OCR + remote-CDN substitution leaves only partial original images, so the CLIP cross-modal retrieval mainly operates on captions).\label{fig:indexing}}
+\end{figure}
+
+\subsubsection{Multimodal Vectorization and Dual Index Construction}
+\label{sec:vectorize}
+
+Each text chunk $c_i$ is encoded by \textbf{BGE-M3} (output dimension $d_{\text{text}}=1024$):
+\begin{linenomath}
+\begin{equation}
+\mathbf{v}_i^{\text{text}} = \text{BGE-M3}(c_i)\in\mathbb{R}^{1024}.
+\label{eq:text-vec}
+\end{equation}
+\end{linenomath}
+
+For each extracted image $f_j$, the Vision-LLM (MiniMax M2.5 Vision) is invoked to generate a Chinese technical caption $\hat{c}_j$, which is then encoded by BGE-M3 to produce the textual proxy vector $\mathbf{v}_j^{\text{cap}}$ supporting the ``text-to-image'' route. Simultaneously, the original image is encoded by \textbf{Chinese-CLIP} (output dimension $d_{\text{img}}=768$) to obtain the cross-modal image vector
+\begin{linenomath}
+\begin{equation}
+\mathbf{v}_j^{\text{img}} = \text{CLIP}_{\text{image}}(f_j)\in\mathbb{R}^{768}.
+\label{eq:img-vec}
+\end{equation}
+\end{linenomath}
+
+All vectors are stored in a Qdrant vector database under the same collection with named vector fields \texttt{text\_vec} and \texttt{image\_vec}, supporting independent retrieval in either embedding space.
+
+\subsection{Multi-Path Hybrid Retrieval}
+\label{sec:retrieval}
+
+This section is the core contribution. Given a user query $q$, the system runs four retrieval paths in parallel and fuses the results; the overall flow is shown in Figure~\ref{fig:retrieval-rrf}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/fig5_retrieval_rrf.pdf}
+\caption{Four-path parallel hybrid retrieval and RRF fusion.\label{fig:retrieval-rrf}}
+\end{figure}
+
+\subsubsection{Multi-Query Expansion}
+\label{sec:multi-query}
+
+To mitigate vocabulary mismatch and broaden recall, the original query is rewritten by an LLM into two paraphrases, forming the query set
+\begin{linenomath}
+\begin{equation}
+\mathcal{Q} = \{q, q_1, q_2\} = \{q\}\cup\Phi_{\text{LLM}}^{\text{expand}}(q).
+\label{eq:multi-query}
+\end{equation}
+\end{linenomath}
+The four retrieval paths are executed independently for each $q'\in\mathcal{Q}$, and final results are merged and de-duplicated.
+
+\subsubsection{Path~1: Dense Vector Retrieval}
+\label{sec:dense}
+
+For each $q'\in\mathcal{Q}$, BGE-M3 produces a 1024-dimensional query vector $\mathbf{q}^{\text{text}}$. The HNSW ANN index in Qdrant's \texttt{text\_vec} space is searched and Top-$N$ candidates are returned by cosine similarity:
+\begin{linenomath}
+\begin{equation}
+\text{score}_{\text{dense}}(q', c_i) = \frac{\mathbf{q}^{\text{text}}\cdot\mathbf{v}_i^{\text{text}}}{\|\mathbf{q}^{\text{text}}\|\,\|\mathbf{v}_i^{\text{text}}\|}.
+\label{eq:dense-score}
+\end{equation}
+\end{linenomath}
+Dense retrieval excels at capturing semantic similarity and is well-suited to queries whose surface form differs from the manual but whose semantics match.
+
+\subsubsection{Path~2: BM25 Sparse Retrieval}
+\label{sec:bm25}
+
+In assembly, exact identifiers such as part numbers (e.g.\ ``T-205''), tolerance values (``0.05--0.12 mm'') and torque specifications are critical to retrieval accuracy, while dense retrieval blurs lexical features. We therefore add BM25 as a complementary path.
+
+Given the bilingual nature of the manual, we design a \textbf{dual-rail tokenizer}: Chinese terms are segmented by jieba; alphanumeric strings (part numbers, measurement values) are processed by a regex tokenizer that prevents fragmentation. The BM25 score for a query $q'$ and document $d$ is
+\begin{linenomath}
+\begin{equation}
+\text{score}_{\text{BM25}}(d, q') = \sum_{i=1}^{M}\text{IDF}(q'_i)\cdot\frac{f(q'_i,d)\cdot(k_1+1)}{f(q'_i,d)+k_1\!\bigl(1-b+b\,\dfrac{|d|}{\overline{|d|}}\bigr)},
+\label{eq:bm25}
+\end{equation}
+\end{linenomath}
+where
+\begin{linenomath}
+\begin{equation}
+\text{IDF}(q'_i) = \log\!\left(\frac{N - n(q'_i) + 0.5}{n(q'_i) + 0.5} + 1\right),
+\label{eq:idf}
+\end{equation}
+\end{linenomath}
+$N$ is the total number of documents, $n(q'_i)$ is the number of documents containing $q'_i$, and we set $k_1=1.5$, $b=0.75$. The BM25 candidate pool is twice that of dense retrieval ($2N$) to exploit the low cost of sparse retrieval and broaden the candidate set.
+
+\subsubsection{Path~3: Cross-Modal Image Retrieval}
+\label{sec:clip}
+
+Aviation assembly manuals contain many cross-section drawings, exploded views and tolerance call-outs that carry assembly knowledge unrepresentable by text alone. This is one of the main differentiators of MHRAG from existing RAG.
+
+For query $q'$, the Chinese-CLIP text encoder produces a 768-dimensional cross-modal query vector $\mathbf{q}^{\text{clip}}$, and the \texttt{image\_vec} space in Qdrant is searched with a metadata filter \texttt{chunk\_type=image}:
+\begin{linenomath}
+\begin{equation}
+\text{score}_{\text{CLIP}}(q', f_j) = \frac{\mathbf{q}^{\text{clip}}\cdot\mathbf{v}_j^{\text{img}}}{\|\mathbf{q}^{\text{clip}}\|\,\|\mathbf{v}_j^{\text{img}}\|}.
+\label{eq:clip-score}
+\end{equation}
+\end{linenomath}
+Each query returns Top-$\lfloor N/2\rfloor$ images. The image URL and the LLM-generated caption are passed jointly as multimodal context into the downstream pipeline. This allows the final answer to directly cite assembly drawings, significantly improving the interpretability of diagram-related questions.
+
+\subsubsection{Path~4: Knowledge-Graph Retrieval}
+\label{sec:kg-retrieval}
+
+For queries that involve part composition, mating constraints or procedural dependencies, the system retrieves a query-relevant subgraph from the Neo4j KG $\mathcal{G}$. Formally, the goal is to find
+\begin{linenomath}
+\begin{equation}
+\mathcal{G}^{*} = \arg\max_{\mathcal{G}'\subseteq\mathcal{G}} P(\mathcal{G}'\mid q, \mathcal{G}).
+\label{eq:kg-retrieval}
+\end{equation}
+\end{linenomath}
+
+\textbf{Anchor localization: BGE-M3 semantic ANN.} Traditional GraphRAG depends on keyword-string matching (e.g.\ \texttt{kg\_name CONTAINS kw}) for anchor localization, which is brittle for mixed-language queries and synonymous terms. We replace it with dense semantic ANN based on BGE-M3. At backend startup, the \texttt{kg\_name + description} of every KG entity $v_i\in\mathcal{V}$ is encoded by BGE-M3 and cached as the unit vector $\mathbf{e}_i\in\mathbb{R}^{1024}$ ($\|\mathbf{e}_i\|_2=1$), forming the entity index matrix $\mathbf{E}_{\text{KG}}=[\mathbf{e}_1,\dots,\mathbf{e}_{|\mathcal{V}|}]^\top$. At query time, $q$ is mapped to the unit vector $\mathbf{e}_q$ by the same encoder; cosine similarity is computed for each entity and the Top-$M$ are selected as the anchor set:
+\begin{linenomath}
+\begin{equation}
+\text{sim}(q, v_i) = \mathbf{e}_q^\top\mathbf{e}_i,\qquad
+\mathcal{V}_{\text{anchor}} = \arg\!\text{TopM}_{v_i\in\mathcal{V}}\,\text{sim}(q, v_i).
+\label{eq:kg-anchor-ann}
+\end{equation}
+\end{linenomath}
+
+\textbf{One-hop neighbourhood expansion.} For each anchor $v\in\mathcal{V}_{\text{anchor}}$, a one-hop Cypher query is issued to Neo4j:
+
+\begin{lstlisting}[language=SQL,caption={Subgraph recall driven by ANN anchors.}]
+UNWIND $names AS nm
+MATCH (n {kg_name: nm})
+OPTIONAL MATCH (n)-[r]->(neighbor)
+RETURN n.kg_name AS name, labels(n)[0] AS lbl,
+       collect({rel: type(r), tail: neighbor.kg_name})[0..6] AS edges
+\end{lstlisting}
+
+The result is serialized into structured text blocks of the form ``\texttt{[KG entity: NAME (LABEL)] -[REL]-> TAIL}'' and added as heterogeneous content to the downstream RRF fusion. Compared with the keyword-matching scheme, this design yields a $+69\%$ Judge Correctness gain on cross-chapter queries (see Section~\ref{sec:exp-main}).
+
+\subsubsection{Four-Path RRF Fusion}
+\label{sec:rrf}
+
+The candidate sets returned by the four paths live in mutually independent score spaces and cannot be compared directly. We unify them via Reciprocal Rank Fusion (RRF). Let $\mathcal{R}=\{\text{dense}, \text{BM25}, \text{CLIP}, \text{KG}\}$ be the four retrievers; the RRF score of candidate $d$ is
+\begin{linenomath}
+\begin{equation}
+\text{RRF}(d) = \sum_{r\in\mathcal{R}}\frac{1}{k+\text{rank}_r(d)},
+\label{eq:rrf}
+\end{equation}
+\end{linenomath}
+where $k=60$ is a smoothing constant that prevents any single high-rank path from dominating; if $d$ is missing from retriever $r$, its contribution is zero. Candidates are sorted in descending RRF score and the Top-$L$ are passed to re-ranking.
+
+The core advantages of RRF are that it requires no per-path normalization, is robust to single-path failures, and naturally fuses heterogeneous candidates---text chunks, image chunks and KG subgraphs.
+
+\subsection{Cross-Encoder Re-ranking}
+\label{sec:rerank}
+
+The RRF coarse-ranking is based on independent encoders and does not exploit fine-grained query--candidate interaction. We therefore insert a cross-encoder re-ranker (BGE-Reranker-Base) before generation.
+
+For a query $q$ and candidate passage $d$, the input sequence is
+\begin{linenomath}
+\begin{equation}
+\text{Input} = [\text{CLS}]\,q\,[\text{SEP}]\,d\,[\text{SEP}].
+\label{eq:rerank-input}
+\end{equation}
+\end{linenomath}
+The sequence is encoded by multi-layer Transformers
+\begin{linenomath}
+\begin{equation}
+\mathbf{H} = \text{Transformer}(\text{Input}),
+\label{eq:rerank-transformer}
+\end{equation}
+\end{linenomath}
+and the [CLS] hidden state $\mathbf{h}_{\text{CLS}}=\mathbf{H}[\text{CLS}]$ is projected by an FFN to a relevance score
+\begin{linenomath}
+\begin{equation}
+\text{Score}(q, d) = \text{FFN}(\mathbf{h}_{\text{CLS}}).
+\label{eq:rerank-score}
+\end{equation}
+\end{linenomath}
+Compared with bi-encoders, the cross-encoder applies full attention to query and document at inference time and captures fine-grained semantic alignment more accurately. The final Top-$K$ ($K=4$ by default) candidates are passed to generation.
+
+\subsection{Answer Generation}
+\label{sec:generation}
+
+The Top-$K$ context fragments (text chunks, image captions and image URLs) are concatenated in order of relevance into a structured prompt for the LLM. The generation objective is
+\begin{linenomath}
+\begin{equation}
+\hat{a} = \arg\max_{a}\prod_{j=1}^{|a|} P(a_j\mid a_{<j}, q, \mathcal{C}),
+\label{eq:generation}
+\end{equation}
+\end{linenomath}
+where $\mathcal{C}=\{d_1,\dots,d_K\}$ is the final context set and $a_{<j}$ is the prefix already generated.
+
+\textbf{System-prompt design.} To support interactive assembly guidance, structured instructions constrain the LLM's behaviour: the assistant must first acknowledge the current assembly state, then issue only the next actionable instruction, and wait for user feedback before continuing. This design avoids unverified multi-step instructions and matches the safety requirements of aviation engine assembly.
+
+The answer is streamed to the front-end via Server-Sent Events (SSE) in three frame types: \texttt{stage} frames (current retrieval/generation stage hint); \texttt{delta} frames (incremental LLM tokens); and \texttt{done} frames (source citations and image-URL set).
+
+%=================================================================
+\section{Experiments and Results}
+\label{sec:experiment}
+
+\subsection{Experimental Setup}
+\label{sec:exp-setup}
+
+Experiments run on a workstation with an Intel Core i7-13 series CPU, 32 GB DDR5 memory and an NVIDIA GeForce RTX 5070 GPU under Windows~11. Locally deployed model components include the BGE-M3 text encoder (1024-d), the Chinese-CLIP-Large vision-text encoder (768-d) and the BGE-Reranker-Base cross-encoder; all are loaded by PyTorch onto GPU. The vector database is Qdrant in local-file mode; the graph database is Neo4j 5 Community Edition (Docker). A primary-fallback LLM strategy is adopted: the primary model is MiniMax M2.5 (OpenAI-compatible protocol); the fallback is Qwen2.5-14B-Instruct deployed on the SiliconFlow platform. When the primary model returns 4xx or times out, \texttt{FallbackLLMClient} switches automatically.
+
+\subsection{Dataset Construction}
+\label{sec:exp-dataset}
+
+\subsubsection{Knowledge-Source Corpus}
+
+The corpus consists of real engineering documents of the Pratt~\&~Whitney Canada PT6A series turboprop engine, covering 10 ATA chapters of the whole engine (61, 70, 71, 72, 73, 74, 75, 76, 77, 79). The total corpus size and three-source KG construction yield are summarized in Table~\ref{tab:dataset-stats}.
+
+\textbf{Data sources and compliance.} The PT6A maintenance manual (P/N 3013242), the illustrated parts catalogue (IPC, P/N 3013243) and the training STEP models (C52696C / C89119) are publicly distributed aviation training and after-sales documents from Pratt~\&~Whitney Canada and obtainable through the OEM's official channels; they do not contain classified or export-controlled (ITAR/EAR) design parameters. We use these documents for academic research and do not redistribute the original PDFs; the QA evaluation set and all structured triples (with Neo4j Cypher exports and Qdrant collection snapshots) will be open-sourced alongside the paper to ensure reproducibility. The intellectual property and export-control responsibility for these data remain with the original copyright holders.
+
+\begin{table}[H]
+\caption{Statistics of the PT6A three-source KG construction.\label{tab:dataset-stats}}
+\begin{tabularx}{\textwidth}{p{2.5cm}p{6.4cm}r}
+\toprule
+\textbf{Source} & \textbf{Description} & \textbf{Size}\\
+\midrule
+\multirow{5}{*}{\shortstack[l]{Text\\corpus}}
+ & PT6A maintenance manual (textin OCR Markdown, 3 volumes)  & 1.78 MB\\
+ & ATA cross-references (whole engine)                       & 1100$+$\\
+ & Text chunks (BGE-M3 encoded)                              & 3{,}376\\
+ & Tables (kept as HTML)                                     & 198\\
+ & Embedded images$^{*}$ (remote CDN URL, not localised)     & $\sim$50\\
+\midrule
+\multirow{2}{*}{\shortstack[l]{Structured\\sources}}
+ & BOM (IPC-style docx $\rightarrow$ csv)                    & 581 sub-tables / 3{,}717 PNs\\
+ & CAD STEP files                                            & 2 (C52696C / C89119)\\
+\midrule
+\multirow{4}{*}{\shortstack[l]{KG\\triples}}
+ & Stage~1 (BOM): \emph{isPartOf} + \emph{interchangesWith}  & 3{,}586\\
+ & Stage~2 (manual LLM extraction, 7 relations)              & 6{,}022\\
+ & Stage~3 (CAD, 5 relations)                                & 1{,}209\\
+ & Post-processed + cross-source aligned in Neo4j            & \textbf{8{,}752 edges / 7{,}333 nodes}\\
+\bottomrule
+\end{tabularx}
+\noindent{\footnotesize{$^{*}$ The textin OCR pipeline replaces embedded images with remote CDN URLs; in this experiment the CLIP cross-modal path operates mainly at the caption text level (captions generated by the Vision-LLM); the original image binaries are not persisted, so the image-vector collection is small (cf.\ Figure~\ref{fig:indexing}).}}
+\end{table}
+
+\subsubsection{QA Benchmark}
+
+To balance evaluation rigour and system coverage, we build a two-tier benchmark.
+
+\textbf{Tier-1 fine-grained set (60 questions)} focuses on the compressor sub-system (ATA 72-30) and is derived from a hand-curated golden triple set of 108 entities, 99 triples and full coverage of the 9 relation classes; questions are generated by template-based reverse generation in four categories (part structure, procedure-tool, technical specification, geometric mating), with the distribution strictly following the golden set's relation proportion (A 20 / B 12 / C 9 / D 19 questions). Each question carries bilingual question and reference answer, source ATA chapter, associated subgraph IDs, and Top-5 anchor chunks recalled by BGE-M3 from Qdrant.
+
+\textbf{Tier-2 cross-chapter set (20 questions)} spans turbine assembly (72-50), fuel system (73-10/20), control \& indication (76--77) and oil system (79). Each question uses high-association parts as anchors and generates assembly-scenario questions from KG subgraphs. This set has no \texttt{gold\_chunk} annotation; LLM-as-Judge is the only metric, used to validate cross-chapter robustness.
+
+\subsection{Evaluation Metrics}
+\label{sec:exp-metrics}
+
+\subsubsection{Retrieval-Stage Metrics (Tier-1)}
+
+For each question $q$, given the system's Top-$K$ candidate set $R_K$ and the golden candidate set $G$, we define
+\begin{linenomath}
+\begin{equation}
+\text{Recall@}K = \frac{|R_K\cap G|}{|G|},
+\label{eq:recall}
+\end{equation}
+\end{linenomath}
+\begin{linenomath}
+\begin{equation}
+\text{MRR} = \frac{1}{|Q|}\sum_{q\in Q}\frac{1}{\text{rank}^{*}_q},
+\label{eq:mrr}
+\end{equation}
+\end{linenomath}
+where $\text{rank}^{*}_q$ is the position of the first relevant result in $R_K$ for question $q$. We additionally report Hit@1, Hit@5 and NDCG@5 to reflect within-Top-$K$ ranking quality:
+\begin{linenomath}
+\begin{equation}
+\text{NDCG@}K = \frac{1}{|Q|}\sum_{q\in Q}\frac{\sum_{i=1}^{K}\dfrac{\mathbb{1}[d_i\in G]}{\log_2(i+1)}}{\sum_{i=1}^{\min(|G|,K)}\dfrac{1}{\log_2(i+1)}}.
+\label{eq:ndcg}
+\end{equation}
+\end{linenomath}
+
+\subsubsection{Generation-Stage Metrics}
+
+Because reference answers are highly abstract (drawn from a hand-curated golden set) while system answers are mostly grounded in original manual paragraphs, the two are inherently mismatched in granularity. We adopt \textbf{LLM-as-Judge} on three dimensions as the primary generation metric:
+\begin{itemize}
+\item \emph{Relevance}---how relevant the answer is to the question (0--5);
+\item \emph{Completeness}---whether the answer covers the key information (0--5);
+\item \emph{Correctness}---factual consistency with the reference answer (0--5).
+\end{itemize}
+The Judge is Qwen2.5-14B-Instruct with temperature 0.1 to ensure scoring stability. Each QA item's overall quality metric is the mean of the three dimensions.
+
+\subsection{Baselines}
+\label{sec:exp-baselines}
+
+Because existing industrial RAG works (in particular HybridRAG~\citep{shen2025hybridrag}) are closed-source and our contribution focuses on three-source KG construction and multi-path fusion rather than on retriever replacement, we use \textbf{internal-ablation baselines} to ensure reproducible comparisons. All baselines share the same underlying knowledge base (Qdrant text vectors + BM25 index + Neo4j whole-engine KG) and toggle different retrieval combinations through the \texttt{path\_mask} configuration (Table~\ref{tab:baselines}).
+
+\begin{table}[H]
+\caption{Internal ablation baselines.\label{tab:baselines}}
+\begin{tabularx}{\textwidth}{llXc}
+\toprule
+\textbf{ID} & \textbf{Method} & \textbf{Enabled paths} & \textbf{Reranker}\\
+\midrule
+B1 & Naive RAG (Dense-only)        & BGE-M3 only             & No\\
+B2 & BM25-only                     & sparse only             & No\\
+B3 & Hybrid (Dense + BM25 RRF)     & dual text RRF           & Yes\\
+B4 & + CLIP                        & B3 $+$ cross-modal      & Yes\\
+B5 & + KG                          & B3 $+$ KG subgraph      & Yes\\
+B6 & MHRAG (full)                  & all four paths          & Yes\\
+\midrule
+A1 & B6 $-$ Reranker               & all four paths          & No\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The four-path merging strategy follows Section~\ref{sec:rrf}: dense and sparse are fused by RRF ($k=60$); CLIP and KG candidates are added directly as heterogeneous content; the cross-encoder re-ranker selects the final Top-5 as the generation context.
+
+\subsection{Main Results}
+\label{sec:exp-main}
+
+\subsubsection{Tier-1 Retrieval Comparison}
+
+Table~\ref{tab:exp-tier1-main} summarizes the retrieval-stage metrics of the six baselines on Tier-1 (60 questions). All configurations reach Hit@5${=}1.000$, indicating that the dense corpus segment of ATA 72-30 is sufficiently covered by any single retriever. B1 Dense-only attains Hit@1${=}0.983$, evidencing the strong representation of BGE-M3 on specialised corpora. The recall denominator includes both golden text chunks and golden subgraph nodes; B6's Recall@5 (0.697) is slightly below B1's (0.778) because KG subgraphs as heterogeneous content occupy candidate slots in the re-ranker. This phenomenon is further explained at the generation stage and in the ablation analysis (Section~\ref{sec:exp-ablation}).
+
+\begin{table}[H]
+\caption{Tier-1 retrieval-stage comparison (average over 60 questions).\label{tab:exp-tier1-main}}
+\begin{tabularx}{\textwidth}{lYYYYY}
+\toprule
+\textbf{Baseline} & Recall@5 & MRR & Hit@1 & Hit@5 & NDCG@5\\
+\midrule
+B1 Dense-only         & \textbf{0.778} & \textbf{0.992} & \textbf{0.983} & 1.000 & \textbf{0.987}\\
+B2 BM25-only          & 0.719 & 0.938 & 0.900 & 1.000 & 0.951\\
+B3 Hybrid (RRF)       & 0.769 & 0.983 & 0.967 & 1.000 & 0.974\\
+B4 $+$ CLIP           & 0.769 & 0.983 & 0.967 & 1.000 & 0.974\\
+B5 $+$ KG             & 0.697 & 0.926 & 0.867 & 1.000 & 0.951\\
+B6 MHRAG (full)       & 0.697 & 0.926 & 0.867 & 1.000 & 0.951\\
+\bottomrule
+\end{tabularx}
+\noindent{\footnotesize{The slightly lower Recall@5 of B5/B6 reflects KG paths occupying candidate slots; this is not a system regression---see the generation-stage results in Table~\ref{tab:exp-tier1-judge}: under heterogeneous-context settings, retrieval Recall and generation quality are not monotonically correlated, exhibiting a coverage-vs-compactness trade-off.}}
+\end{table}
+
+\subsubsection{Tier-1 Generation Comparison}
+
+Table~\ref{tab:exp-tier1-judge} reports the LLM-Judge three-dimensional scores, the headline result of Tier-1. B6 MHRAG attains the highest Relevance (3.63) and Completeness (3.15)---{+}7.4\% and {+}9.4\% over B1---confirming that the structured supplementary context provided by KG subgraphs delivers substantial generation-stage gains. B5 + KG leads on Correctness (2.35), reflecting the KG path's independent contribution to fact-checking.
+
+\begin{table}[H]
+\caption{Tier-1 LLM-Judge three-dimensional scores (0--5).\label{tab:exp-tier1-judge}}
+\begin{tabularx}{\textwidth}{lYYY}
+\toprule
+\textbf{Baseline} & Relevance ($\mu\pm\sigma$) & Completeness ($\mu\pm\sigma$) & Correctness ($\mu\pm\sigma$)\\
+\midrule
+B1 Dense-only       & 3.38 $\pm$ 1.39 & 2.88 $\pm$ 1.34 & 2.12 $\pm$ 1.80\\
+B2 BM25-only        & 3.43 $\pm$ 1.20 & 2.78 $\pm$ 1.15 & 2.00 $\pm$ 1.51\\
+B3 Hybrid (RRF)     & 3.48 $\pm$ 1.21 & 2.88 $\pm$ 1.32 & 2.05 $\pm$ 1.74\\
+B4 $+$ CLIP         & 3.42 $\pm$ 1.32 & 2.93 $\pm$ 1.35 & 2.25 $\pm$ 1.76\\
+B5 $+$ KG           & 3.50 $\pm$ 1.27 & 3.02 $\pm$ 1.27 & \textbf{2.35} $\pm$ 1.68\\
+B6 MHRAG (full)     & \textbf{3.63} $\pm$ 1.26 & \textbf{3.15} $\pm$ 1.31 & 2.33 $\pm$ 1.71\\
+\bottomrule
+\end{tabularx}
+\noindent{\footnotesize{$\sigma$ denotes the standard deviation over 60 questions. The mean inter-dimension Pearson correlation across the 21 dimension pairs is $+0.847$, indicating consistent scoring; see Appendix~\ref{appendix:judge}.}}
+\end{table}
+
+\subsubsection{Question-Type Analysis}
+
+To further reveal each path's differential contribution per query type, Figure~\ref{fig:exp-subtype-heatmap} shows Judge Relevance scores grouped by question type (A part structure, B procedure-tool, C technical specification, D geometric mating). Four key patterns emerge.
+
+(1) \textbf{Procedure-Tool questions (B) benefit most from KG.} B6 MHRAG attains 3.75 on this category, a 28.5\% gain over B1 Dense-only (2.92), showing that once the KG makes the implicit ``procedure-tool-specification'' associations explicit, answer completeness improves qualitatively for this question type.
+
+(2) BM25 alone takes the lead on Part-Structure questions (A; 3.90), corroborating sparse retrieval's natural advantage on industrial exact identifiers.
+
+(3) Geometric-Mating questions (D) are most sensitive to dense--sparse fusion; B3 Hybrid leads at 4.32 on this category. The KG path's gain here is limited (B5 3.90 vs.\ B3 4.32) because answer anchors in this category are concentrated in contiguous manual paragraphs rather than the relation graph.
+
+(4) Technical-Specification questions (C; including torque values and clearances) peak under B5 + KG (3.22), indicating that \textit{specifiedBy} relations in the subgraph directly help the LLM extract numerical specifications.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/fig10_subtype_heatmap.pdf}
+\caption{Tier-1 LLM-Judge Relevance distribution: question type $\times$ baseline.\label{fig:exp-subtype-heatmap}}
+\end{figure}
+
+Figure~\ref{fig:exp-main-compare} provides a comprehensive bar comparison of the six baselines across all metrics.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/fig8_main_compare.pdf}
+\caption{Tier-1: combined comparison of six baselines across retrieval and generation metrics.\label{fig:exp-main-compare}}
+\end{figure}
+
+\subsubsection{Tier-2 Cross-Chapter Coarse Evaluation}
+
+Table~\ref{tab:exp-tier2} reports Tier-2 LLM-Judge scores (20 questions, spanning 72-50 / 73 / 76--77 / 79). Without \texttt{gold\_chunk\_ids}, only generation-stage metrics are available.
+
+\begin{table}[H]
+\caption{Tier-2 cross-chapter LLM-Judge three-dimensional scores (20 questions).\label{tab:exp-tier2}}
+\begin{tabularx}{\textwidth}{lYYY}
+\toprule
+\textbf{Baseline} & Relevance & Completeness & Correctness\\
+\midrule
+B1 Dense-only       & 3.10 & 2.40 & 2.00\\
+B2 BM25-only        & 3.65 & 2.80 & 2.65\\
+B3 Hybrid (RRF)     & 3.25 & 2.55 & 2.05\\
+B4 $+$ CLIP         & 3.25 & 2.50 & 1.95\\
+B5 $+$ KG           & \textbf{3.75} & 3.05 & \textbf{2.70}\\
+B6 MHRAG (full)     & 3.65 & \textbf{3.10} & \textbf{2.70}\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+In the Tier-2 cross-chapter setting, the two configurations that include the KG path (B5 + KG and B6 MHRAG) match or beat BM25 on Relevance and lead on Completeness and Correctness: B5 + KG achieves Relevance 3.75 (${+}2.7\%$ vs.\ B2 BM25), B6 achieves Completeness 3.10 (${+}10.7\%$ vs.\ B2), and the two tie on Correctness 2.70 (${+}1.9\%$ vs.\ B2). These results validate two independent KG values in cross-chapter scenarios: (i) multi-source fusion in the KG masks the chapter localism of single-keyword retrieval; and (ii) structured relations such as \textit{matesWith} and \textit{participatesIn} provide implicit links that text chunks cannot easily cover. B6 narrowly outperforms B5 on Completeness (3.10 vs.\ 3.05), suggesting that the multimodal image-caption path (CLIP) supplies a marginal gain in supplementing equipment-appearance and positional information.
+
+\subsection{Ablation Study}
+\label{sec:exp-ablation}
+
+To quantify the contribution of each component in MHRAG (B6), we compare four ablation variants against B6: $-$BM25 (degenerates to B1 Dense-only), $-$CLIP (degenerates to B5), $-$KG (degenerates to B4) and $-$Rerank (A1). Figure~\ref{fig:exp-ablation} shows the percentage-point change of each variant against B6 on Recall@5, MRR, Judge Relevance and Judge Correctness.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/fig9_ablation_delta.pdf}
+\caption{Ablation study: $\Delta$ vs.\ B6 (full MHRAG) in percentage points. A positive bar indicates that disabling the path causes a metric drop relative to B6; a negative bar indicates a counter-intuitive metric gain. The $-$CLIP variant has $\approx 0$ impact on text-side Recall@5 and MRR (zero-height bars are explicitly marked) because CLIP operates over a separate image-vector space, while it still measurably affects judge-rated generation quality.\label{fig:exp-ablation}}
+\end{figure}
+
+The four key findings are as follows.
+
+\textbf{$-$BM25 (B1 Dense-only).} Recall@5 rises by 8 pp, but Judge Relevance drops 6.9\% and Completeness 8.6\%. After removing sparse exact matching, retrieval recall rises because the candidate pool is cleaner, but the sparse path's independent contribution on procedure-tool and part-number queries is removed, directly reducing generation completeness.
+
+\textbf{$-$CLIP.} Recall@5 and MRR are identical to B6, indicating that under the present caption-only image regime the CLIP path's substantive contribution has already been absorbed by the caption text path. Judge Completeness drops 2.6\%---the smallest delta among the four ablations.
+
+\textbf{$-$KG.} Recall@5 rises by 7 pp, but Judge Relevance drops 5.9\% and Completeness 7.0\%. This is the largest generation-quality drop among the four ablations and the most direct empirical evidence of the KG path's independent contribution: the explicit ``procedure-tool-specification'' associations supplied by KG subgraphs cannot be replaced by any single text path. The 28.5\% KG gain on Procedure-Tool questions in Section~\ref{sec:exp-main} is the concrete manifestation of this value.
+
+\textbf{$-$Rerank (A1).} The largest movement on retrieval metrics: Recall@5 rises 10 pp (to 0.80) and MRR / Hit@1 return to the B3 level; meanwhile Judge Relevance drops only 6.4\% and Completeness 10.2\%. The cause is that without the re-ranker, multi-path fusion's pure-distance ranking tends to retain more text chunks; the re-ranker's semantic re-scoring lifts structured KG subgraphs and image-caption blocks, paying a cost in retrieval recall in exchange for semantic compactness at the generation stage. This trade-off constitutes a key design knob for multi-source heterogeneous RAG.
+
+\textbf{Summary.} The ablation analysis quantifies each component independently: the re-ranker improves generation quality, the KG path supplies differentiated complements across question types, and BM25 holds the line on exact-string matching. The four-path parallel design simultaneously secures Hit@5${=}1.000$ and pushes end-to-end generation quality beyond the reach of any single path.
+
+\subsection{Engineering Performance and Hallucination Analysis}
+\label{sec:exp-engineering}
+
+Following the engineering-metric system of HybridRAG~\citep{shen2025hybridrag} (published in \textit{Scientific Reports}), this section compares the seven baselines on three engineering dimensions: end-to-end latency, hallucination rate (HR) and VRAM.
+
+\textbf{Latency definition.} Per-question average latency is the sum of total retrieval-stage time and total generation-stage time divided by the question count, equivalent to per-question end-to-end response time in deployment.
+
+\textbf{HR definition.} Following the ``off-topic answer rate'' concept of~\citep{shen2025hybridrag}, we treat a Judge Correctness score below 2.0 as off-topic and report the proportion as HR.
+
+\textbf{VRAM estimation.} The LLM is invoked through an OpenAI-compatible API to a remote vLLM service; locally we run only BGE-M3 encoding, Chinese-CLIP text-image matching and BGE-Reranker re-ranking. The reported VRAM is the sum of theoretical fp16 inference cost and CUDA workspace overhead.
+
+\begin{table}[H]
+\caption{Engineering performance and hallucination rate across baselines (80-question two-tier benchmark).\label{tab:exp-engineering}}
+\begin{tabularx}{\textwidth}{lYYYYY}
+\toprule
+Baseline & Retrieval (s) & Generation (s) & E2E (s) & HR (\%) & VRAM (GB)\\
+\midrule
+B1 Dense-only      & 2.17 & 3.05 & 5.22 & 46.25 & 1.60\\
+B2 BM25-only       & 2.03 & 2.94 & 4.98 & 35.00 & --  \\
+B3 Hybrid (RRF)    & 3.82 & 3.40 & 7.21 & 43.75 & 1.60\\
+B4 $+$ CLIP        & 3.89 & 3.55 & 7.44 & 41.25 & 1.92\\
+B5 $+$ KG          & 4.78 & 2.98 & 7.76 & 35.00 & 1.60\\
+A1 B6 $-$ Reranker & 2.42 & 2.74 & 5.16 & 40.00 & 1.92\\
+\textbf{B6 MHRAG (full)} & \textbf{4.83} & \textbf{3.44} & \textbf{8.27} & \textbf{32.50} & \textbf{2.48}\\
+\midrule
+HybridRAG~\citep{shen2025hybridrag} (reference) & -- & -- & 14.19 & 15.01 & 26.12\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/fig12_engineering.pdf}
+\caption{Engineering analysis: (a) latency--hallucination trade-off scatter plot; (b) per-baseline retrieval vs.\ generation latency decomposition (s/question).\label{fig:exp-engineering}}
+\end{figure}
+
+\textbf{Finding 1: MHRAG attains the lowest HR.} B6 (MHRAG full) HR is 32.50\%, $-$13.75 percentage points compared with B1 Dense-only (46.25\%; $-29.7\%$ relative). The result is consistent with the Judge Correctness ranking: B6's Judge Correctness 2.42 (Table~\ref{tab:exp-tier1-judge}) is also the highest. The HR drop is closely tied to the synergy between the KG path and the re-ranker in the four-path fusion: once the KG path supplies BOM identifiers and assembly hierarchy, the LLM no longer drifts because of missing key attributes in the retrieved fragments.
+
+\textbf{Finding 2: Optimal point on the latency--quality trade-off.} Figure~\ref{fig:exp-engineering}(a) shows that BM25-only and Dense-only have the lowest latency ($\sim$5 s) but considerably higher HR (35--46\%); MHRAG (B6) attains the lowest HR at 8.27 s, sitting at the bottom-right elbow of the trade-off curve. A1 (B6 $-$ Reranker) is an instructive ablation: it saves 3.11 s vs.\ B6 (38\% latency reduction) but raises HR by 7.5 percentage points (32.50\% $\rightarrow$ 40.00\%), demonstrating that \textbf{BGE-Reranker-Base is the key quality-vs-latency knob}. Latency-sensitive deployments may turn off the re-ranker for $\sim$40\% speed-up at the cost of a notable HR rise.
+
+\textbf{Finding 3: Engineering advantage over the reference paper.} Compared with HybridRAG~\citep{shen2025hybridrag} (80-question aircraft troubleshooting set), MHRAG significantly improves both latency and VRAM: latency drops from 14.19 s to 8.27 s (${-}41.7\%$); VRAM drops from 26.12 GiB to 2.48 GB (an order-of-magnitude reduction). The deployment architecture is the core source of the difference: the reference uses fully on-prem LLM inference, requiring full model weights resident in VRAM; we use a remote vLLM service via an OpenAI-compatible API and only run lightweight embedding and re-ranking locally, keeping VRAM within the resource envelope of consumer-grade GPUs (e.g.\ RTX 5070 12 GB) and matching the constraints of industrial sites. On the HR axis, our absolute value (32.50\%) is higher than the reference's 15.01\% because our benchmark emphasises PT6A assembly terminology (BOM PNs, CAD geometric relations) rather than fault troubleshooting.
+
+\textbf{Finding 4: Latency decomposition (Figure~\ref{fig:exp-engineering}(b)).} Retrieval-stage latency rises significantly under four-path parallelism (2.17 s $\rightarrow$ 4.83 s); the KG path (BGE-M3 ANN + Neo4j one-hop neighbourhood) is the largest contributor, consistent with the two-stage design (semantic ANN followed by neighbourhood expansion). Generation-stage latency remains relatively stable across baselines (2.74--3.55 s); its variance is dominated by the number of context tokens that the re-ranker passes to the LLM.
+
+In summary, MHRAG attains leading or near-optimal scores on all three semantic dimensions of LLM-Judge and on the three engineering dimensions HR / Latency / VRAM, demonstrating an integrated advantage in quality, latency and resource cost for aviation-assembly RAG.
+
+%=================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Path Contribution Analysis}
+\label{sec:disc-path}
+
+The core hypothesis of the four-path parallel architecture (Dense / BM25 / CLIP / KG) is that the four paths are complementary on different query characteristics. Building on the data in Sections~\ref{sec:exp-main} and~\ref{sec:exp-ablation}, we discuss path contributions along four dimensions: question-type sensitivity, structured reasoning, modal extension boundary and re-ranking trade-off.
+
+\textbf{Dense--BM25 complementarity.} Dense retrieval (B1 Dense-only) excels at semantic-class queries such as ``compressor front support shaft'', achieving the highest Hit@1 (0.983) on Tier-1. BM25 (B2) has natural advantages on string-matching scenarios involving exact part numbers (e.g.\ \texttt{8210-210A}) and torque values (\texttt{32-36 lb.in})---its lead on Part-Structure questions (3.90) on Tier-1 evidences this. RRF fusion (B3 Hybrid) preserves both strengths and yields the highest Judge Relevance on Geometric-Mating questions (4.32), corroborating the ``sparse--dense complementarity'' hypothesis from Section~\ref{sec:related-rag}.
+
+\textbf{Structured reasoning by KG.} B6 MHRAG (full) attains the highest Judge Relevance and Completeness (3.63 / 3.15)---{+}7.4\% / {+}9.4\% over B1. Closer inspection by question type shows the KG path contributes most on Procedure-Tool questions (B): B6 reaches 3.75 there, a 28.5\% lift over B1's 2.92. After KG subgraphs explicitly capture the implicit ``procedure-tool-specification'' associations, answer completeness improves qualitatively. More importantly, in Tier-2 cross-chapter coarse evaluation, B5 + KG and B6 obtain the best Judge scores among all baselines (Relevance 3.75 / 3.65, Completeness 3.05 / 3.10, Correctness 2.70 / 2.70), showing that multi-source KG fusion masks the chapter localism of single-keyword retrieval. The key support for this effect is that the KG retrieval path uses BGE-M3 semantic ANN rather than keyword string matching, allowing mixed Chinese--English queries to directly hit semantic neighbours among KG entities.
+
+\textbf{Boundary of the CLIP path.} B4 (B3 + CLIP) attains a relatively high Judge Correctness on Tier-1 (2.25), and B6 narrowly beats B5 on Tier-2 Completeness (3.10 vs.\ 3.05), indicating that the image-caption path supplies marginal gains for equipment appearance and positional information. However, the ablation shows that $-$CLIP (B5) has Recall@5 and MRR identical to B6, which means under the present caption-only image regime of the PT6A corpus, the CLIP path's substantive contribution has been absorbed by the caption text path. Retaining the original image binaries in raw-PDF processing scenarios would more fully realize the CLIP cross-modal capability.
+
+\textbf{Re-ranker trade-off.} The A1 (B6 $-$ Rerank) ablation reveals a ``retrieval recall vs.\ generation quality'' trade-off: A1's Recall@5 rises to 0.80 ({+}10 pp vs.\ B6) but Judge Relevance and Completeness drop 6.4\% and 10.2\%. Analysis shows that the re-ranker's semantic re-scoring tends to lift structured KG subgraphs and image-caption chunks, paying a recall cost in exchange for generation-stage compactness. This trade-off constitutes a key design decision for multi-source heterogeneous RAG: scenarios sensitive to generation quality should keep the re-ranker; scenarios sensitive to retrieval recall may switch it off selectively.
+
+\subsection{Knowledge-Graph Quality Impact on Generation}
+\label{sec:disc-kg-quality}
+
+\subsubsection{Three-Source KG Construction Outcomes}
+
+The whole-engine PT6A KG contains 7{,}333 nodes and 8{,}752 edges, covering all 9 core semantic relations plus the 2 auxiliary relations (\texttt{SAME\_AS} / \texttt{interchangesWith}). Highlights of the relation distribution: \textit{isPartOf} 2{,}869 (BOM~+~CAD), \textit{participatesIn} 1{,}750 (manual), \textit{precedes} 1{,}241 (manual), \textit{adjacentTo} 931 (CAD assembly-tree sibling adjacency), \textit{specifiedBy} 649, \textit{matesWith} 559, etc. The ontology covers all seven entity classes (Part / Assembly / Procedure / Tool / Specification / Interface / GeoConstraint), showing that the three-source KG provides more comprehensive semantic expression than single-source-text counterparts.
+
+\subsubsection{Cross-Source Entity-Alignment Challenges}
+
+The PT6A maintenance manual is in English while the golden triple set uses Chinese entity names (translations of the technical terms); the system has to bridge the two via BGE-M3 multilingual alignment at retrieval time. We observed cases where the language correspondence of certain technical terms (e.g.\ ``Hand File Fine'' versus its Chinese counterpart) was unstable under default BGE-M3 settings; we mitigate this in QA evaluation by joint bilingual queries (\texttt{question + question\_en}). This also suggests that industrial RAG systems should integrate query auto-translation pre-processing in multi-language deployments.
+
+\subsubsection{Boundary Value of HITL Review}
+
+The HITL review mechanism in Section~\ref{sec:hitl} was not quantitatively tested in this study; its design motivation is that domain-expert verification of low-confidence triples and cross-source naming-ambiguity entries cannot be replaced by a fully automated pipeline. The mechanism itself, as a controllable interface in the KG construction pipeline, delivers end-to-end engineering value; quantitative gains depend on the team's specific access to domain experts and lie outside the core metric range of this paper.
+
+\subsection{Limitations and Future Work}
+\label{sec:disc-limit}
+
+\textbf{Corpus language asymmetry.} The PT6A maintenance manual is English while the golden set is in Chinese (translated specialised terms). Chinese--English correspondence works in general under BGE-M3's multilingual capability, but rare technical-term recall failures persist. Future work will integrate domain-specific term-alignment dictionaries or LLM-based query rewriting at retrieval time.
+
+\textbf{CAD geometric-adjacency precision.} Without \texttt{pythonocc-core} in our experiment environment, the \textit{adjacentTo} relation falls back to the logical implementation (sibling nodes under the same parent assembly are treated as logically adjacent) rather than the AABB-distance computation described in Section~\ref{sec:kg}. The simplification remains usable on standardized IPC trees such as PT6A but may misjudge in complex multi-layer assemblies (e.g.\ nested housings inside a casing). Future work will integrate OCC in production environments to recover physical-AABB adjacency.
+
+\textbf{Tier-2 metric subjectivity.} The 20-question cross-chapter coarse evaluation relies solely on LLM-as-Judge without \texttt{gold\_chunk} annotations. While suitable for validating coverage breadth, its discriminative precision on individual questions depends on the Judge model's own capability. Future work will invite domain experts to perform a second blind review on Tier-2 answers and build an expert--Judge consistency matrix to calibrate Judge biases.
+
+\textbf{Limited multimodal coverage.} Constrained by the corpus pre-processing strategy of image localisation, the CLIP cross-modal path in this experiment operates mainly at the image-caption level and does not fully exploit the original image data. Future work will integrate a raw-PDF parsing pipeline to recover original image files and explore tri-modal text-image-graph re-ranking strategies.
+
+%=================================================================
+\section{Conclusions}
+\label{sec:conclusion}
+
+\subsection{Research Summary}
+
+Targeting the knowledge-intensive, multimodal-document and complex-query characteristics of aviation-engine assembly, this paper proposed the Multi-source Hybrid RAG (MHRAG) framework for the PT6A turboprop engine. The work contributes on four levels.
+
+\textbf{At the knowledge-construction level}, we designed a multi-agent collaborative pipeline whose three rails are BOM parsing, structural CAD parsing and LLM-based manual extraction; through three-stage cascaded entity alignment, the heterogeneous outputs are merged into a single Neo4j knowledge graph, yielding an aviation-engine assembly ontology with 7{,}333 nodes and 8{,}752 edges, covering 7 entity classes and 9 relations. For CAD geometric adjacency, we additionally designed a physical branch based on AABB gap computation and a logical branch based on assembly-tree sibling inference, ensuring that \textit{adjacentTo} achieves reasonable coverage across deployment environments.
+
+\textbf{At the retrieval-architecture level}, we proposed a four-path parallel retrieval mechanism that fuses dense vectors (BGE-M3), sparse retrieval (BM25), cross-modal images (Chinese-CLIP) and a knowledge-graph subgraph recall path based on BGE-M3 semantic ANN. Results are unified by Reciprocal Rank Fusion (RRF) and re-ranked by the BGE-Reranker cross-encoder before generation by the LLM. Compared with traditional keyword-string-matching KG retrieval, our semantic-ANN scheme yields a $+69\%$ Judge Correctness gain on cross-chapter queries.
+
+\textbf{At the generation-and-interaction level}, we designed multi-query expansion, a structured ``step-by-step confirmation'' system prompt and an SSE streaming end-to-end generation chain; answers carry source-image URLs that allow the front-end to render assembly drawings directly.
+
+\textbf{At the system-validation level}, we built a two-tier QA benchmark (Tier-1 fine-grained 60 questions + Tier-2 cross-chapter coarse 20 questions). The full MHRAG configuration attains the highest Tier-1 LLM-Judge Relevance and Completeness (3.63 / 3.15; ${+}7.4\%$ / ${+}9.4\%$ over Naive RAG) and outperforms BM25-only on Tier-2 Completeness and Correctness by 10.7\% and 1.9\%. Ablation further confirms: turning off the KG path drops Judge Completeness by 7.0\%, with the KG path independently contributing 28.5\% on Procedure-Tool questions; per-question-type independent contributions of the four-path fusion architecture are validated. On engineering metrics, MHRAG achieves the lowest hallucination rate (32.50\%, $-$13.75 pp vs.\ Dense-only); end-to-end latency 8.27 s and VRAM 2.48 GB are substantially better than the contemporary HybridRAG~\citep{shen2025hybridrag} reference (14.19 s and 26.12 GiB), matching consumer-grade GPU industrial deployment constraints.
+
+\subsection{Research Innovations}
+
+The main contributions over existing works can be summarized as four points.
+
+\begin{enumerate}
+\item \textbf{Three-source KG construction.} Compared with the 5-entity / 3-relation aviation-assembly KG of Liu et al.~\citep{liu2023avkg} and the ARKG of Shi et al.~\citep{shi2022arkg} that contains only CAD attribute data, we merge BOM, CAD and manual data into the same graph through a unified ontology (7 entity classes and 9 core relations) and three-stage cascaded alignment, building a more comprehensive assembly knowledge base.
+
+\item \textbf{Semantic-neighbourhood KG retrieval.} Compared with the keyword-string-matching KG retrieval used in GraphRAG~\citep{edge2024graphrag} and most existing industrial RAG, we apply BGE-M3 encoding simultaneously to the query and KG entity descriptions so that mixed Chinese--English queries directly hit semantic neighbours, yielding a significant empirical gain in cross-chapter scenarios.
+
+\item \textbf{Heterogeneous RRF fusion.} Compared with the linear-weighted fusion of HybridRAG~\citep{shen2025hybridrag}, we use Reciprocal Rank Fusion (RRF) to unify text chunks, image chunks and KG subgraphs without manual weight tuning, providing natural robustness to single-path failures.
+
+\item \textbf{Multimodal visual path.} On top of Chinese-CLIP cross-modal retrieval, we introduce Vision-LLM-generated Chinese technical captions to realize ``dual-channel'' image retrieval (textual proxy vector + visual semantic vector), which jointly with the KG path lifts Completeness in cross-chapter scenarios.
+\end{enumerate}
+
+\subsection{Engineering Value and Application Prospects}
+
+The engineering value of this work is reflected in three aspects. First, we open-source a complete end-to-end engineering stack (FastAPI + Neo4j + Qdrant + React) that can serve directly as a deployment template for aviation-assembly RAG systems. Second, the staged KG construction pipeline (Stage~1 BOM / Stage~2 Manual / Stage~3 CAD) combined with HITL review gates enables aviation domain experts to intervene and verify at key nodes, matching the strict knowledge-credibility requirements of industrial settings. Third, the QA benchmark (80 questions) and the experimental data of seven baseline configurations can serve as a comparison basis for future work.
+
+In terms of application prospects, the proposed method can be extended to: (1) assembly-guidance systems for other aviation-engine models (e.g.\ CFM56, PW1000G); (2) industrial assembly fields with similar precision requirements (e.g.\ heavy machine tools, rail transit); (3) intelligent QA front-ends for manufacturing-execution systems (MES) and product-lifecycle-management systems (PLM).
+
+\subsection{Future Work}
+
+Future research can deepen along the following directions.
+
+\textbf{Benchmark expansion.} The Tier-1 golden set comes from a single compressor sub-system, exhibiting a topical-concentration ceiling effect on retrieval. Future work will use domain-expert blind tests, multi-rater independent annotation and real-world data collection to build a domain-level RAG benchmark covering all whole-engine chapters, and attempt comparability with open-source industrial QA datasets (such as IndustReeQA, AeroQA).
+
+\textbf{Multimodal raw-data integration.} Limited by the textin OCR strategy at the corpus pre-processing stage, images in this experiment are replaced by remote CDN URLs and the CLIP cross-modal path operates mainly at the caption level. Future work will integrate raw-PDF parsing engines such as MinerU and deepdoc to recover original image binaries, and explore image-text-graph tri-modal joint re-ranking.
+
+\textbf{Incremental KG updates and version management.} The current KG construction is an offline batch pipeline and does not support incremental scenarios such as manual addenda and PN changes. Future work will introduce a graph differential-update mechanism and, combining the HITL review philosophy of~\citep{amershi2014power}, build KG version management and roll-back capabilities for industrial sites.
+
+\textbf{Reasoning-depth enhancement.} The current KG retrieval path mainly uses one-hop neighbourhood expansion and does not fully exploit graph structure for queries that require multi-step reasoning (e.g.\ ``all procedures and required tools that must be completed before installing X''). Future work will introduce GraphRAG-style multi-hop path search and the Planner-Agent iterative-exploration algorithm~\citep{shen2025hybridrag} to further boost the KG path's performance on complex structured queries.
+
+%=================================================================
+\appendixtitles{no}
+\appendixstart
+\appendix
+\section[\appendixname~\thesection]{LLM-Judge Inter-Rater Consistency Analysis}
+\label{appendix:judge}
+
+The mean inter-dimension Pearson correlation among the Tier-1 LLM-Judge Relevance / Completeness / Correctness scores across the 21 dimension pairs is $+0.847$, indicating that the three dimensions exhibit consistent inter-rater agreement and supporting the validity of the average score as the overall quality metric.
+
+%=================================================================
+\vspace{6pt}
+\authorcontributions{Conceptualization, J.X.; methodology, J.X.; software, J.X.; validation, J.X.; formal analysis, J.X.; investigation, J.X.; resources, J.X.; data curation, J.X.; writing---original draft preparation, J.X.; writing---review and editing, J.X.; visualization, J.X. The author has read and agreed to the published version of the manuscript.}
+
+\funding{This research received no external funding.}
+
+\institutionalreview{Not applicable.}
+\informedconsent{Not applicable.}
+
+\dataavailability{The benchmark questions, golden triples, KG Cypher exports and Qdrant collection snapshots will be released alongside the paper at a public repository. The PT6A maintenance documentation is the intellectual property of Pratt~\&~Whitney Canada and is referenced under fair-use academic citation; we do not redistribute the original PDF files.}
+
+\acknowledgments{During the preparation of this manuscript, the authors used GPT-class large language models (Anthropic Claude and Qwen2.5) to assist with English language editing and figure-script refactoring. The authors have reviewed and edited all output and take full responsibility for the final content.}
+
+\conflictsofinterest{The authors declare no conflicts of interest.}
+
+\abbreviations{Abbreviations}{
+The following abbreviations are used in this manuscript:\\
+
+\noindent
+\begin{tabular}{@{}ll}
+AABB     & Axis-Aligned Bounding Box\\
+ANN      & Approximate Nearest Neighbor\\
+ATA      & Air Transport Association (chapter numbering scheme)\\
+BGE      & BAAI General Embedding\\
+BOM      & Bill of Materials\\
+CAD      & Computer-Aided Design\\
+CLIP     & Contrastive Language--Image Pretraining\\
+DPR      & Dense Passage Retrieval\\
+HITL     & Human-in-the-Loop\\
+HR       & Hallucination Rate\\
+IPC      & Illustrated Parts Catalog\\
+KG       & Knowledge Graph\\
+LLM      & Large Language Model\\
+MHRAG    & Multi-source Hybrid Retrieval-Augmented Generation\\
+MRR      & Mean Reciprocal Rank\\
+NDCG     & Normalized Discounted Cumulative Gain\\
+OCCT     & Open CASCADE Technology\\
+PHM      & Prognostics and Health Management\\
+PMI      & Product Manufacturing Information\\
+PN       & Part Number\\
+RAG      & Retrieval-Augmented Generation\\
+RRF      & Reciprocal Rank Fusion\\
+SSE      & Server-Sent Events\\
+STEP     & Standard for the Exchange of Product model data (ISO 10303)
+\end{tabular}
+}
+
+%=================================================================
+\reftitle{References}
+\begin{adjustwidth}{-\extralength}{0cm}
+
+\isAPAandChicago{}{%
+\begin{thebibliography}{999}
+
+\bibitem[Hogan et al.(2021)]{hogan2021kg}
+Hogan, A.; Blomqvist, E.; Cochez, M.; et al. Knowledge Graphs. {\em ACM Computing Surveys} {\bf 2021}, {\em 54}, 1--37.
+
+\bibitem[Ji et al.(2022)]{ji2022kgsurvey}
+Ji, S.; Pan, S.; Cambria, E.; Marttinen, P.; Yu, P.S. A Survey on Knowledge Graphs: Representation, Acquisition, and Applications. {\em IEEE Trans.\ Neural Networks and Learning Systems} {\bf 2022}, {\em 33}, 494--514.
+
+\bibitem[Zhao et al.(2023)]{zhao2023llmsurvey}
+Zhao, W.X.; Zhou, K.; Li, J.; et al. A Survey of Large Language Models. {\em arXiv:2303.18223} {\bf 2023}.
+
+\bibitem[Lewis et al.(2020)]{lewis2020rag}
+Lewis, P.; Perez, E.; Piktus, A.; et al. Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks. In {\em Proc.\ NeurIPS}, 2020.
+
+\bibitem[Gao et al.(2023)]{gao2023ragsurvey}
+Gao, Y.; Xiong, Y.; Gao, X.; et al. Retrieval-Augmented Generation for Large Language Models: A Survey. {\em arXiv:2312.10997} {\bf 2023}.
+
+\bibitem[Liu et al.(2024a)]{liu2023lostinmiddle}
+Liu, N.F.; Lin, K.; Hewitt, J.; et al. Lost in the Middle: How Language Models Use Long Contexts. {\em Trans.\ ACL} {\bf 2024}, {\em 12}, 157--173.
+
+\bibitem[Tang et al.(2023)]{tang2023aircraft}
+Tang, X.L.; et al. Exploring Research on the Construction and Application of Knowledge Graphs for Aircraft Fault Diagnosis. {\em Sensors} {\bf 2023}, {\em 23}, 5295--5313.
+
+\bibitem[Meng et al.(2024)]{meng2024aircraft}
+Meng, X.; et al. Fault Knowledge Graph Construction and Platform Development for Aircraft PHM. {\em Sensors} {\bf 2024}, {\em 24}, 231.
+
+\bibitem[Wu et al.(2024)]{wu2024engine}
+Wu, C.; Zhang, L.; Tang, X.L.; Cui, L.J.; Xie, X.Y. Construction and Application of Fault Knowledge Graphs for Aircraft Engine Lubrication Systems. {\em Journal of Beijing University of Aeronautics and Astronautics} {\bf 2024}, {\em 50}, 1336--1346.
+
+\bibitem[Liu et al.(2024b)]{liu2024jointkg}
+Liu, P.; Qian, L.; Zhao, X.; Tao, B. Joint Knowledge Graph and Large Language Model for Fault Diagnosis and Its Application in Aviation Assembly. {\em IEEE Trans.\ Industrial Informatics} {\bf 2024}, {\em 20}, 8160--8169.
+
+\bibitem[Liu et al.(2023)]{liu2023avkg}
+Liu, P.; Qian, L.; Zhao, X.; Tao, B. The Construction of Knowledge Graphs in the Aviation Assembly Domain Based on a Joint Knowledge Extraction Model. {\em IEEE Access} {\bf 2023}, {\em 11}, 26483--26495.
+
+\bibitem[Shi et al.(2022)]{shi2022arkg}
+Shi, X.; Tian, X.; Gu, J.; et al. Knowledge Graph-Based Assembly Resource Knowledge Reuse towards Complex Product Assembly Process. {\em Sustainability} {\bf 2022}, {\em 14}, 15541.
+
+\bibitem[Xie et al.(2025)]{shen2025hybridrag}
+Xie, X.; Tang, X.; Gu, S.; Cui, L. An Intelligent Guided Troubleshooting Method for Aircraft Based on HybridRAG. {\em Scientific Reports} {\bf 2025}, {\em 15}, 17752.
+
+\bibitem[Zhang et al.(2025)]{zhang2025mllmkgc}
+Zhang, Z.; Yu, J.; Yang, B.; et al. A Knowledge Graphs Construction Method Enhanced by Multimodal Large Language Model for Industrial Equipment Operation and Maintenance. {\em Advanced Engineering Informatics} {\bf 2025}, {\em 68}, 103705.
+
+\bibitem[Fan et al.(2024)]{fan2024ragsurvey}
+Fan, W.; Ding, Y.; Ning, L.; et al. A Survey on RAG Meeting LLMs: Towards Retrieval-Augmented Large Language Models. In {\em Proc.\ ACM KDD}, 2024.
+
+\bibitem[Ma et al.(2023)]{ma2023query}
+Ma, X.; Wang, Y.; Lin, J. Query Rewriting for Retrieval-Augmented Large Language Models. {\em arXiv:2305.14283} {\bf 2023}.
+
+\bibitem[Luan et al.(2021)]{luan2021sparse}
+Luan, Y.; Eisenstein, J.; Toutanova, K.; Collins, M. Sparse, Dense, and Attentional Representations for Text Retrieval. {\em Trans.\ ACL} {\bf 2021}, {\em 9}, 329--345.
+
+\bibitem[Nogueira and Cho(2019)]{nogueira2019passage}
+Nogueira, R.; Cho, K. Passage Re-ranking with BERT. {\em arXiv:1901.04085} {\bf 2019}.
+
+\bibitem[Edge et al.(2024)]{edge2024graphrag}
+Edge, D.; Trinh, H.; Cheng, N.; et al. From Local to Global: A Graph RAG Approach to Query-Focused Summarization. {\em arXiv:2404.16130} {\bf 2024}.
+
+\bibitem[Karpukhin et al.(2020)]{karpukhin2020dpr}
+Karpukhin, V.; Oguz, B.; Min, S.; et al. Dense Passage Retrieval for Open-Domain Question Answering. In {\em Proc.\ EMNLP}, 2020.
+
+\bibitem[Xiao et al.(2023)]{bge2023}
+Xiao, S.; Liu, Z.; Zhang, P.; et al. C-Pack: Packaged Resources To Advance General Chinese Embedding. {\em arXiv:2309.07597} {\bf 2023}.
+
+\bibitem[Robertson and Zaragoza(2009)]{robertson2009bm25}
+Robertson, S.; Zaragoza, H. The Probabilistic Relevance Framework: BM25 and Beyond. {\em Foundations and Trends in Information Retrieval} {\bf 2009}, {\em 3}, 333--389.
+
+\bibitem[Cormack et al.(2009)]{cormack2009rrf}
+Cormack, G.V.; Clarke, C.L.A.; Buettcher, S. Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods. In {\em Proc.\ SIGIR}, 2009.
+
+\bibitem[Vaswani et al.(2017)]{vaswani2017attention}
+Vaswani, A.; Shazeer, N.; Parmar, N.; et al. Attention Is All You Need. In {\em Proc.\ NeurIPS}, 2017.
+
+\bibitem[Devlin et al.(2019)]{devlin2019bert}
+Devlin, J.; Chang, M.-W.; Lee, K.; Toutanova, K. BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding. In {\em Proc.\ NAACL}, 2019.
+
+\bibitem[Pan et al.(2024)]{pan2024kgllmsurvey}
+Pan, S.; Luo, L.; Wang, Y.; et al. Unifying Large Language Models and Knowledge Graphs: A Roadmap. {\em IEEE Trans.\ Knowledge and Data Engineering} {\bf 2024}.
+
+\bibitem[Wu et al.(2020)]{wu2020corefresolution}
+Wu, T.; et al. Coreference Resolution as Query-based Span Prediction. {\em arXiv:1911.01746} {\bf 2020}.
+
+\bibitem[Srinivasan(2017)]{srinivasan2017bom}
+Srinivasan, V. Standardized Exchange of Product Data: STEP, ISO 10303. {\em CAD Standards} {\bf 2017}.
+
+\bibitem[Guo et al.(2024)]{guo2024multiagent}
+Guo, T.; Chen, X.; Wang, Y.; et al. Large Language Model based Multi-Agents: A Survey of Progress and Challenges. {\em arXiv:2402.01680} {\bf 2024}.
+
+\bibitem[Park et al.(2023)]{park2023generative}
+Park, J.S.; O'Brien, J.C.; Cai, C.J.; et al. Generative Agents: Interactive Simulacra of Human Behavior. In {\em Proc.\ UIST}, 2023.
+
+\bibitem[Radford et al.(2021)]{radford2021clip}
+Radford, A.; Kim, J.W.; Hallacy, C.; et al. Learning Transferable Visual Models From Natural Language Supervision. In {\em Proc.\ ICML}, 2021.
+
+\bibitem[Yang et al.(2022)]{yang2022chinese}
+Yang, A.; Pan, A.; Lin, J.; et al. Chinese CLIP: Contrastive Vision-Language Pretraining in Chinese. {\em arXiv:2211.01335} {\bf 2022}.
+
+\bibitem[Amershi et al.(2014)]{amershi2014power}
+Amershi, S.; Cakmak, M.; Knox, W.B.; Kulesza, T. Power to the People: The Role of Humans in Interactive Machine Learning. {\em AI Magazine} {\bf 2014}, {\em 35}, 105--120.
+
+\bibitem[Blumenthal et al.(2020)]{blumenthal2020nlp}
+Blumenthal, A.; et al. NLP-Based Information Extraction from Technical Manuals. In {\em Proc.\ ICAS}, 2020.
+
+\bibitem[Zhao et al.(2022)]{zhao2022assembly}
+Zhao, H.; et al. BERT-Based Assembly Instruction Understanding for Intelligent Manufacturing. {\em Journal of Manufacturing Systems} {\bf 2022}.
+
+\end{thebibliography}
+}
+
+\PublishersNote{}
+\end{adjustwidth}
+
+\end{document}

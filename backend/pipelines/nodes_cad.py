@@ -73,11 +73,12 @@ def make_cad_nodes(app_state: Any, neo4j_cfg: dict) -> dict:
             try:
                 assembly_tree = _parse_step_tree_from_text(file_path)
                 constraints   = _parse_step_constraints(file_path)
-                adjacency     = []   # 需要 OCC Reader，无法 fallback
+                # fallback 邻接：从装配树推断同 parent 下兄弟节点（logical_sibling）
+                adjacency     = _parse_step_adjacency_from_tree(file_path)
                 log_msg = (
                     f"[CAD][FALLBACK] pythonocc-core 不可用，已降级为纯文本解析模式。"
                     f"装配节点 {_count_tree_nodes(assembly_tree)} 个，"
-                    f"配合约束 {len(constraints)} 条，邻接关系 0 条（需 OCC）"
+                    f"配合约束 {len(constraints)} 条，邻接关系 {len(adjacency)} 条（logical_sibling）"
                 )
                 return {
                     "cad_assembly_tree": assembly_tree,
@@ -377,11 +378,14 @@ def _parse_step_constraints(file_path: str) -> list:
             key = (pa, pb)
             if key not in seen:
                 seen.add(key)
+                # 为每个 NAUO 配合生成隐式接口节点，使 _cad_data_to_flat_triples
+                # 能产出 hasInterface + constrainedBy 三元组（对齐论文§3.2.2 五类关系）
+                iface_name = f"Interface_{pa}__{pb}"
                 constraints.append({
                     "part_a":          pa,
                     "part_b":          pb,
-                    "constraint_type": "assembly",
-                    "interface":       "",
+                    "constraint_type": "mating_surface",
+                    "interface":       iface_name,
                 })
 
         # GEOMETRIC_TOLERANCE → 几何公差约束
@@ -422,6 +426,43 @@ def _parse_step_constraints(file_path: str) -> list:
         pass
 
     return constraints
+
+
+def _parse_step_adjacency_from_tree(file_path: str) -> list:
+    """
+    无 OCC 时的 adjacency 降级实现：从装配树推断"逻辑邻接"。
+    规则：同一父装配下的任意两个子件视为空间邻接（典型 IPC BOM 排版假设）。
+    生成的 adjacentTo 三元组带 method='logical_sibling' 标识，区别于 OCC 的 AABB 计算。
+
+    返回：[{part_a, part_b, gap_mm: 0.0, method: 'logical_sibling'}, ...]
+    """
+    adjacency = []
+    try:
+        constraints = _parse_step_constraints(file_path)
+        # 从 NAUO 配合关系推装配树（part_b is parent of part_a）
+        # 但 _parse_step_constraints 中 NAUO 顺序未明，用 _parse_step_tree_from_text 更可靠
+        tree = _parse_step_tree_from_text(file_path)
+
+        def collect_siblings(node: dict):
+            """递归收集每个 parent 的子件列表"""
+            for parent_name, sub in node.items():
+                if isinstance(sub, dict):
+                    children = list(sub.keys())
+                    if len(children) >= 2:
+                        for i, ca in enumerate(children):
+                            for cb in children[i + 1:]:
+                                adjacency.append({
+                                    "part_a": ca,
+                                    "part_b": cb,
+                                    "gap_mm": 0.0,
+                                    "method": "logical_sibling",
+                                })
+                    collect_siblings(sub)
+
+        collect_siblings(tree)
+    except Exception:
+        pass
+    return adjacency
 
 
 def _parse_step_adjacency(reader, file_path: str = "") -> list:
